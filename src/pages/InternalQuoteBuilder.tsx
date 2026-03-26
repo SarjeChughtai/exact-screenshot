@@ -11,9 +11,10 @@ import { formatCurrency, formatNumber, PROVINCES, getProvinceTax, calcFreight, c
 import { estimateFreightFromLocation } from '@/lib/freightEstimate';
 import type { Quote } from '@/types';
 import { toast } from 'sonner';
-import { Upload, FileText, CheckCircle2, AlertTriangle, Download, Mail, ChevronDown, X, Sparkles, Loader2 } from 'lucide-react';
+import { Upload, FileText, CheckCircle2, AlertTriangle, Download, Mail, ChevronDown, X, Sparkles, Loader2, MapPin, Lightbulb, Trash2, Plus } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { PersonnelSelect } from '@/components/PersonnelSelect';
+import { ClientSelect } from '@/components/ClientSelect';
 
 interface CostFileData {
   steelWeightLbs: number;
@@ -27,6 +28,35 @@ interface ParsedFile {
   type: 'mbs' | 'insulation' | 'unknown';
   status: 'success' | 'failed';
   data?: any;
+  buildingIndex: number;
+}
+
+interface BuildingTab {
+  label: string;
+  costData: CostFileData;
+  files: ParsedFile[];
+  width: string;
+  length: string;
+  height: string;
+  pitch: string;
+}
+
+function generateCostSavingTips(form: any, costData: CostFileData, quote: Quote | null): string[] {
+  const tips: string[] = [];
+  const w = parseFloat(form.width) || 0;
+  const l = parseFloat(form.length) || 0;
+  const h = parseFloat(form.height) || 14;
+  const pitch = parseFloat(form.pitch) || 1;
+
+  if (pitch > 2) tips.push(`📐 Reducing roof pitch from ${pitch}:12 to 1:12 could save ~${((pitchCostMultiplier(pitch).multiplier - 1) * 100).toFixed(0)}% on steel costs.`);
+  if (h > 16) tips.push(`📏 A ${h}ft eave height adds ~${((heightCostMultiplier(h).multiplier - 1) * 100).toFixed(0)}% to steel. Consider ${Math.min(h, 16)}ft if clearance allows.`);
+  if (w > 80) tips.push(`🏗️ Buildings over 80ft wide require multi-span framing — significantly more costly. If possible, keep width ≤ 80ft.`);
+  if (form.foundationType === 'frost_wall') tips.push(`🧱 Frost wall foundations cost ~65% more than slab. Verify if slab-on-grade is feasible for this site.`);
+  if (form.remoteLevel === 'extreme') tips.push(`🚛 Extreme remote freight adds $3,000+. Consider a staging/pickup arrangement to reduce cost.`);
+  if (form.remoteLevel === 'remote') tips.push(`🚛 Remote location adds $1,500 to freight. Check if a closer delivery point is available.`);
+  if (w * l > 10000 && parseFloat(form.contingencyPct) >= 5) tips.push(`💰 For large buildings (${formatNumber(w * l)} sqft), you may be able to reduce contingency to 3% — the larger the project, the more predictable costs become.`);
+  if (parseFloat(form.insulationCost) > 0 && !form.insulationGrade) tips.push(`🧊 Specify insulation grade to ensure the quote matches the correct R-value specification.`);
+  return tips;
 }
 
 export default function InternalQuoteBuilder() {
@@ -49,15 +79,43 @@ export default function InternalQuoteBuilder() {
 
   const [supplierMarkupPct, setSupplierMarkupPct] = useState(String(settings.supplierIncreasePct));
   const [internalMarkupPct] = useState('0');
-  const [costData, setCostData] = useState<CostFileData>({ steelWeightLbs: 0, supplierCostPerLb: 0, totalSupplierCost: 0, accessories: [] });
+  const [buildings, setBuildings] = useState<BuildingTab[]>([
+    { label: 'Building 1', costData: { steelWeightLbs: 0, supplierCostPerLb: 0, totalSupplierCost: 0, accessories: [] }, files: [], width: '', length: '', height: '14', pitch: '1' },
+  ]);
+  const [activeBuildingIdx, setActiveBuildingIdx] = useState(0);
   const [quote, setQuote] = useState<Quote | null>(null);
   const [tieredMarkupInfo, setTieredMarkupInfo] = useState<{ rate: number; amount: number } | null>(null);
   const [dragActive, setDragActive] = useState(false);
-  const [parsedFiles, setParsedFiles] = useState<ParsedFile[]>([]);
   const [complianceNotes, setComplianceNotes] = useState<string[]>([]);
   const [aiProcessing, setAiProcessing] = useState(false);
+  const [costSavingTips, setCostSavingTips] = useState<string[]>([]);
+  const [locationSource, setLocationSource] = useState('');
+
+  const costData = buildings[activeBuildingIdx]?.costData || { steelWeightLbs: 0, supplierCostPerLb: 0, totalSupplierCost: 0, accessories: [] };
+  const parsedFiles = buildings[activeBuildingIdx]?.files || [];
+
+  const setCostData = (updater: CostFileData | ((d: CostFileData) => CostFileData)) => {
+    setBuildings(prev => prev.map((b, i) => i === activeBuildingIdx ? { ...b, costData: typeof updater === 'function' ? updater(b.costData) : updater } : b));
+  };
 
   const set = (key: string, val: string) => setForm(f => ({ ...f, [key]: val }));
+
+  // Location lookup for auto-populating distance/province
+  const handleLocationLookup = async () => {
+    const input = form.postalCode || form.city;
+    if (!input.trim()) { setLocationSource('Enter a postal code or city'); return; }
+    setLocationSource('Looking up distance...');
+    const estimate = await estimateFreightFromLocation(input);
+    if (estimate) {
+      set('distance', estimate.distanceKm.toString());
+      set('remoteLevel', estimate.remote);
+      set('province', estimate.province);
+      const via = estimate.distanceSource === 'maps' ? 'Maps API' : 'heuristic';
+      setLocationSource(`Auto: ~${estimate.distanceKm}km via ${via} (${estimate.method})`);
+    } else {
+      setLocationSource('Could not estimate — enter manually');
+    }
+  };
 
   // Auto-populate from Job ID
   const handleJobIdChange = (jobId: string) => {
@@ -80,6 +138,10 @@ export default function InternalQuoteBuilder() {
         width: String(q.width || ''), length: String(q.length || ''), height: String(q.height || '14'),
       }));
     }
+  };
+
+  const handleClientSelect = (client: { clientId: string; clientName: string }) => {
+    setForm(f => ({ ...f, clientId: client.clientId, clientName: client.clientName }));
   };
 
   const extractTextFromPdf = async (file: File): Promise<string[]> => {
@@ -116,7 +178,6 @@ export default function InternalQuoteBuilder() {
     let clientName = '', clientId = '', jobId = '';
     const accessories: { name: string; weight: number; cost: number }[] = [];
 
-    // Page 2+ project info
     const forMatch = fullText.match(/FOR\s*\n?\s*(.+)/i);
     if (forMatch) clientName = forMatch[1].trim();
     const clientIdMatch = fullText.match(/FOR\s*\n?\s*.+\n?\s*(\d{4,})/i);
@@ -124,7 +185,6 @@ export default function InternalQuoteBuilder() {
     const jobMatch = fullText.match(/JOB\s*:?\s*(.+)/i);
     if (jobMatch) jobId = jobMatch[1].trim();
 
-    // Dimensions
     const widthMatch = fullText.match(/Width\s*\(ft\)\s*=\s*([\d.]+)/i);
     const lengthMatch = fullText.match(/Length\s*\(ft\)\s*=\s*([\d.]+)/i);
     const heightMatch = fullText.match(/Eave\s*Height\s*\(ft\)\s*=\s*([\d.]+)/i);
@@ -132,18 +192,15 @@ export default function InternalQuoteBuilder() {
     if (lengthMatch) pLength = parseFloat(lengthMatch[1]);
     if (heightMatch) pHeight = parseFloat(heightMatch[1]);
 
-    // Cost summary — Total line
     const totalMatch = fullText.match(/Total[:\s]+([\d,]+\.?\d*)\s+([\d,]+\.?\d*)/i);
     if (totalMatch) {
       weight = parseFloat(totalMatch[1].replace(/,/g, ''));
       totalCost = parseFloat(totalMatch[2].replace(/,/g, ''));
     }
 
-    // PRICE PER WEIGHT
     const pplbMatch = fullText.match(/PRICE\s+PER\s+WEIGHT\s*\(lb\)\s+([\d.]+)/i);
     if (pplbMatch) costPerLb = parseFloat(pplbMatch[1]);
 
-    // Component line items
     const lines = fullText.split('\n');
     for (const line of lines) {
       const componentMatch = line.match(/^([A-Za-z][A-Za-z &,]+?)\s+([\d,]+\.?\d*)\s+([\d,]+\.?\d*)\s*$/);
@@ -156,7 +213,6 @@ export default function InternalQuoteBuilder() {
       }
     }
 
-    // Fallbacks
     if (weight && totalCost && !costPerLb) costPerLb = totalCost / weight;
     if (weight && costPerLb && !totalCost) totalCost = weight * costPerLb;
 
@@ -207,7 +263,6 @@ export default function InternalQuoteBuilder() {
           fullText = await file.text();
         }
 
-        // AI-first extraction
         const aiResult = await extractWithAI(fullText, file.name);
 
         if (aiResult) {
@@ -217,7 +272,7 @@ export default function InternalQuoteBuilder() {
             const total = aiResult.insulation_total || 0;
             set('insulationCost', String(total));
             if (aiResult.insulation_grade) set('insulationGrade', aiResult.insulation_grade);
-            newParsedFiles.push({ name: file.name, type: 'insulation', status: 'success', data: aiResult });
+            newParsedFiles.push({ name: file.name, type: 'insulation', status: 'success', data: aiResult, buildingIndex: activeBuildingIdx });
             toast.success(`🤖 AI extracted insulation: ${formatCurrency(total)}`);
           } else if (docType === 'mbs') {
             applyAIData(aiResult);
@@ -228,10 +283,9 @@ export default function InternalQuoteBuilder() {
               name: c.name, weight: c.weight || 0, cost: c.cost || 0,
             }));
             setCostData({ steelWeightLbs: weight, supplierCostPerLb: costPerLb, totalSupplierCost: totalCost, accessories: components });
-            newParsedFiles.push({ name: file.name, type: 'mbs', status: 'success', data: aiResult });
+            newParsedFiles.push({ name: file.name, type: 'mbs', status: 'success', data: aiResult, buildingIndex: activeBuildingIdx });
             toast.success(`🤖 AI extracted MBS: ${formatNumber(weight)} lbs @ $${costPerLb.toFixed(2)}/lb`);
           } else {
-            // AI detected unknown but still got some data — apply what we can
             applyAIData(aiResult);
             if (aiResult.weight && aiResult.total_cost) {
               setCostData({
@@ -240,14 +294,14 @@ export default function InternalQuoteBuilder() {
                 totalSupplierCost: aiResult.total_cost,
                 accessories: (aiResult.components || []).map((c: any) => ({ name: c.name, weight: c.weight || 0, cost: c.cost || 0 })),
               });
-              newParsedFiles.push({ name: file.name, type: 'mbs', status: 'success', data: aiResult });
+              newParsedFiles.push({ name: file.name, type: 'mbs', status: 'success', data: aiResult, buildingIndex: activeBuildingIdx });
               toast.success(`🤖 AI extracted data from ${file.name}`);
             } else if (aiResult.insulation_total) {
               set('insulationCost', String(aiResult.insulation_total));
-              newParsedFiles.push({ name: file.name, type: 'insulation', status: 'success', data: aiResult });
+              newParsedFiles.push({ name: file.name, type: 'insulation', status: 'success', data: aiResult, buildingIndex: activeBuildingIdx });
               toast.success(`🤖 AI extracted insulation: ${formatCurrency(aiResult.insulation_total)}`);
             } else {
-              newParsedFiles.push({ name: file.name, type: 'unknown', status: 'failed' });
+              newParsedFiles.push({ name: file.name, type: 'unknown', status: 'failed', buildingIndex: activeBuildingIdx });
               toast.error(`AI could not extract useful data from ${file.name}`);
             }
           }
@@ -256,12 +310,11 @@ export default function InternalQuoteBuilder() {
             toast.info(`AI note: ${aiResult.notes}`, { duration: 5000 });
           }
         } else {
-          // Fallback to regex parsing
           const pages = fullText.split('\n');
           if (detectInsulationPdf(fullText)) {
             const insulationTotal = parseInsulationPdf(fullText);
             set('insulationCost', String(insulationTotal));
-            newParsedFiles.push({ name: file.name, type: 'insulation', status: 'success', data: { total: insulationTotal } });
+            newParsedFiles.push({ name: file.name, type: 'insulation', status: 'success', data: { total: insulationTotal }, buildingIndex: activeBuildingIdx });
             toast.success(`Insulation (regex): ${formatCurrency(insulationTotal)}`);
           } else {
             const parsed = parseMbsPdf(pages);
@@ -276,10 +329,10 @@ export default function InternalQuoteBuilder() {
                 steelWeightLbs: parsed.weight, supplierCostPerLb: parsed.costPerLb,
                 totalSupplierCost: parsed.totalCost, accessories: parsed.accessories,
               });
-              newParsedFiles.push({ name: file.name, type: 'mbs', status: 'success', data: parsed });
+              newParsedFiles.push({ name: file.name, type: 'mbs', status: 'success', data: parsed, buildingIndex: activeBuildingIdx });
               toast.success(`MBS (regex): ${formatNumber(parsed.weight)} lbs`);
             } else {
-              newParsedFiles.push({ name: file.name, type: 'unknown', status: 'failed' });
+              newParsedFiles.push({ name: file.name, type: 'unknown', status: 'failed', buildingIndex: activeBuildingIdx });
               toast.error(`Could not parse: ${file.name}`);
             }
           }
@@ -291,18 +344,47 @@ export default function InternalQuoteBuilder() {
           if (est) set('distance', est.distanceKm.toString());
         }
       } catch {
-        newParsedFiles.push({ name: file.name, type: 'unknown', status: 'failed' });
+        newParsedFiles.push({ name: file.name, type: 'unknown', status: 'failed', buildingIndex: activeBuildingIdx });
         toast.error(`Error parsing ${file.name}`);
       }
     }
-    setParsedFiles(prev => [...prev, ...newParsedFiles]);
+    setBuildings(prev => prev.map((b, i) => i === activeBuildingIdx ? { ...b, files: [...b.files, ...newParsedFiles] } : b));
     setAiProcessing(false);
+  };
+
+  const removeFile = (fileIndex: number) => {
+    setBuildings(prev => prev.map((b, i) => i === activeBuildingIdx ? { ...b, files: b.files.filter((_, fi) => fi !== fileIndex) } : b));
+    toast.info('File removed');
+  };
+
+  const addBuilding = () => {
+    setBuildings(prev => [...prev, {
+      label: `Building ${prev.length + 1}`,
+      costData: { steelWeightLbs: 0, supplierCostPerLb: 0, totalSupplierCost: 0, accessories: [] },
+      files: [],
+      width: '', length: '', height: '14', pitch: '1',
+    }]);
+    setActiveBuildingIdx(buildings.length);
+  };
+
+  const removeBuilding = (idx: number) => {
+    if (buildings.length <= 1) return;
+    setBuildings(prev => prev.filter((_, i) => i !== idx));
+    setActiveBuildingIdx(Math.max(0, activeBuildingIdx - 1));
   };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setDragActive(false);
     if (e.dataTransfer.files.length) handleFileUpload(e.dataTransfer.files);
+  };
+
+  const getDefaultJobName = () => {
+    const w = parseFloat(form.width) || 0;
+    const l = parseFloat(form.length) || 0;
+    const h = parseFloat(form.height) || 0;
+    if (w && l) return `${w}'x${l}'x${h}'`;
+    return '';
   };
 
   const generate = () => {
@@ -324,15 +406,13 @@ export default function InternalQuoteBuilder() {
     const tieredMarkupAmount = calcMarkup(steelAfterSupplierMarkup);
     const tieredRate = getMarkupRate(steelAfterSupplierMarkup);
     
-    // Apply pitch and height multipliers to steel
     const pitchMult = pitchCostMultiplier(pitch);
     const heightMult = heightCostMultiplier(h);
     
-    // Adjusted steel = steel after supplier + tiered markup, then pitch/height adjustments
+    // Adjusted steel = steel after supplier + tiered markup, then pitch/height adjustments — all baked into "Steel" price
     const adjustedSteel = (steelAfterSupplierMarkup + tieredMarkupAmount) * pitchMult.multiplier * heightMult.multiplier;
     setTieredMarkupInfo({ rate: tieredRate, amount: tieredMarkupAmount });
 
-    // Auto-calculate engineering complexity
     const complexity = autoComplexityFactor(w, l, h);
     const engineering = calcEngineeringFromFactor(complexity.factor);
     const foundation = lookupFoundation(sqft, form.foundationType);
@@ -344,13 +424,12 @@ export default function InternalQuoteBuilder() {
     const combinedTotal = adjustedSteel + engineering + foundation + insulation + guttersVal + linersVal + freight;
     const contingency = combinedTotal * (parseFloat(form.contingencyPct) || 0) / 100;
     const totalPlusCont = combinedTotal + contingency;
-    const taxes = getProvinceTax(form.province);
-    const taxRate = taxes.order_rate;
-    const gstHst = totalPlusCont * (taxes.type === 'GST+QST' ? (taxes.gst || 0.05) : taxRate);
-    const qst = taxes.type === 'GST+QST' ? totalPlusCont * (taxes.qst || 0.09975) : 0;
+
+    // NO TAX on internal quote
+    const gstHst = 0;
+    const qst = 0;
     const finalPerLb = adjustedSteel / weight;
 
-    // Build compliance notes (internal only — not on quote)
     const notes: string[] = [
       `Base Steel (from MBS): ${formatCurrency(costData.totalSupplierCost)} at ${formatNumber(weight)} lbs = $${costData.supplierCostPerLb.toFixed(2)}/lb`,
       `+${supplierMarkupPct}% Supplier: $/lb goes from $${costData.supplierCostPerLb.toFixed(2)} to $${adjustedCostPerLb.toFixed(2)} → steel becomes ${formatCurrency(steelAfterSupplierMarkup)}`,
@@ -362,16 +441,19 @@ export default function InternalQuoteBuilder() {
       `Foundation: sqft=${formatNumber(sqft)}, type=${form.foundationType}, base=${formatCurrency(foundation - 500)} + $500 = ${formatCurrency(foundation)}`,
       `Insulation: ${formatCurrency(insulation)} (pass-through, no markup)`,
       `Freight: MAX($4,000, ${form.distance}km × $4) + remote(${form.remoteLevel}) + overweight = ${formatCurrency(freight)}`,
-      `Tax: province = ${form.province}, type = ${taxes.type}, rate = ${(taxRate * 100).toFixed(2)}%`,
+      `Tax: EXCLUDED from internal quote`,
       `ALL FIGURES SOURCE: 143 MBS projects for steel tiers, 48 Silvercote quotes for insulation, foundation schedule v1`,
     ].filter(Boolean);
     setComplianceNotes(notes);
+
+    // Default job name to dimensions
+    const jobName = form.jobName || getDefaultJobName();
 
     const q: Quote = {
       id: crypto.randomUUID(),
       date: new Date().toISOString().split('T')[0],
       jobId: form.jobId || `CSB-${Date.now().toString(36).toUpperCase()}`,
-      jobName: form.jobName, clientName: form.clientName, clientId: form.clientId,
+      jobName, clientName: form.clientName, clientId: form.clientId,
       salesRep: form.salesRep, estimator: form.estimator,
       province: form.province, city: form.city, address: form.address, postalCode: form.postalCode,
       width: w, length: l, height: h, sqft, weight,
@@ -381,16 +463,18 @@ export default function InternalQuoteBuilder() {
       gutters: guttersVal, liners: linersVal, insulation, insulationGrade: form.insulationGrade,
       freight, combinedTotal, perSqft: combinedTotal / sqft, perLb: finalPerLb,
       contingencyPct: parseFloat(form.contingencyPct) || 0, contingency,
-      gstHst, qst, grandTotal: totalPlusCont + gstHst + qst, status: 'Draft',
+      gstHst, qst, grandTotal: totalPlusCont, status: 'Draft',
     };
     setQuote(q);
+
+    // Generate cost-saving tips
+    setCostSavingTips(generateCostSavingTips(form, costData, q));
   };
 
   const saveToLog = () => {
     if (!quote) return;
     addQuote(quote);
 
-    // Auto-create deal if job ID doesn't exist
     const existingDeal = deals.find(d => d.jobId === quote.jobId);
     if (!existingDeal) {
       addDeal({
@@ -435,7 +519,7 @@ export default function InternalQuoteBuilder() {
     if (!printContent) return;
     const win = window.open('', '_blank');
     if (!win) return;
-    const pdfTitle = `Internal Quote - ${quote.clientName} - ${quote.clientId} - ${quote.jobName || quote.jobId}`;
+    const pdfTitle = `Internal Quote - ${quote.jobId} - ${quote.clientName} - ${quote.clientId} - ${quote.jobName}`;
     win.document.write(`<html><head><title>${pdfTitle}</title>
       <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
       <style>
@@ -465,15 +549,14 @@ export default function InternalQuoteBuilder() {
       `Building: ${quote.width}' × ${quote.length}' × ${quote.height}' | ${formatNumber(quote.sqft)} sqft | ${formatNumber(quote.weight)} lbs\n\n` +
       `Adjusted Steel: ${formatCurrency(quote.adjustedSteel)}\nEngineering: ${formatCurrency(quote.engineering)}\nFoundation: ${formatCurrency(quote.foundation)}\n` +
       `Insulation: ${formatCurrency(quote.insulation)}\nFreight: ${formatCurrency(quote.freight)}\n\n` +
-      `COMBINED TOTAL: ${formatCurrency(quote.combinedTotal)}\n$/sqft: ${formatCurrency(quote.perSqft)}\n$/lb: $${quote.perLb.toFixed(2)}\n\n` +
-      `GRAND TOTAL (incl tax): ${formatCurrency(quote.grandTotal)}`
+      `COMBINED TOTAL: ${formatCurrency(quote.combinedTotal)}\n$/sqft: ${formatCurrency(quote.perSqft)}\n\n` +
+      `GRAND TOTAL: ${formatCurrency(quote.grandTotal)}`
     );
     window.open(`mailto:?subject=${subject}&body=${body}`);
   };
 
   const perLbCheck = quote ? quote.perLb : null;
   const perLbInRange = perLbCheck !== null && perLbCheck >= 2.15 && perLbCheck <= 2.30;
-  const salesReps = getSalesReps();
 
   return (
     <div className="max-w-6xl space-y-6">
@@ -484,6 +567,30 @@ export default function InternalQuoteBuilder() {
 
       <div className="grid lg:grid-cols-2 gap-6">
         <div className="space-y-5">
+          {/* Building Tabs */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {buildings.map((b, i) => (
+              <div key={i} className="flex items-center">
+                <Button
+                  variant={i === activeBuildingIdx ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setActiveBuildingIdx(i)}
+                  className="text-xs"
+                >
+                  {b.label}
+                </Button>
+                {buildings.length > 1 && (
+                  <Button variant="ghost" size="sm" className="h-6 w-6 p-0 ml-0.5" onClick={() => removeBuilding(i)}>
+                    <X className="h-3 w-3" />
+                  </Button>
+                )}
+              </div>
+            ))}
+            <Button variant="outline" size="sm" onClick={addBuilding} className="text-xs">
+              <Plus className="h-3 w-3 mr-1" /> Add Building
+            </Button>
+          </div>
+
           {/* Multi-file Upload */}
           <div
             className={`bg-card border-2 border-dashed rounded-lg p-6 text-center transition-colors ${dragActive ? 'border-accent bg-accent/5' : aiProcessing ? 'border-primary bg-primary/5' : 'border-border'}`}
@@ -514,19 +621,24 @@ export default function InternalQuoteBuilder() {
             )}
           </div>
 
-          {/* Parsed files list */}
+          {/* Parsed files list with remove option */}
           {parsedFiles.length > 0 && (
             <div className="bg-muted rounded-md p-3 text-xs space-y-1">
-              <p className="font-semibold text-muted-foreground mb-1">Uploaded Files</p>
+              <p className="font-semibold text-muted-foreground mb-1">Uploaded Files — {buildings[activeBuildingIdx]?.label}</p>
               {parsedFiles.map((f, i) => (
                 <div key={i} className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     {f.status === 'success' ? <CheckCircle2 className="h-3 w-3 text-success" /> : <AlertTriangle className="h-3 w-3 text-destructive" />}
                     <span>{f.name}</span>
                   </div>
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded ${f.type === 'mbs' ? 'bg-accent/20 text-accent' : f.type === 'insulation' ? 'bg-success/20 text-success' : 'bg-destructive/20 text-destructive'}`}>
-                    {f.type === 'mbs' ? 'MBS Cost File' : f.type === 'insulation' ? 'Insulation Quote' : 'Unknown'}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${f.type === 'mbs' ? 'bg-accent/20 text-accent' : f.type === 'insulation' ? 'bg-success/20 text-success' : 'bg-destructive/20 text-destructive'}`}>
+                      {f.type === 'mbs' ? 'MBS Cost File' : f.type === 'insulation' ? 'Insulation Quote' : 'Unknown'}
+                    </span>
+                    <button onClick={() => removeFile(i)} className="text-muted-foreground hover:text-destructive transition-colors" title="Remove file">
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -587,9 +699,18 @@ export default function InternalQuoteBuilder() {
                 <Label className="text-xs">Job ID</Label>
                 <Input className="input-blue mt-1" value={form.jobId} onChange={e => handleJobIdChange(e.target.value)} placeholder="Auto / type to search" />
               </div>
-              <div><Label className="text-xs">Job Name</Label><Input className="input-blue mt-1" value={form.jobName} onChange={e => set('jobName', e.target.value)} /></div>
-              <div><Label className="text-xs">Client Name</Label><Input className="input-blue mt-1" value={form.clientName} onChange={e => set('clientName', e.target.value)} /></div>
-              <div><Label className="text-xs">Client ID</Label><Input className="input-blue mt-1" value={form.clientId} onChange={e => set('clientId', e.target.value)} /></div>
+              <div>
+                <Label className="text-xs">Job Name</Label>
+                <Input className="input-blue mt-1" value={form.jobName} onChange={e => set('jobName', e.target.value)} placeholder={getDefaultJobName() || 'Auto from dimensions'} />
+              </div>
+              <div>
+                <Label className="text-xs">Client Name</Label>
+                <ClientSelect mode="name" valueId={form.clientId} valueName={form.clientName} onSelect={handleClientSelect} className="mt-1" />
+              </div>
+              <div>
+                <Label className="text-xs">Client ID</Label>
+                <ClientSelect mode="id" valueId={form.clientId} valueName={form.clientName} onSelect={handleClientSelect} className="mt-1" />
+              </div>
               <div>
                 <Label className="text-xs">Sales Rep</Label>
                 <PersonnelSelect value={form.salesRep} onValueChange={v => set('salesRep', v)} role="sales_rep" className="mt-1" />
@@ -599,6 +720,21 @@ export default function InternalQuoteBuilder() {
                 <PersonnelSelect value={form.estimator} onValueChange={v => set('estimator', v)} role="estimator" className="mt-1" />
               </div>
             </div>
+
+            {/* Location with auto-lookup */}
+            <div className="bg-accent/5 border border-accent/20 rounded-lg p-3 space-y-2">
+              <Label className="text-xs font-semibold flex items-center gap-1">
+                <MapPin className="h-3.5 w-3.5 text-accent" />
+                Location & Auto Freight
+              </Label>
+              <div className="grid grid-cols-3 gap-2">
+                <Input className="input-blue" value={form.postalCode} onChange={e => set('postalCode', e.target.value)} placeholder="Postal code" onKeyDown={e => e.key === 'Enter' && void handleLocationLookup()} />
+                <Input className="input-blue" value={form.city} onChange={e => set('city', e.target.value)} placeholder="City" />
+                <Button size="sm" variant="outline" onClick={() => void handleLocationLookup()}>Lookup</Button>
+              </div>
+              {locationSource && <p className="text-[10px] text-muted-foreground">{locationSource}</p>}
+            </div>
+
             <div className="grid grid-cols-3 gap-3">
               <div>
                 <Label className="text-xs">Province</Label>
@@ -607,15 +743,15 @@ export default function InternalQuoteBuilder() {
                   <SelectContent>{PROVINCES.map(p => <SelectItem key={p.code} value={p.code}>{p.code}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
-              <div><Label className="text-xs">City</Label><Input className="input-blue mt-1" value={form.city} onChange={e => set('city', e.target.value)} /></div>
-              <div><Label className="text-xs">Postal Code</Label><Input className="input-blue mt-1" value={form.postalCode} onChange={e => set('postalCode', e.target.value)} /></div>
+              <div><Label className="text-xs">Address</Label><Input className="input-blue mt-1" value={form.address} onChange={e => set('address', e.target.value)} /></div>
+              <div><Label className="text-xs">Distance (km)</Label><Input className="input-blue mt-1" value={form.distance} onChange={e => set('distance', e.target.value)} /></div>
             </div>
             <div className="grid grid-cols-3 gap-3">
               <div><Label className="text-xs">Width (ft)</Label><Input className="input-blue mt-1" value={form.width} onChange={e => set('width', e.target.value)} /></div>
               <div><Label className="text-xs">Length (ft)</Label><Input className="input-blue mt-1" value={form.length} onChange={e => set('length', e.target.value)} /></div>
               <div><Label className="text-xs">Height (ft)</Label><Input className="input-blue mt-1" value={form.height} onChange={e => set('height', e.target.value)} /></div>
             </div>
-            {/* Pitch & Height impact notes for estimator */}
+            {/* Pitch & Height impact notes */}
             {(parseFloat(form.pitch) > 1 || parseFloat(form.height) > 14) && (
               <div className="bg-muted rounded-md p-3 text-xs space-y-1">
                 {parseFloat(form.pitch) > 1 && <p className="text-muted-foreground">📐 {pitchCostMultiplier(parseFloat(form.pitch)).note}</p>}
@@ -623,7 +759,7 @@ export default function InternalQuoteBuilder() {
               </div>
             )}
             <div className="grid grid-cols-3 gap-3">
-              <div><Label className="text-xs">Distance (km)</Label><Input className="input-blue mt-1" value={form.distance} onChange={e => set('distance', e.target.value)} /></div>
+              <div><Label className="text-xs">Roof Pitch (:12)</Label><Input className="input-blue mt-1" value={form.pitch} onChange={e => set('pitch', e.target.value)} placeholder="1" /></div>
               <div>
                 <Label className="text-xs">Remote</Label>
                 <Select value={form.remoteLevel} onValueChange={v => set('remoteLevel', v)}>
@@ -648,9 +784,9 @@ export default function InternalQuoteBuilder() {
               </div>
             </div>
             <div className="grid grid-cols-3 gap-3">
-              <div><Label className="text-xs">Roof Pitch (:12)</Label><Input className="input-blue mt-1" value={form.pitch} onChange={e => set('pitch', e.target.value)} placeholder="1" /></div>
               <div><Label className="text-xs">Contingency %</Label><Input className="input-blue mt-1" value={form.contingencyPct} onChange={e => set('contingencyPct', e.target.value)} /></div>
               <div><Label className="text-xs">Insulation ($)</Label><Input className="input-blue mt-1" value={form.insulationCost} onChange={e => set('insulationCost', e.target.value)} /></div>
+              <div><Label className="text-xs">Insulation Grade</Label><Input className="input-blue mt-1" value={form.insulationGrade} onChange={e => set('insulationGrade', e.target.value)} /></div>
             </div>
           </div>
 
@@ -705,12 +841,23 @@ export default function InternalQuoteBuilder() {
                 <QRow label="$/sqft" value={quote.perSqft} />
                 <div className="h-2" />
                 {quote.contingency > 0 && <QRow label={`Contingency (${quote.contingencyPct}%)`} value={quote.contingency} />}
-                <QRow label="GST/HST" value={quote.gstHst} />
-                {quote.qst > 0 && <QRow label="QST" value={quote.qst} />}
                 <div className="h-3" />
-                <div className="flex justify-between font-bold text-lg border-t pt-2"><span>GRAND TOTAL</span><span>{formatCurrency(quote.grandTotal)}</span></div>
+                <div className="flex justify-between font-bold text-lg border-t pt-2"><span>TOTAL</span><span>{formatCurrency(quote.grandTotal)}</span></div>
+                <p className="text-xs text-muted-foreground italic">Tax excluded — applied at point of sale</p>
               </div>
             </div>
+
+            {/* Cost-Saving Tips */}
+            {costSavingTips.length > 0 && (
+              <div className="bg-accent/5 border border-accent/20 rounded-lg p-4 space-y-2">
+                <div className="flex items-center gap-2 text-sm font-semibold text-accent">
+                  <Lightbulb className="h-4 w-4" /> Cost-Saving Opportunities
+                </div>
+                {costSavingTips.map((tip, i) => (
+                  <p key={i} className="text-xs text-muted-foreground">{tip}</p>
+                ))}
+              </div>
+            )}
 
             {/* Compliance Notes */}
             {complianceNotes.length > 0 && (
