@@ -549,6 +549,7 @@ export type Database = {
         | "operations"
         | "sales_rep"
         | "freight"
+        | "dealer"
       deal_status:
         | "Lead"
         | "Quoted"
@@ -719,6 +720,7 @@ export const Constants = {
         "operations",
         "sales_rep",
         "freight",
+        "dealer",
       ],
       deal_status: [
         "Lead",
