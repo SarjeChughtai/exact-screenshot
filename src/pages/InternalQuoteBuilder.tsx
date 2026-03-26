@@ -264,11 +264,35 @@ export default function InternalQuoteBuilder() {
     for (const file of fileArr) {
       try {
         let fullText = '';
-        if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
-          const pages = await extractTextFromPdf(file);
-          fullText = pages.join('\n');
+        const lowerName = file.name.toLowerCase();
+        
+        if (file.type === 'application/pdf' || lowerName.endsWith('.pdf')) {
+          try {
+            const pages = await extractTextFromPdf(file);
+            fullText = pages.join('\n');
+            if (!fullText.trim()) {
+              toast.warning(`${file.name}: PDF appears to be scanned/image-only. Try a text-based PDF.`);
+              newParsedFiles.push({ name: file.name, type: 'unknown', status: 'failed', buildingIndex: activeBuildingIdx });
+              continue;
+            }
+          } catch (pdfErr) {
+            console.error('PDF parse error:', pdfErr);
+            toast.error(`${file.name}: Could not read PDF — try a different format (.csv, .txt)`);
+            newParsedFiles.push({ name: file.name, type: 'unknown', status: 'failed', buildingIndex: activeBuildingIdx });
+            continue;
+          }
+        } else if (lowerName.endsWith('.xlsx') || lowerName.endsWith('.xls')) {
+          toast.error(`${file.name}: Excel files (.xlsx/.xls) are not supported. Please export as CSV or PDF first.`);
+          newParsedFiles.push({ name: file.name, type: 'unknown', status: 'failed', buildingIndex: activeBuildingIdx });
+          continue;
         } else {
           fullText = await file.text();
+        }
+
+        if (!fullText.trim()) {
+          toast.error(`${file.name}: File appears empty`);
+          newParsedFiles.push({ name: file.name, type: 'unknown', status: 'failed', buildingIndex: activeBuildingIdx });
+          continue;
         }
 
         const aiResult = await extractWithAI(fullText, file.name);
