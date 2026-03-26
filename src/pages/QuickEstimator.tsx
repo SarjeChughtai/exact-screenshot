@@ -233,8 +233,7 @@ export default function QuickEstimator() {
     };
 
     await addQuote(quote);
-    await addDeal(deal);
-    toast.success('RFQ created (Stage 1)');
+    toast.success('Quote created — convert to Deal from the Quote Log when ready');
     navigate(`/rfq-builder?jobId=${encodeURIComponent(jobId)}`);
   };
 

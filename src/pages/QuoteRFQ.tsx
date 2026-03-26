@@ -127,41 +127,7 @@ export default function QuoteRFQ() {
 
     const jobId = form.jobId.trim() || generateJobId();
 
-    // Check if deal exists, if not create one
-    const existingDeal = deals.find(d => d.jobId === jobId);
-    if (!existingDeal) {
-      addDeal({
-        jobId,
-        jobName: form.jobName,
-        clientName: form.clientName,
-        clientId: form.clientId,
-        salesRep: form.salesRep,
-        estimator: form.estimator,
-        teamLead: '',
-        province: form.province,
-        city: form.city,
-        address: form.address,
-        postalCode: form.postalCode,
-        width: parseFloat(form.width) || 0,
-        length: parseFloat(form.length) || 0,
-        height: parseFloat(form.height) || 0,
-        sqft: (parseFloat(form.width) || 0) * (parseFloat(form.length) || 0),
-        weight: 0,
-        taxRate: 0,
-        taxType: '',
-        orderType: 'New',
-        dateSigned: '',
-        dealStatus: 'Lead',
-        paymentStatus: 'UNPAID',
-        productionStatus: 'Submitted',
-        freightStatus: 'Pending',
-        insulationStatus: form.insulationRequired ? 'Requested' : '',
-        deliveryDate: '',
-        pickupDate: '',
-        notes: '',
-      });
-      toast.success(`Deal ${jobId} created`);
-    }
+    // Quote saved without auto-creating deal — convert from Quote Log
 
     setForm(f => ({ ...f, jobId: jobId }));
     toast.success('Quote RFQ submitted');
