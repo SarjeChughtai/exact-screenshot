@@ -117,6 +117,19 @@ export default function QuickEstimator() {
       grandTotal: estimatedTotal + contingency + taxes.total,
       province,
     });
+
+    // Generate cost-saving tips
+    const tips: string[] = [];
+    const p = parseFloat(pitch) || 1;
+    if (p > 2) tips.push(`📐 Reducing roof pitch from ${p}:12 to 1:12 could save ~${((pitchCostMultiplier(p).multiplier - 1) * 100).toFixed(0)}% on steel costs.`);
+    if (h > 16) tips.push(`📏 A ${h}ft eave height adds ~${((heightCostMultiplier(h).multiplier - 1) * 100).toFixed(0)}% to steel. Consider ${Math.min(h, 16)}ft if clearance allows.`);
+    if (w > 80) tips.push(`🏗️ Buildings over 80ft wide require multi-span framing — significantly more costly. Consider ≤ 80ft width.`);
+    if (foundationType === 'frost_wall') tips.push(`🧱 Frost wall foundations cost ~65% more than slab. Verify if slab-on-grade is feasible.`);
+    if (remoteLevel === 'extreme') tips.push(`🚛 Extreme remote freight adds $3,000+. Consider a staging/pickup arrangement.`);
+    if (remoteLevel === 'remote') tips.push(`🚛 Remote location adds $1,500 to freight. Check if a closer delivery point is available.`);
+    if (sqft > 10000 && parseFloat(contingencyPct) >= 5) tips.push(`💰 For large buildings (${formatNumber(sqft)} sqft), contingency could be reduced to 3% — larger projects have more predictable costs.`);
+    if (includeInsulation && !insulationGrade) tips.push(`🧊 Specify insulation grade to ensure the estimate matches the correct R-value.`);
+    setCostSavingTips(tips);
   };
 
   const convertToRFQ = async () => {
