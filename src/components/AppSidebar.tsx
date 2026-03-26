@@ -96,8 +96,8 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === 'collapsed';
   const location = useLocation();
-  const { currentUser, setCurrentUser, canAccess } = useRoles();
-  const [showRolePicker, setShowRolePicker] = useState(false);
+  const { canAccess } = useRoles();
+  const { user, userRoles, signOut } = useAuth();
 
   const filteredGroups = menuGroups
     .map(g => ({ ...g, items: g.items.filter(item => canAccess(item.module)) }))
@@ -105,14 +105,6 @@ export function AppSidebar() {
 
   const isGroupActive = (group: MenuGroup) =>
     group.items.some(item => location.pathname === item.path);
-
-  const toggleRole = (role: UserRole) => {
-    const newRoles = currentUser.roles.includes(role)
-      ? currentUser.roles.filter(r => r !== role)
-      : [...currentUser.roles, role];
-    if (newRoles.length === 0) return;
-    setCurrentUser({ ...currentUser, roles: newRoles });
-  };
 
   return (
     <Sidebar collapsible="icon">
@@ -162,38 +154,35 @@ export function AppSidebar() {
       <SidebarFooter className="border-t border-sidebar-border p-3">
         {!collapsed ? (
           <div className="space-y-2">
-            <button onClick={() => setShowRolePicker(!showRolePicker)} className="flex items-center gap-2 w-full text-left text-xs text-sidebar-foreground/70 hover:text-sidebar-foreground transition-colors">
-              <User className="h-3.5 w-3.5" /><span className="truncate">{currentUser.name}</span>
-            </button>
-            <div className="flex flex-wrap gap-1">
-              {currentUser.roles.map(r => (
-                <Badge key={r} variant="secondary" className="text-[9px] px-1.5 py-0 bg-sidebar-accent text-sidebar-accent-foreground">{ROLE_LABELS[r]}</Badge>
-              ))}
+            <div className="flex items-center gap-2 text-xs text-sidebar-foreground/70">
+              <User className="h-3.5 w-3.5" />
+              <span className="truncate">{user?.email || 'Unknown'}</span>
             </div>
-            {showRolePicker && (
-              <div className="space-y-1.5 pt-1 border-t border-sidebar-border">
-                <p className="text-[9px] uppercase tracking-wider text-sidebar-muted font-semibold">Switch Roles</p>
-                {ALL_ROLES.map(role => (
-                  <label key={role} className="flex items-center gap-2 text-[11px] text-sidebar-foreground/80 cursor-pointer">
-                    <Checkbox checked={currentUser.roles.includes(role)} onCheckedChange={() => toggleRole(role)} className="h-3 w-3 border-sidebar-border" />
-                    {ROLE_LABELS[role]}
-                  </label>
-                ))}
-                <div className="pt-1 space-y-1">
-                  <p className="text-[9px] uppercase tracking-wider text-sidebar-muted font-semibold">Quick Switch</p>
-                  {DEMO_USERS.map(u => (
-                    <button key={u.label} onClick={() => setCurrentUser({ ...currentUser, name: `${u.label} User`, roles: u.roles })}
-                      className={cn("block w-full text-left text-[10px] px-2 py-0.5 rounded text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
-                        JSON.stringify(currentUser.roles) === JSON.stringify(u.roles) && "bg-sidebar-accent text-sidebar-primary-foreground")}>
-                      View as {u.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
+            <div className="flex flex-wrap gap-1">
+              {userRoles.map(r => (
+                <Badge key={r} variant="secondary" className="text-[9px] px-1.5 py-0 bg-sidebar-accent text-sidebar-accent-foreground">
+                  {ROLE_LABELS[r as UserRole] || r}
+                </Badge>
+              ))}
+              {userRoles.length === 0 && (
+                <span className="text-[9px] text-sidebar-muted">No roles assigned</span>
+              )}
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full justify-start text-xs text-sidebar-foreground/60 hover:text-sidebar-foreground"
+              onClick={() => signOut()}
+            >
+              <LogOut className="h-3 w-3 mr-1.5" />Sign Out
+            </Button>
           </div>
         ) : (
-          <div className="flex justify-center"><Shield className="h-4 w-4 text-sidebar-muted" /></div>
+          <div className="flex justify-center">
+            <button onClick={() => signOut()} title="Sign Out">
+              <LogOut className="h-4 w-4 text-sidebar-muted hover:text-sidebar-foreground" />
+            </button>
+          </div>
         )}
       </SidebarFooter>
     </Sidebar>
