@@ -54,6 +54,7 @@ export default function InternalQuoteBuilder() {
   const [dragActive, setDragActive] = useState(false);
   const [parsedFiles, setParsedFiles] = useState<ParsedFile[]>([]);
   const [complianceNotes, setComplianceNotes] = useState<string[]>([]);
+  const [aiProcessing, setAiProcessing] = useState(false);
 
   const set = (key: string, val: string) => setForm(f => ({ ...f, [key]: val }));
 
