@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, ReactNode, useCallback } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useCallback, useEffect } from 'react';
+import { useAuth } from '@/context/AuthContext';
 
 export type UserRole = 'admin' | 'owner' | 'accounting' | 'operations' | 'sales_rep' | 'freight';
 
@@ -38,22 +39,30 @@ const MODULE_ACCESS: Record<string, UserRole[]> = {
   settings: ['admin', 'owner', 'accounting', 'operations', 'sales_rep', 'freight'],
 };
 
-function loadUser(): UserProfile {
-  try {
-    const s = localStorage.getItem('canada_steel_user');
-    if (s) return JSON.parse(s);
-  } catch {}
-  return { id: 'admin-1', name: 'Admin User', email: 'admin@canadasteel.ca', roles: ['admin'] };
-}
-
 const RoleContext = createContext<RoleContextType | null>(null);
 
 export function RoleProvider({ children }: { children: ReactNode }) {
-  const [currentUser, setCurrentUserState] = useState<UserProfile>(loadUser);
+  const { user, userRoles } = useAuth();
 
-  const setCurrentUser = useCallback((user: UserProfile) => {
-    setCurrentUserState(user);
-    localStorage.setItem('canada_steel_user', JSON.stringify(user));
+  const [currentUser, setCurrentUserState] = useState<UserProfile>({
+    id: user?.id || '',
+    name: user?.user_metadata?.name || user?.email || '',
+    email: user?.email || '',
+    roles: (userRoles as UserRole[]) || [],
+  });
+
+  // Sync with auth context
+  useEffect(() => {
+    setCurrentUserState({
+      id: user?.id || '',
+      name: user?.user_metadata?.name || user?.email || '',
+      email: user?.email || '',
+      roles: (userRoles as UserRole[]) || [],
+    });
+  }, [user, userRoles]);
+
+  const setCurrentUser = useCallback((u: UserProfile) => {
+    setCurrentUserState(u);
   }, []);
 
   const hasRole = useCallback((role: UserRole) => currentUser.roles.includes(role), [currentUser]);
