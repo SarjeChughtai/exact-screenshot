@@ -19,7 +19,11 @@ import type { Quote, Deal } from '@/types';
 
 interface EstimateResult {
   sqft: number; weight: number;
-  steelCost: number; engineering: number; foundation: number;
+  baseSteelCost: number;      // Steel cost BEFORE supplier increase
+  baseSteelPerSqft: number;   // Base steel $/sqft
+  supplierIncrease: number;   // Dollar amount of supplier increase
+  steelCost: number;          // Steel cost AFTER supplier increase
+  engineering: number; foundation: number;
   insulation: number; gutters: number; liners: number; freight: number;
   subtotal: number; internalMargin: number; estimatedTotal: number;
   contingency: number; gstHst: number; qst: number; grandTotal: number;
@@ -71,6 +75,9 @@ export default function QuickEstimator() {
     }
   };
 
+  const [showMarkup, setShowMarkup] = useState(false);
+  const [showSupplierIncrease, setShowSupplierIncrease] = useState(false);
+
   const calculate = () => {
     const w = parseFloat(width) || 0;
     const l = parseFloat(length) || 0;
@@ -79,6 +86,11 @@ export default function QuickEstimator() {
     if (sqft <= 0) return;
 
     const steel = calcSteelCost(sqft);
+    // calcSteelCost already applies 1.12 multiplier, so base = steel.cost / 1.12
+    const baseSteelCost = steel.cost / 1.12;
+    const supplierIncrease = steel.cost - baseSteelCost;
+    const baseSteelPerSqft = baseSteelCost / sqft;
+
     const eng = calcEngineering(selectedFactors);
     const found = lookupFoundation(sqft, foundationType);
 
@@ -107,6 +119,7 @@ export default function QuickEstimator() {
 
     setResult({
       sqft, weight: steel.weight,
+      baseSteelCost, baseSteelPerSqft, supplierIncrease,
       steelCost: steel.cost, engineering: eng, foundation: found,
       insulation: ins, gutters, liners, freight: frt,
       subtotal, internalMargin, estimatedTotal,
@@ -356,7 +369,17 @@ export default function QuickEstimator() {
             </div>
 
             <div className="space-y-2 text-sm">
-              <Row label="Steel (incl. 12% increase)" value={result.steelCost} />
+              {/* Steel Price with base $/sqft */}
+              <Row label="Steel Price" value={result.steelCost} />
+              <div className="text-xs text-muted-foreground ml-4">
+                Base Steel: {formatCurrency(result.baseSteelPerSqft)}/sqft
+              </div>
+
+              {/* Supplier Increase — shown as separate line when toggled */}
+              {showSupplierIncrease && (
+                <Row label="Supplier Increase (12%)" value={result.supplierIncrease} muted />
+              )}
+
               <Row label="Engineering Fee" value={result.engineering} />
               <Row label="Foundation Drawing" value={result.foundation} />
               {result.insulation > 0 && <Row label={`Insulation (${insulationGrade})`} value={result.insulation} />}
@@ -365,7 +388,12 @@ export default function QuickEstimator() {
               <Row label="Freight Estimate" value={result.freight} />
               <div className="border-t pt-2" />
               <Row label="Subtotal" value={result.subtotal} bold />
-              <Row label="Internal Margin (5%)" value={result.internalMargin} muted />
+
+              {/* Internal Margin — hidden by default, shown via toggle */}
+              {showMarkup && (
+                <Row label="Internal Margin (5%)" value={result.internalMargin} muted />
+              )}
+
               <Row label="Estimated Total" value={result.estimatedTotal} bold />
               <Row label={`Contingency (${contingencyPct}%)`} value={result.contingency} />
               <div className="border-t pt-2" />
@@ -378,6 +406,18 @@ export default function QuickEstimator() {
               </div>
               <div className="text-xs text-muted-foreground text-right">
                 {formatCurrency(result.estimatedTotal / result.sqft)}/sqft
+              </div>
+
+              {/* Toggles */}
+              <div className="border-t pt-3 mt-3 space-y-2">
+                <div className="flex items-center gap-2">
+                  <Checkbox checked={showMarkup} onCheckedChange={v => setShowMarkup(!!v)} />
+                  <Label className="text-xs text-muted-foreground">Show Internal Markup</Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Checkbox checked={showSupplierIncrease} onCheckedChange={v => setShowSupplierIncrease(!!v)} />
+                  <Label className="text-xs text-muted-foreground">Show Supplier Increase Separately</Label>
+                </div>
               </div>
 
               <div className="pt-2">
