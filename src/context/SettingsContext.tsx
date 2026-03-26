@@ -35,6 +35,7 @@ export interface AppSettings {
   insulationStatuses: string[];
   freightStatuses: string[];
   personnel: PersonnelEntry[];
+  clients: ClientEntry[];
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -68,6 +69,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     { id: '2', name: 'Jatin Mahey', email: 'jatin@canadasteel.ca', role: 'sales_rep', roles: ['sales_rep'] },
     { id: '3', name: 'Mitch Fink', email: 'mitch@canadasteel.ca', role: 'sales_rep', roles: ['sales_rep'] },
   ],
+  clients: [],
 };
 
 interface SettingsContextType {
