@@ -201,37 +201,6 @@ export default function QuickEstimator() {
       status: 'Sent',
     };
 
-    const deal: Deal = {
-      jobId,
-      jobName: quote.jobName,
-      clientName: quote.clientName,
-      clientId: quote.clientId,
-      salesRep: currentUser.name,
-      estimator: currentUser.name,
-      teamLead: '',
-      province,
-      city,
-      address: '',
-      postalCode,
-      width: w,
-      length: l,
-      height: h,
-      sqft: result.sqft,
-      weight: result.weight,
-      taxRate: prov.order_rate,
-      taxType: prov.type,
-      orderType: '',
-      dateSigned: date,
-      dealStatus: 'Lead',
-      paymentStatus: 'UNPAID',
-      productionStatus: 'Submitted',
-      freightStatus: 'Pending',
-      insulationStatus: 'Pending',
-      deliveryDate: '',
-      pickupDate: '',
-      notes: '',
-    };
-
     await addQuote(quote);
     toast.success('Quote created — convert to Deal from the Quote Log when ready');
     navigate(`/rfq-builder?jobId=${encodeURIComponent(jobId)}`);
