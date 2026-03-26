@@ -14,7 +14,7 @@ import { toast } from 'sonner';
 import { MapPin } from 'lucide-react';
 
 export default function QuoteBuilder() {
-  const { addQuote } = useAppContext();
+  const { addQuote, quotes } = useAppContext();
 
   const [form, setForm] = useState({
     jobId: '', jobName: '', clientName: '', clientId: '',
@@ -32,8 +32,41 @@ export default function QuoteBuilder() {
 
   const [quote, setQuote] = useState<Quote | null>(null);
   const [freightSource, setFreightSource] = useState('');
+  const [selectedSourceQuote, setSelectedSourceQuote] = useState('');
 
   const set = (key: string, val: string) => setForm(f => ({ ...f, [key]: val }));
+
+  // Pull data from Quote Log to reduce duplicate entry
+  const handleSourceQuoteChange = (quoteId: string) => {
+    setSelectedSourceQuote(quoteId);
+    const q = quotes.find(q => q.id === quoteId);
+    if (!q) return;
+    setForm(f => ({
+      ...f,
+      jobId: q.jobId,
+      jobName: q.jobName,
+      clientName: q.clientName,
+      clientId: q.clientId,
+      salesRep: q.salesRep,
+      estimator: q.estimator,
+      province: q.province,
+      city: q.city,
+      address: q.address,
+      postalCode: q.postalCode,
+      width: String(q.width || ''),
+      length: String(q.length || ''),
+      height: String(q.height || '14'),
+      baseSteelCost: String(q.baseSteelCost || ''),
+      totalWeight: String(q.weight || ''),
+      insulationCost: String(q.insulation || '0'),
+      insulationGrade: q.insulationGrade || '',
+      gutters: String(q.gutters || '0'),
+      liners: String(q.liners || '0'),
+      foundationType: q.foundationType || 'slab',
+      contingencyPct: String(q.contingencyPct || '5'),
+    }));
+    toast.success(`Loaded data from quote ${q.jobId}`);
+  };
 
   const handleLocationLookup = async () => {
     const input = form.postalCode || form.city || form.address;
@@ -138,6 +171,26 @@ export default function QuoteBuilder() {
 
       <div className="grid lg:grid-cols-2 gap-6">
         <div className="space-y-5 bg-card border rounded-lg p-5">
+          {/* Pull from Quote Log */}
+          {quotes.length > 0 && (
+            <div className="bg-accent/5 border border-accent/20 rounded-lg p-3 space-y-1">
+              <Label className="text-xs font-semibold">Import from Quote Log</Label>
+              <Select value={selectedSourceQuote} onValueChange={handleSourceQuoteChange}>
+                <SelectTrigger className="input-blue h-9">
+                  <SelectValue placeholder="Select a quote to auto-fill..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {quotes.map(q => (
+                    <SelectItem key={q.id} value={q.id}>
+                      {q.jobId} — {q.clientName} ({q.width}×{q.length})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[10px] text-muted-foreground">Auto-fills project info, dimensions, and costs from Quote Log</p>
+            </div>
+          )}
+
           <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Project Info</h3>
           <div className="grid grid-cols-2 gap-3">
             <div><Label className="text-xs">Job ID</Label><Input className="input-blue mt-1" value={form.jobId} onChange={e => set('jobId', e.target.value)} placeholder="Auto-generated" /></div>
