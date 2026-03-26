@@ -221,7 +221,7 @@ export default function Settings() {
                     <tr key={p.id} className="border-b">
                       <td className="py-2">{p.name}</td>
                       <td className="py-2 text-xs text-muted-foreground">{p.email}</td>
-                      <td className="py-2 text-xs capitalize">{p.role.replace('_', ' ')}</td>
+                      <td className="py-2 text-xs capitalize">{(p.roles || [p.role]).map(r => r.replace('_', ' ')).join(', ')}</td>
                       {isAdmin && (
                         <td className="py-2">
                           <Button variant="ghost" size="sm" onClick={() => removePerson(p.id)}>
@@ -235,19 +235,19 @@ export default function Settings() {
               </table>
             </div>
             {isAdmin && (
-              <div className="flex gap-2 items-end">
+              <div className="flex flex-wrap gap-2 items-end">
                 <div><Label className="text-xs">Name</Label><Input className="input-blue mt-1 h-8" value={newPerson.name} onChange={e => setNewPerson(p => ({ ...p, name: e.target.value }))} /></div>
                 <div><Label className="text-xs">Email</Label><Input className="input-blue mt-1 h-8" value={newPerson.email} onChange={e => setNewPerson(p => ({ ...p, email: e.target.value }))} /></div>
                 <div>
-                  <Label className="text-xs">Role</Label>
-                  <Select value={newPerson.role} onValueChange={v => setNewPerson(p => ({ ...p, role: v as PersonnelEntry['role'] }))}>
-                    <SelectTrigger className="input-blue mt-1 h-8 w-32"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="sales_rep">Sales Rep</SelectItem>
-                      <SelectItem value="estimator">Estimator</SelectItem>
-                      <SelectItem value="team_lead">Team Lead</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Label className="text-xs">Roles</Label>
+                  <div className="flex gap-2 mt-1">
+                    {(['sales_rep', 'estimator', 'team_lead'] as const).map(r => (
+                      <label key={r} className="flex items-center gap-1 text-xs cursor-pointer">
+                        <input type="checkbox" checked={newPerson.roles.includes(r)} onChange={() => toggleNewRole(r)} className="rounded" />
+                        {r === 'sales_rep' ? 'Sales Rep' : r === 'estimator' ? 'Estimator' : 'Team Lead'}
+                      </label>
+                    ))}
+                  </div>
                 </div>
                 <Button size="sm" onClick={addPerson}><Plus className="h-3 w-3 mr-1" />Add</Button>
               </div>
