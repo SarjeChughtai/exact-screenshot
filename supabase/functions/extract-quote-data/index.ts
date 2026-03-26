@@ -39,7 +39,8 @@ Key extraction rules:
 - If a field is not found, use null
 - For document_type: use "mbs" for MBS/steel supplier docs, "insulation" for Silvercote/insulation docs, "unknown" otherwise
 - IMPORTANT: Look for the client_id which is typically a 6-digit or longer numeric string found near the top of the document, often near the "FOR" line, project header, or account number section. It may appear as an account number, customer number, or client ID. This is NOT the job ID — it identifies the client/customer account.
-- The job_id is usually a separate identifier for the specific project/job.`;
+- The job_id is usually a separate identifier for the specific project/job.
+- IMPORTANT: Look for roof slope/pitch. It often appears as "Roof Slope (rise/12 )= 2.00/ 2.00" or "Roof Pitch = X:12". Extract the FIRST number as roof_pitch (the rise value per 12). For "2.00/ 2.00" format, use the first number (2.00).`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -74,6 +75,7 @@ Key extraction rules:
                   width: { type: "number", description: "Building width in feet" },
                   length: { type: "number", description: "Building length in feet" },
                   height: { type: "number", description: "Eave height in feet" },
+                  roof_pitch: { type: "number", description: "Roof slope/pitch rise per 12. For 'Roof Slope (rise/12)= 2.00/ 2.00' extract 2. For '1:12' extract 1." },
                   weight: { type: "number", description: "Total steel weight in lbs" },
                   cost_per_lb: { type: "number", description: "Cost per pound" },
                   total_cost: { type: "number", description: "Total supplier cost" },
