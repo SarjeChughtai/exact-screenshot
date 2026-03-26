@@ -428,18 +428,32 @@ export default function InternalQuoteBuilder() {
         <div className="space-y-5">
           {/* Multi-file Upload */}
           <div
-            className={`bg-card border-2 border-dashed rounded-lg p-6 text-center transition-colors ${dragActive ? 'border-accent bg-accent/5' : 'border-border'}`}
+            className={`bg-card border-2 border-dashed rounded-lg p-6 text-center transition-colors ${dragActive ? 'border-accent bg-accent/5' : aiProcessing ? 'border-primary bg-primary/5' : 'border-border'}`}
             onDragOver={e => { e.preventDefault(); setDragActive(true); }}
             onDragLeave={() => setDragActive(false)}
             onDrop={handleDrop}
           >
-            <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-            <p className="text-sm font-medium">Drop MBS cost files + insulation quotes</p>
-            <p className="text-xs text-muted-foreground mt-1">PDF, CSV, TXT — drop multiple files at once</p>
-            <label className="mt-3 inline-block">
-              <input type="file" className="hidden" accept=".csv,.txt,.pdf" multiple onChange={e => e.target.files && handleFileUpload(e.target.files)} />
-              <Button variant="outline" size="sm" asChild><span>Or browse files</span></Button>
-            </label>
+            {aiProcessing ? (
+              <>
+                <Loader2 className="h-8 w-8 mx-auto text-primary mb-2 animate-spin" />
+                <p className="text-sm font-medium flex items-center justify-center gap-1.5">
+                  <Sparkles className="h-4 w-4 text-primary" /> AI extracting quote data...
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">Analyzing document structure and extracting all line items</p>
+              </>
+            ) : (
+              <>
+                <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                <p className="text-sm font-medium flex items-center justify-center gap-1.5">
+                  <Sparkles className="h-4 w-4 text-primary" /> AI-Powered Document Extraction
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">Drop MBS cost files + insulation quotes — AI extracts all fields automatically</p>
+                <label className="mt-3 inline-block">
+                  <input type="file" className="hidden" accept=".csv,.txt,.pdf" multiple onChange={e => e.target.files && handleFileUpload(e.target.files)} />
+                  <Button variant="outline" size="sm" asChild><span>Or browse files</span></Button>
+                </label>
+              </>
+            )}
           </div>
 
           {/* Parsed files list */}
