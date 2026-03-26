@@ -48,7 +48,7 @@ export default function InternalQuoteBuilder() {
   });
 
   const [supplierMarkupPct, setSupplierMarkupPct] = useState(String(settings.supplierIncreasePct));
-  const [internalMarkupPct, setInternalMarkupPct] = useState('0');
+  const [internalMarkupPct] = useState('0');
   const [costData, setCostData] = useState<CostFileData>({ steelWeightLbs: 0, supplierCostPerLb: 0, totalSupplierCost: 0, accessories: [] });
   const [quote, setQuote] = useState<Quote | null>(null);
   const [tieredMarkupInfo, setTieredMarkupInfo] = useState<{ rate: number; amount: number } | null>(null);
@@ -554,17 +554,10 @@ export default function InternalQuoteBuilder() {
 
           {/* Markup Controls */}
           <div className="bg-card border rounded-lg p-5 space-y-4">
-            <h3 className="text-sm font-semibold uppercase tracking-wide text-destructive">Markup Controls</h3>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label className="text-xs">Supplier Markup on $/lb (%)</Label>
-                <Input className="input-blue mt-1" type="number" step="0.5" value={supplierMarkupPct} onChange={e => setSupplierMarkupPct(e.target.value)} />
-              </div>
-              <div>
-                <Label className="text-xs">Additional Internal Markup (%)</Label>
-                <Input className="input-blue mt-1" type="number" step="0.5" value={internalMarkupPct} onChange={e => setInternalMarkupPct(e.target.value)} />
-                <p className="text-[10px] text-muted-foreground mt-1">Extra margin beyond tiered steel markup (default 0%)</p>
-              </div>
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-destructive">Supplier Markup</h3>
+            <div>
+              <Label className="text-xs">Supplier Markup on $/lb (%)</Label>
+              <Input className="input-blue mt-1" type="number" step="0.5" value={supplierMarkupPct} onChange={e => setSupplierMarkupPct(e.target.value)} />
             </div>
             {costData.supplierCostPerLb > 0 && (
               <div className="bg-muted rounded-md p-3 text-xs space-y-1">
@@ -636,7 +629,7 @@ export default function InternalQuoteBuilder() {
               </div>
             </div>
             <div className="grid grid-cols-3 gap-3">
-              <div><Label className="text-xs">Complexity Factor</Label><Input className="input-blue mt-1" value={form.complexityFactor} onChange={e => set('complexityFactor', e.target.value)} /></div>
+              <div><Label className="text-xs">Roof Pitch (:12)</Label><Input className="input-blue mt-1" value={form.pitch} onChange={e => set('pitch', e.target.value)} placeholder="1" /></div>
               <div><Label className="text-xs">Contingency %</Label><Input className="input-blue mt-1" value={form.contingencyPct} onChange={e => set('contingencyPct', e.target.value)} /></div>
               <div><Label className="text-xs">Insulation ($)</Label><Input className="input-blue mt-1" value={form.insulationCost} onChange={e => set('insulationCost', e.target.value)} /></div>
             </div>
