@@ -436,8 +436,20 @@ export default function InternalQuoteBuilder() {
     const win = window.open('', '_blank');
     if (!win) return;
     const pdfTitle = `Internal Quote - ${quote.clientName} - ${quote.clientId} - ${quote.jobName || quote.jobId}`;
-    win.document.write(`<html><head><title>${pdfTitle}</title><style>body{font-family:monospace;font-size:12px;padding:20px;line-height:1.8;} .bold{font-weight:bold;} .header{text-align:center;margin-bottom:24px;} .row{display:flex;justify-content:space-between;margin:6px 0;} .divider{border-top:1px solid #ccc;margin:12px 0;} .warning{color:red;font-weight:bold;} .spacer{height:10px;}</style></head><body>`);
-    win.document.write(`<div class="header"><h2>INTERNAL SALES QUOTE — ${quote.jobId}</h2><p>${quote.clientName} (ID: ${quote.clientId}) — ${quote.jobName}</p><p class="warning">CONFIDENTIAL — INTERNAL USE ONLY</p></div>`);
+    win.document.write(`<html><head><title>${pdfTitle}</title>
+      <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+      <style>
+        body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; font-size: 14px; padding: 40px; line-height: 2.2; color: #1a1a1a; }
+        .bold { font-weight: 700; }
+        .header { text-align: center; margin-bottom: 32px; border-bottom: 2px solid #333; padding-bottom: 16px; }
+        .header h2 { font-size: 20px; font-weight: 700; margin: 0 0 8px 0; }
+        .header p { margin: 4px 0; font-size: 13px; color: #555; }
+        .row { display: flex; justify-content: space-between; margin: 8px 0; padding: 4px 0; }
+        .divider { border-top: 1px solid #ddd; margin: 16px 0; }
+        .warning { color: #dc2626; font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
+        .spacer { height: 16px; }
+      </style></head><body>`);
+    win.document.write(`<div class="header"><h2>INTERNAL SALES QUOTE — ${quote.jobId}</h2><p>${quote.clientName} (ID: ${quote.clientId}) — ${quote.jobName}</p><p class="warning">⚠ Confidential — Internal Use Only</p></div>`);
     win.document.write(printContent.innerHTML);
     win.document.write('</body></html>');
     win.document.close();
