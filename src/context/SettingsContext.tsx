@@ -6,8 +6,13 @@ export interface PersonnelEntry {
   id: string;
   name: string;
   email: string;
-  role: PersonnelRole; // primary role (kept for backward compat)
-  roles: PersonnelRole[]; // all roles this person holds
+  role: PersonnelRole;
+  roles: PersonnelRole[];
+}
+
+export interface ClientEntry {
+  clientId: string;
+  clientName: string;
 }
 
 export interface AppSettings {
