@@ -12,7 +12,7 @@ import {
   pitchCostMultiplier, heightCostMultiplier
 } from '@/lib/calculations';
 import { estimateFreightFromLocation } from '@/lib/freightEstimate';
-import { MapPin } from 'lucide-react';
+import { MapPin, Lightbulb } from 'lucide-react';
 import { useAppContext } from '@/context/AppContext';
 import { useRoles } from '@/context/RoleContext';
 import { toast } from 'sonner';
@@ -49,6 +49,7 @@ export default function QuickEstimator() {
   const [selectedFactors, setSelectedFactors] = useState<string[]>(['Clear span up to 80ft']);
   const [contingencyPct, setContingencyPct] = useState('5');
   const [result, setResult] = useState<EstimateResult | null>(null);
+  const [costSavingTips, setCostSavingTips] = useState<string[]>([]);
 
   const toggleFactor = (item: string) => {
     setSelectedFactors(prev => prev.includes(item) ? prev.filter(f => f !== item) : [...prev, item]);
@@ -116,6 +117,19 @@ export default function QuickEstimator() {
       grandTotal: estimatedTotal + contingency + taxes.total,
       province,
     });
+
+    // Generate cost-saving tips
+    const tips: string[] = [];
+    const p = parseFloat(pitch) || 1;
+    if (p > 2) tips.push(`📐 Reducing roof pitch from ${p}:12 to 1:12 could save ~${((pitchCostMultiplier(p).multiplier - 1) * 100).toFixed(0)}% on steel costs.`);
+    if (h > 16) tips.push(`📏 A ${h}ft eave height adds ~${((heightCostMultiplier(h).multiplier - 1) * 100).toFixed(0)}% to steel. Consider ${Math.min(h, 16)}ft if clearance allows.`);
+    if (w > 80) tips.push(`🏗️ Buildings over 80ft wide require multi-span framing — significantly more costly. Consider ≤ 80ft width.`);
+    if (foundationType === 'frost_wall') tips.push(`🧱 Frost wall foundations cost ~65% more than slab. Verify if slab-on-grade is feasible.`);
+    if (remoteLevel === 'extreme') tips.push(`🚛 Extreme remote freight adds $3,000+. Consider a staging/pickup arrangement.`);
+    if (remoteLevel === 'remote') tips.push(`🚛 Remote location adds $1,500 to freight. Check if a closer delivery point is available.`);
+    if (sqft > 10000 && parseFloat(contingencyPct) >= 5) tips.push(`💰 For large buildings (${formatNumber(sqft)} sqft), contingency could be reduced to 3% — larger projects have more predictable costs.`);
+    if (includeInsulation && !insulationGrade) tips.push(`🧊 Specify insulation grade to ensure the estimate matches the correct R-value.`);
+    setCostSavingTips(tips);
   };
 
   const convertToRFQ = async () => {
@@ -395,6 +409,18 @@ export default function QuickEstimator() {
                   Convert to RFQ (Stage 1)
                 </Button>
               </div>
+
+              {/* Cost-Saving Tips */}
+              {costSavingTips.length > 0 && (
+                <div className="bg-accent/5 border border-accent/20 rounded-lg p-3 space-y-1.5 mt-3">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-accent">
+                    <Lightbulb className="h-3.5 w-3.5" /> Cost-Saving Opportunities
+                  </div>
+                  {costSavingTips.map((tip, i) => (
+                    <p key={i} className="text-xs text-muted-foreground">{tip}</p>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}

@@ -6,8 +6,13 @@ export interface PersonnelEntry {
   id: string;
   name: string;
   email: string;
-  role: PersonnelRole; // primary role (kept for backward compat)
-  roles: PersonnelRole[]; // all roles this person holds
+  role: PersonnelRole;
+  roles: PersonnelRole[];
+}
+
+export interface ClientEntry {
+  clientId: string;
+  clientName: string;
 }
 
 export interface AppSettings {
@@ -30,6 +35,7 @@ export interface AppSettings {
   insulationStatuses: string[];
   freightStatuses: string[];
   personnel: PersonnelEntry[];
+  clients: ClientEntry[];
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -63,6 +69,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     { id: '2', name: 'Jatin Mahey', email: 'jatin@canadasteel.ca', role: 'sales_rep', roles: ['sales_rep'] },
     { id: '3', name: 'Mitch Fink', email: 'mitch@canadasteel.ca', role: 'sales_rep', roles: ['sales_rep'] },
   ],
+  clients: [],
 };
 
 interface SettingsContextType {
