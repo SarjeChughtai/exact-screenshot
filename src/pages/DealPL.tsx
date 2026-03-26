@@ -7,6 +7,7 @@ export default function DealPL() {
   const { deals, payments } = useAppContext();
   const [expandedJob, setExpandedJob] = useState<string | null>(null);
 
+  // Only show actual deals, not quotes
   const rows = deals.map(d => {
     const clientIn = payments.filter(p => p.jobId === d.jobId && (p.direction === 'Client Payment IN' || p.direction === 'Refund IN')).reduce((s, p) => s + p.amountExclTax, 0);
     const vendorOut = payments.filter(p => p.jobId === d.jobId && (p.direction === 'Vendor Payment OUT' || p.direction === 'Refund OUT')).reduce((s, p) => s + p.amountExclTax, 0);
