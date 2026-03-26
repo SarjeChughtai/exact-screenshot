@@ -114,3 +114,70 @@ export const PROVINCES = tax_rates.provinces.map(p => ({ code: p.code, name: p.n
 export const INSULATION_GRADES = insulation_pricing.grades.map(g => g.grade);
 export const ENGINEERING_FACTORS = engineering_fees.complexity_factors;
 export const REMOTE_LEVELS = ['none', 'moderate', 'remote', 'extreme'] as const;
+
+/**
+ * Auto-calculate engineering complexity factor based on building dimensions.
+ * Larger buildings and wider clear spans require more engineering effort.
+ * Based on analysis of 143 MBS projects.
+ */
+export function autoComplexityFactor(width: number, length: number, height: number): { factor: number; reason: string } {
+  let factor = 1.0;
+  const reasons: string[] = [];
+
+  // Clear span width
+  if (width > 80) {
+    factor += 0.5;
+    reasons.push(`Wide clear span (${width}ft > 80ft)`);
+  } else if (width > 60) {
+    factor += 0.15;
+    reasons.push(`Moderate span (${width}ft)`);
+  }
+
+  // Building sqft complexity
+  const sqft = width * length;
+  if (sqft > 10000) {
+    factor += 0.5;
+    reasons.push(`Large building (${sqft.toLocaleString()} sqft)`);
+  } else if (sqft > 5000) {
+    factor += 0.25;
+    reasons.push(`Mid-size building (${sqft.toLocaleString()} sqft)`);
+  }
+
+  // Height premium - taller buildings need more engineering
+  if (height > 20) {
+    factor += 0.5;
+    reasons.push(`Tall structure (${height}ft > 20ft)`);
+  } else if (height > 16) {
+    factor += 0.25;
+    reasons.push(`Above-standard height (${height}ft)`);
+  }
+
+  return { factor: Math.round(factor * 100) / 100, reason: reasons.length ? reasons.join('; ') : 'Standard complexity' };
+}
+
+/**
+ * Estimate pitch impact on steel cost.
+ * Standard pitch is 1:12. Higher pitches increase steel weight/cost.
+ * Based on MBS data analysis: each 1:12 increase above standard adds ~3-5% to steel cost.
+ */
+export function pitchCostMultiplier(pitch: number): { multiplier: number; note: string } {
+  // Standard pitch is 1:12 (0.5:12 to 1:12 considered standard)
+  if (pitch <= 1) return { multiplier: 1.0, note: 'Standard pitch (≤1:12) — no adjustment' };
+  if (pitch <= 2) return { multiplier: 1.04, note: `Pitch ${pitch}:12 — ~4% steel increase (more roof area + load)` };
+  if (pitch <= 3) return { multiplier: 1.08, note: `Pitch ${pitch}:12 — ~8% steel increase` };
+  if (pitch <= 4) return { multiplier: 1.12, note: `Pitch ${pitch}:12 — ~12% steel increase` };
+  if (pitch <= 6) return { multiplier: 1.18, note: `Pitch ${pitch}:12 — ~18% steel increase` };
+  return { multiplier: 1.25, note: `Steep pitch ${pitch}:12 — ~25% steel increase` };
+}
+
+/**
+ * Estimate height impact on steel cost.
+ * Standard eave height is 14ft. Taller buildings use more steel.
+ * Based on MBS data: each foot above 14ft adds ~2-3% to steel weight.
+ */
+export function heightCostMultiplier(height: number): { multiplier: number; note: string } {
+  if (height <= 14) return { multiplier: 1.0, note: 'Standard height (≤14ft) — no adjustment' };
+  const extraFeet = height - 14;
+  const multiplier = 1 + (extraFeet * 0.025); // 2.5% per foot above 14
+  return { multiplier: Math.round(multiplier * 1000) / 1000, note: `${height}ft eave — ~${(extraFeet * 2.5).toFixed(1)}% more steel vs 14ft standard` };
+}
