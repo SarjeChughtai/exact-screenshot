@@ -77,12 +77,13 @@ export default function Settings() {
         <p className="text-sm text-muted-foreground mt-1">Global configuration for markups, statuses, and personnel</p>
       </div>
 
-      <Tabs defaultValue="markups">
+      <Tabs defaultValue={isAdmin ? "markups" : "statuses"}>
         <TabsList>
           {isAdmin && <TabsTrigger value="markups">Markup & Costs</TabsTrigger>}
           {isAdmin && <TabsTrigger value="estimator">Estimator</TabsTrigger>}
           <TabsTrigger value="statuses">Status Options</TabsTrigger>
           <TabsTrigger value="personnel">Personnel</TabsTrigger>
+          {isAdmin && <TabsTrigger value="users">Users & Access</TabsTrigger>}
           <TabsTrigger value="data">Data</TabsTrigger>
         </TabsList>
 
@@ -246,6 +247,12 @@ export default function Settings() {
             )}
           </div>
         </TabsContent>
+
+        {isAdmin && (
+          <TabsContent value="users" className="space-y-4">
+            <UserManagement />
+          </TabsContent>
+        )}
 
         <TabsContent value="data" className="space-y-4">
           <div className="bg-card border rounded-lg p-5 space-y-4">
