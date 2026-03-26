@@ -10,6 +10,7 @@ import { useSettings } from '@/context/SettingsContext';
 import { PROVINCES } from '@/lib/calculations';
 import { toast } from 'sonner';
 import { Plus, Trash2, Send, Printer } from 'lucide-react';
+import { PersonnelSelect } from '@/components/PersonnelSelect';
 
 type WallLocation = 'LEW' | 'REW' | 'FSW' | 'BSW';
 const WALL_LABELS: Record<WallLocation, string> = {
@@ -269,18 +270,11 @@ export default function QuoteRFQ() {
               </div>
               <div>
                 <Label className="text-xs">Sales Rep</Label>
-                {salesReps.length > 0 ? (
-                  <Select value={form.salesRep} onValueChange={v => set('salesRep', v)}>
-                    <SelectTrigger className="input-blue mt-1"><SelectValue placeholder="Select..." /></SelectTrigger>
-                    <SelectContent>
-                      {salesReps.map(r => <SelectItem key={r.id} value={r.name}>{r.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                ) : <Input className="input-blue mt-1" value={form.salesRep} onChange={e => set('salesRep', e.target.value)} />}
+                <PersonnelSelect value={form.salesRep} onValueChange={v => set('salesRep', v)} role="sales_rep" className="mt-1" />
               </div>
               <div>
                 <Label className="text-xs">Estimator</Label>
-                <Input className="input-blue mt-1" value={form.estimator} onChange={e => set('estimator', e.target.value)} />
+                <PersonnelSelect value={form.estimator} onValueChange={v => set('estimator', v)} role="estimator" className="mt-1" />
               </div>
             </div>
           </div>

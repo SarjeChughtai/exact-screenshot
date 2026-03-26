@@ -12,6 +12,7 @@ import { estimateFreightFromLocation } from '@/lib/freightEstimate';
 import type { Quote } from '@/types';
 import { toast } from 'sonner';
 import { MapPin } from 'lucide-react';
+import { PersonnelSelect } from '@/components/PersonnelSelect';
 
 export default function QuoteBuilder() {
   const { addQuote } = useAppContext();
@@ -144,8 +145,8 @@ export default function QuoteBuilder() {
             <div><Label className="text-xs">Job Name</Label><Input className="input-blue mt-1" value={form.jobName} onChange={e => set('jobName', e.target.value)} /></div>
             <div><Label className="text-xs">Client Name</Label><Input className="input-blue mt-1" value={form.clientName} onChange={e => set('clientName', e.target.value)} /></div>
             <div><Label className="text-xs">Client ID</Label><Input className="input-blue mt-1" value={form.clientId} onChange={e => set('clientId', e.target.value)} /></div>
-            <div><Label className="text-xs">Sales Rep</Label><Input className="input-blue mt-1" value={form.salesRep} onChange={e => set('salesRep', e.target.value)} /></div>
-            <div><Label className="text-xs">Estimator</Label><Input className="input-blue mt-1" value={form.estimator} onChange={e => set('estimator', e.target.value)} /></div>
+            <div><Label className="text-xs">Sales Rep</Label><PersonnelSelect value={form.salesRep} onValueChange={v => set('salesRep', v)} role="sales_rep" className="mt-1" /></div>
+            <div><Label className="text-xs">Estimator</Label><PersonnelSelect value={form.estimator} onValueChange={v => set('estimator', v)} role="estimator" className="mt-1" /></div>
           </div>
 
           <div className="grid grid-cols-3 gap-3">

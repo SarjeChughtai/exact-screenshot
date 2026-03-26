@@ -1,10 +1,13 @@
 import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 
+export type PersonnelRole = 'sales_rep' | 'estimator' | 'team_lead';
+
 export interface PersonnelEntry {
   id: string;
   name: string;
   email: string;
-  role: 'sales_rep' | 'estimator' | 'team_lead';
+  role: PersonnelRole; // primary role (kept for backward compat)
+  roles: PersonnelRole[]; // all roles this person holds
 }
 
 export interface AppSettings {
@@ -56,9 +59,9 @@ const DEFAULT_SETTINGS: AppSettings = {
   insulationStatuses: ['Requested', 'Ordered', 'Delivered', 'N/A'],
   freightStatuses: ['RFQ', 'Quoted', 'Booked', 'Delivered'],
   personnel: [
-    { id: '1', name: 'Devin Sloane', email: 'devin@canadasteel.ca', role: 'sales_rep' },
-    { id: '2', name: 'Jatin Mahey', email: 'jatin@canadasteel.ca', role: 'sales_rep' },
-    { id: '3', name: 'Mitch Fink', email: 'mitch@canadasteel.ca', role: 'sales_rep' },
+    { id: '1', name: 'Devin Sloane', email: 'devin@canadasteel.ca', role: 'sales_rep', roles: ['sales_rep'] },
+    { id: '2', name: 'Jatin Mahey', email: 'jatin@canadasteel.ca', role: 'sales_rep', roles: ['sales_rep'] },
+    { id: '3', name: 'Mitch Fink', email: 'mitch@canadasteel.ca', role: 'sales_rep', roles: ['sales_rep'] },
   ],
 };
 
@@ -70,10 +73,21 @@ interface SettingsContextType {
   getTeamLeads: () => PersonnelEntry[];
 }
 
+function migratePersonnel(personnel: any[]): PersonnelEntry[] {
+  return personnel.map(p => ({
+    ...p,
+    roles: p.roles || [p.role || 'sales_rep'],
+  }));
+}
+
 function loadSettings(): AppSettings {
   try {
     const s = localStorage.getItem('canada_steel_settings');
-    if (s) return { ...DEFAULT_SETTINGS, ...JSON.parse(s) };
+    if (s) {
+      const parsed = { ...DEFAULT_SETTINGS, ...JSON.parse(s) };
+      if (parsed.personnel) parsed.personnel = migratePersonnel(parsed.personnel);
+      return parsed;
+    }
   } catch {}
   return { ...DEFAULT_SETTINGS };
 }
@@ -91,9 +105,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const getSalesReps = useCallback(() => settings.personnel.filter(p => p.role === 'sales_rep'), [settings]);
-  const getEstimators = useCallback(() => settings.personnel.filter(p => p.role === 'estimator'), [settings]);
-  const getTeamLeads = useCallback(() => settings.personnel.filter(p => p.role === 'team_lead'), [settings]);
+  const getSalesReps = useCallback(() => settings.personnel.filter(p => (p.roles || [p.role]).includes('sales_rep')), [settings]);
+  const getEstimators = useCallback(() => settings.personnel.filter(p => (p.roles || [p.role]).includes('estimator')), [settings]);
+  const getTeamLeads = useCallback(() => settings.personnel.filter(p => (p.roles || [p.role]).includes('team_lead')), [settings]);
 
   return (
     <SettingsContext.Provider value={{ settings, updateSettings, getSalesReps, getEstimators, getTeamLeads }}>

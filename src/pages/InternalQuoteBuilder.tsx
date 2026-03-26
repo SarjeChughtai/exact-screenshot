@@ -13,6 +13,7 @@ import type { Quote } from '@/types';
 import { toast } from 'sonner';
 import { Upload, FileText, CheckCircle2, AlertTriangle, Download, Mail, ChevronDown, X, Sparkles, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { PersonnelSelect } from '@/components/PersonnelSelect';
 
 interface CostFileData {
   steelWeightLbs: number;
@@ -352,7 +353,7 @@ export default function InternalQuoteBuilder() {
       `Engineering: base $1,200 × factor ${form.complexityFactor} = ${formatCurrency(1200 * (parseFloat(form.complexityFactor) || 1))} + $500 markup = ${formatCurrency(engineering)}`,
       `Foundation: sqft=${formatNumber(sqft)}, type=${form.foundationType}, base=${formatCurrency(foundation - 500)} + $500 = ${formatCurrency(foundation)}`,
       `Insulation: ${formatCurrency(insulation)} (pass-through, no markup)`,
-      `Freight: MAX($4,000, ${form.distance}km × $4) + remote + overweight = ${formatCurrency(freight)}`,
+      `Freight: MAX($4,000, ${form.distance}km × $4) + remote(${form.remoteLevel}) + overweight = ${formatCurrency(freight)}`,
       additionalMarkup > 0 ? `Internal Additional: ${internalMarkupPct}% of ${formatCurrency(subtotal)} = ${formatCurrency(additionalMarkupAmount)}` : '',
       `Tax: province = ${form.province}, type = ${taxes.type}, rate = ${(taxRate * 100).toFixed(2)}%`,
       `ALL FIGURES SOURCE: 143 MBS projects for steel tiers, 48 Silvercote quotes for insulation, foundation schedule v1`,
@@ -579,16 +580,12 @@ export default function InternalQuoteBuilder() {
               <div><Label className="text-xs">Client ID</Label><Input className="input-blue mt-1" value={form.clientId} onChange={e => set('clientId', e.target.value)} /></div>
               <div>
                 <Label className="text-xs">Sales Rep</Label>
-                {salesReps.length > 0 ? (
-                  <Select value={form.salesRep} onValueChange={v => set('salesRep', v)}>
-                    <SelectTrigger className="input-blue mt-1"><SelectValue placeholder="Select..." /></SelectTrigger>
-                    <SelectContent>
-                      {salesReps.map(r => <SelectItem key={r.id} value={r.name}>{r.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                ) : <Input className="input-blue mt-1" value={form.salesRep} onChange={e => set('salesRep', e.target.value)} />}
+                <PersonnelSelect value={form.salesRep} onValueChange={v => set('salesRep', v)} role="sales_rep" className="mt-1" />
               </div>
-              <div><Label className="text-xs">Estimator</Label><Input className="input-blue mt-1" value={form.estimator} onChange={e => set('estimator', e.target.value)} /></div>
+              <div>
+                <Label className="text-xs">Estimator</Label>
+                <PersonnelSelect value={form.estimator} onValueChange={v => set('estimator', v)} role="estimator" className="mt-1" />
+              </div>
             </div>
             <div className="grid grid-cols-3 gap-3">
               <div>
@@ -689,7 +686,7 @@ export default function InternalQuoteBuilder() {
                 <QRow label="Gutters" value={quote.gutters} />
                 <QRow label="Liners" value={quote.liners} />
                 <QRow label="Insulation" value={quote.insulation} />
-                <QRow label="Freight Estimate" value={quote.freight} />
+                <QRow label={`Freight Estimate (${form.distance}km, ${form.remoteLevel})`} value={quote.freight} />
                 <br />
                 {parseFloat(internalMarkupPct) > 0 && <QRow label={`Additional Internal (${internalMarkupPct}%)`} value={quote.markup - (tieredMarkupInfo?.amount || 0)} />}
                 <QRow label="COMBINED TOTAL" value={quote.combinedTotal} bold />
