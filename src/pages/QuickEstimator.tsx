@@ -409,6 +409,18 @@ export default function QuickEstimator() {
                   Convert to RFQ (Stage 1)
                 </Button>
               </div>
+
+              {/* Cost-Saving Tips */}
+              {costSavingTips.length > 0 && (
+                <div className="bg-accent/5 border border-accent/20 rounded-lg p-3 space-y-1.5 mt-3">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-accent">
+                    <Lightbulb className="h-3.5 w-3.5" /> Cost-Saving Opportunities
+                  </div>
+                  {costSavingTips.map((tip, i) => (
+                    <p key={i} className="text-xs text-muted-foreground">{tip}</p>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}
