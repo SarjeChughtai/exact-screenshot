@@ -29,7 +29,7 @@ interface EstimateResult {
 
 export default function QuickEstimator() {
   const navigate = useNavigate();
-  const { addQuote, addDeal } = useAppContext();
+  const { addQuote } = useAppContext();
   const { currentUser } = useRoles();
 
   const [width, setWidth] = useState('');

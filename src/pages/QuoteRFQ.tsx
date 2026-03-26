@@ -30,7 +30,7 @@ interface Opening {
 }
 
 export default function QuoteRFQ() {
-  const { deals, addDeal } = useAppContext();
+  const { deals } = useAppContext();
   const { getSalesReps } = useSettings();
   const salesReps = getSalesReps();
 
