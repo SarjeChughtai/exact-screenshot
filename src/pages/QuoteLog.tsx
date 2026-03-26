@@ -8,20 +8,20 @@ import { getProvinceTax } from '@/lib/calculations';
 
 const STATUSES: QuoteStatus[] = ['Draft', 'Sent', 'Follow Up', 'Won', 'Lost', 'Expired'];
 
+const STATUS_LABELS: Record<QuoteStatus, string> = {
+  Draft: 'Draft',
+  Sent: 'Request for Quote',
+  'Follow Up': 'Follow Up',
+  Won: 'Won',
+  Lost: 'Lost',
+  Expired: 'Expired',
+};
+
 export default function QuoteLog() {
   const { quotes, updateQuote, addDeal, updateDeal, deals } = useAppContext();
 
   const changeStatus = (id: string, status: QuoteStatus) => {
     updateQuote(id, { status });
-  };
-
-  const STATUS_LABELS: Record<QuoteStatus, string> = {
-    Draft: 'Draft',
-    Sent: 'Request for Quote',
-    'Follow Up': 'Follow Up',
-    Won: 'Won',
-    Lost: 'Lost',
-    Expired: 'Expired',
   };
 
   const convertToDeal = (q: typeof quotes[0]) => {
@@ -48,47 +48,33 @@ export default function QuoteLog() {
 
     const deal: Deal = {
       jobId: q.jobId,
-      jobName: q.jobName,
-      clientName: q.clientName,
-      clientId: q.clientId,
-      salesRep: q.salesRep,
-      estimator: q.estimator,
-      teamLead: '',
-      province: q.province,
-      city: q.city,
-      address: q.address,
-      postalCode: q.postalCode,
-      width: q.width,
-      length: q.length,
-      height: q.height,
-      sqft: q.sqft,
-      weight: q.weight,
-      taxRate: prov.order_rate,
-      taxType: prov.type,
-      orderType: '',
-      dateSigned: new Date().toISOString().split('T')[0],
-      dealStatus: 'Quoted',
-      paymentStatus: 'UNPAID',
-      productionStatus: 'Submitted',
-      freightStatus: 'Pending',
-      insulationStatus: 'Pending',
-      deliveryDate: '',
-      pickupDate: '',
-      notes: '',
+      jobName: q.jobName, clientName: q.clientName, clientId: q.clientId,
+      salesRep: q.salesRep, estimator: q.estimator, teamLead: '',
+      province: q.province, city: q.city, address: q.address, postalCode: q.postalCode,
+      width: q.width, length: q.length, height: q.height, sqft: q.sqft, weight: q.weight,
+      taxRate: prov.order_rate, taxType: prov.type,
+      orderType: '', dateSigned: new Date().toISOString().split('T')[0],
+      dealStatus: 'Quoted', paymentStatus: 'UNPAID',
+      productionStatus: 'Submitted', freightStatus: 'Pending',
+      insulationStatus: 'Pending', deliveryDate: '', pickupDate: '', notes: '',
     };
 
     addDeal(deal);
     toast.success(`Deal created for ${q.jobId}`);
   };
 
-  return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold">Quote Log</h2>
-        <p className="text-sm text-muted-foreground mt-1">{quotes.length} quotes total</p>
-      </div>
+  // Separate into groups
+  const rfqInProgress = quotes.filter(q => q.status === 'Sent');
+  const quotesReturned = quotes.filter(q => q.status === 'Follow Up');
+  const otherQuotes = quotes.filter(q => !['Sent', 'Follow Up'].includes(q.status));
 
-      <div className="bg-card border rounded-lg overflow-x-auto">
+  const renderTable = (title: string, subtitle: string, items: typeof quotes, highlight?: string) => (
+    <div className="space-y-2">
+      <div>
+        <h3 className="text-lg font-semibold">{title}</h3>
+        <p className="text-xs text-muted-foreground">{subtitle} — {items.length} items</p>
+      </div>
+      <div className={`bg-card border rounded-lg overflow-x-auto ${highlight ? `border-${highlight}` : ''}`}>
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-primary text-primary-foreground text-xs">
@@ -98,9 +84,9 @@ export default function QuoteLog() {
             </tr>
           </thead>
           <tbody>
-            {quotes.length === 0 ? (
-              <tr><td colSpan={10} className="px-3 py-8 text-center text-muted-foreground">No quotes yet</td></tr>
-            ) : quotes.map(q => (
+            {items.length === 0 ? (
+              <tr><td colSpan={10} className="px-3 py-6 text-center text-muted-foreground text-xs">None</td></tr>
+            ) : items.map(q => (
               <tr key={q.id} className={`border-b hover:bg-muted/50 ${q.status === 'Lost' || q.status === 'Expired' ? 'status-cancelled' : ''}`}>
                 <td className="px-3 py-2 font-mono text-xs">{q.jobId}</td>
                 <td className="px-3 py-2 text-xs">{q.date}</td>
@@ -128,6 +114,19 @@ export default function QuoteLog() {
           </tbody>
         </table>
       </div>
+    </div>
+  );
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-2xl font-bold">Quote Log</h2>
+        <p className="text-sm text-muted-foreground mt-1">{quotes.length} quotes total</p>
+      </div>
+
+      {renderTable('RFQs In Progress', 'Quotes submitted as RFQ — awaiting factory response', rfqInProgress)}
+      {renderTable('Quotes Returned', 'Quotes sent back / follow up required', quotesReturned)}
+      {renderTable('All Other Quotes', 'Draft, Won, Lost, Expired', otherQuotes)}
     </div>
   );
 }

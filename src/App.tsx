@@ -16,6 +16,7 @@ import QuickEstimator from "@/pages/QuickEstimator";
 import QuoteBuilder from "@/pages/QuoteBuilder";
 import InternalQuoteBuilder from "@/pages/InternalQuoteBuilder";
 import QuoteLog from "@/pages/QuoteLog";
+import EstimatesLog from "@/pages/EstimatesLog";
 import MasterDeals from "@/pages/MasterDeals";
 import InternalCosts from "@/pages/InternalCosts";
 import ProjectedFinancials from "@/pages/ProjectedFinancials";
@@ -32,6 +33,8 @@ import CommissionProfit from "@/pages/CommissionProfit";
 import CommissionStatement from "@/pages/CommissionStatement";
 import AuditLog from "@/pages/AuditLog";
 import Settings from "@/pages/Settings";
+import DealerRFQ from "@/pages/DealerRFQ";
+import DealerLog from "@/pages/DealerLog";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -58,6 +61,7 @@ const App = () => (
                           <Route path="/internal-quote-builder" element={<InternalQuoteBuilder />} />
                           <Route path="/quote-builder" element={<QuoteBuilder />} />
                           <Route path="/quote-log" element={<QuoteLog />} />
+                          <Route path="/estimates-log" element={<EstimatesLog />} />
                           <Route path="/quote-rfq" element={<QuoteRFQ />} />
                           <Route path="/deals" element={<MasterDeals />} />
                           <Route path="/internal-costs" element={<InternalCosts />} />
@@ -74,6 +78,8 @@ const App = () => (
                           <Route path="/commission-statement" element={<CommissionStatement />} />
                           <Route path="/settings" element={<Settings />} />
                           <Route path="/audit-log" element={<AuditLog />} />
+                          <Route path="/dealer-rfq" element={<DealerRFQ />} />
+                          <Route path="/dealer-log" element={<DealerLog />} />
                           <Route path="*" element={<NotFound />} />
                         </Routes>
                       </Layout>

@@ -1,4 +1,5 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -33,6 +34,7 @@ export default function QuoteRFQ() {
   const { deals } = useAppContext();
   const { getSalesReps } = useSettings();
   const salesReps = getSalesReps();
+  const [searchParams] = useSearchParams();
 
   const [form, setForm] = useState({
     clientId: '',
@@ -52,13 +54,34 @@ export default function QuoteRFQ() {
     gutters: false,
     gutterNotes: '',
     liners: false,
-    linerLocation: '' as '' | 'roof' | 'wall' | 'both',
+    linerLocation: '' as '' | 'roof' | 'walls' | 'roof_walls',
     linerNotes: '',
     insulationRequired: false,
     insulationRoofGrade: '',
     insulationWallGrade: '',
     notes: '',
   });
+
+  // Auto-populate from URL params (from estimator)
+  useEffect(() => {
+    const jobId = searchParams.get('jobId');
+    if (jobId) {
+      setForm(f => ({
+        ...f,
+        jobId: searchParams.get('jobId') || f.jobId,
+        clientName: searchParams.get('clientName') || f.clientName,
+        clientId: searchParams.get('clientId') || f.clientId,
+        salesRep: searchParams.get('salesRep') || f.salesRep,
+        width: searchParams.get('width') || f.width,
+        length: searchParams.get('length') || f.length,
+        height: searchParams.get('height') || f.height,
+        roofPitch: searchParams.get('pitch') ? `${searchParams.get('pitch')}:12` : f.roofPitch,
+        province: searchParams.get('province') || f.province,
+        city: searchParams.get('city') || f.city,
+        postalCode: searchParams.get('postalCode') || f.postalCode,
+      }));
+    }
+  }, [searchParams]);
 
   const [openings, setOpenings] = useState<Opening[]>([]);
 
@@ -347,14 +370,14 @@ export default function QuoteRFQ() {
               </div>
               {form.liners && (
                 <>
-                  <div>
+                   <div>
                     <Label className="text-[10px]">Location</Label>
                     <Select value={form.linerLocation} onValueChange={v => set('linerLocation', v)}>
                       <SelectTrigger className="input-blue mt-1 h-8 text-xs"><SelectValue placeholder="Select..." /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="roof">Roof</SelectItem>
-                        <SelectItem value="wall">Wall</SelectItem>
-                        <SelectItem value="both">Both</SelectItem>
+                        <SelectItem value="walls">Walls</SelectItem>
+                        <SelectItem value="roof_walls">Roof & Walls</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
