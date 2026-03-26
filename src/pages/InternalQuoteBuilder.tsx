@@ -241,6 +241,7 @@ export default function InternalQuoteBuilder() {
     if (aiData.width) set('width', String(aiData.width));
     if (aiData.length) set('length', String(aiData.length));
     if (aiData.height) set('height', String(aiData.height));
+    if (aiData.roof_pitch) set('pitch', String(aiData.roof_pitch));
     if (aiData.client_name) set('clientName', aiData.client_name);
     if (aiData.client_id) set('clientId', aiData.client_id);
     if (aiData.job_id) set('jobId', aiData.job_id);
@@ -326,6 +327,7 @@ export default function InternalQuoteBuilder() {
               if (parsed.pWidth) set('width', String(parsed.pWidth));
               if (parsed.pLength) set('length', String(parsed.pLength));
               if (parsed.pHeight) set('height', String(parsed.pHeight));
+              if (parsed.pPitch) set('pitch', String(parsed.pPitch));
               if (parsed.clientName) set('clientName', parsed.clientName);
               if (parsed.clientId) set('clientId', parsed.clientId);
               if (parsed.jobId) set('jobId', parsed.jobId);
