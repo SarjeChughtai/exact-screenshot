@@ -16,7 +16,7 @@ import { MapPin, Lightbulb } from 'lucide-react';
 import { useAppContext } from '@/context/AppContext';
 import { useRoles } from '@/context/RoleContext';
 import { toast } from 'sonner';
-import type { Quote, Deal } from '@/types';
+import type { Quote } from '@/types';
 
 interface EstimateResult {
   sqft: number; weight: number;
