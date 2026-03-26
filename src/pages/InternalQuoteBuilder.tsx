@@ -11,7 +11,8 @@ import { formatCurrency, formatNumber, PROVINCES, getProvinceTax, calcFreight, c
 import { estimateFreightFromLocation } from '@/lib/freightEstimate';
 import type { Quote } from '@/types';
 import { toast } from 'sonner';
-import { Upload, FileText, CheckCircle2, AlertTriangle, Download, Mail, ChevronDown, X } from 'lucide-react';
+import { Upload, FileText, CheckCircle2, AlertTriangle, Download, Mail, ChevronDown, X, Sparkles, Loader2 } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 
 interface CostFileData {
   steelWeightLbs: number;
