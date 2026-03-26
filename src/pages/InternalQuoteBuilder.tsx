@@ -174,7 +174,7 @@ export default function InternalQuoteBuilder() {
   const parseMbsPdf = (pages: string[]) => {
     const fullText = pages.join('\n');
     let weight = 0, costPerLb = 0, totalCost = 0;
-    let pWidth = 0, pLength = 0, pHeight = 0;
+    let pWidth = 0, pLength = 0, pHeight = 0, pPitch = 0;
     let clientName = '', clientId = '', jobId = '';
     const accessories: { name: string; weight: number; cost: number }[] = [];
 
@@ -191,6 +191,10 @@ export default function InternalQuoteBuilder() {
     if (widthMatch) pWidth = parseFloat(widthMatch[1]);
     if (lengthMatch) pLength = parseFloat(lengthMatch[1]);
     if (heightMatch) pHeight = parseFloat(heightMatch[1]);
+
+    // Roof Slope parsing: handles "Roof Slope (rise/12 )= 2.00/ 2.00" and similar formats
+    const slopeMatch = fullText.match(/Roof\s*Slope\s*\(?rise\/12\s*\)?\s*=\s*([\d.]+)/i);
+    if (slopeMatch) pPitch = parseFloat(slopeMatch[1]);
 
     const totalMatch = fullText.match(/Total[:\s]+([\d,]+\.?\d*)\s+([\d,]+\.?\d*)/i);
     if (totalMatch) {
@@ -216,7 +220,7 @@ export default function InternalQuoteBuilder() {
     if (weight && totalCost && !costPerLb) costPerLb = totalCost / weight;
     if (weight && costPerLb && !totalCost) totalCost = weight * costPerLb;
 
-    return { weight, costPerLb, totalCost, pWidth, pLength, pHeight, clientName, clientId, jobId, accessories };
+    return { weight, costPerLb, totalCost, pWidth, pLength, pHeight, pPitch, clientName, clientId, jobId, accessories };
   };
 
   const extractWithAI = async (text: string, filename: string) => {
