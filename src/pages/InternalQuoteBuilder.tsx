@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -28,6 +29,8 @@ interface ParsedFile {
 }
 
 export default function InternalQuoteBuilder() {
+  const [searchParams] = useSearchParams();
+  const initialJobId = searchParams.get('jobId') || '';
   const { addQuote, deals, quotes } = useAppContext();
   const { settings, getSalesReps } = useSettings();
 
@@ -55,6 +58,14 @@ export default function InternalQuoteBuilder() {
   const [complianceNotes, setComplianceNotes] = useState<string[]>([]);
 
   const set = (key: string, val: string) => setForm(f => ({ ...f, [key]: val }));
+
+  // Auto-populate from URL jobId parameter
+  useEffect(() => {
+    if (initialJobId) {
+      handleJobIdChange(initialJobId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialJobId]);
 
   // Auto-populate from Job ID
   const handleJobIdChange = (jobId: string) => {
@@ -111,68 +122,146 @@ export default function InternalQuoteBuilder() {
     let weight = 0, costPerLb = 0, totalCost = 0;
     let pWidth = 0, pLength = 0, pHeight = 0;
     let clientName = '', clientId = '', jobId = '';
+    let province = '', city = '', postalCode = '';
+    let salesRep = '', estimator = '';
     const accessories: { name: string; weight: number; cost: number }[] = [];
 
-    // Page 2+ project info
-    const forMatch = fullText.match(/FOR\s*\n?\s*(.+)/i);
-    if (forMatch) clientName = forMatch[1].trim();
-    const clientIdMatch = fullText.match(/FOR\s*\n?\s*.+\n?\s*(\d{4,})/i);
+    // --- CLIENT / PROJECT IDENTIFICATION ---
+    // Multiple patterns for "FOR" field
+    const forMatch = fullText.match(/FOR\s*[:\n]?\s*(.+)/i);
+    if (forMatch) clientName = forMatch[1].trim().split('\n')[0].trim();
+    // Client ID: look for number near client name
+    const clientIdMatch = fullText.match(/(?:Customer|Client|Account)\s*(?:ID|No|#|Number)?\s*[:\s]\s*(\d{4,})/i)
+      || fullText.match(/FOR\s*[:\n]?\s*.+\n?\s*(\d{4,})/i);
     if (clientIdMatch) clientId = clientIdMatch[1].trim();
-    const jobMatch = fullText.match(/JOB\s*:?\s*(.+)/i);
+    // Job ID / Project Number
+    const jobMatch = fullText.match(/(?:JOB|PROJECT|ORDER|QUOTE)\s*(?:ID|NO|#|NUMBER)?\s*[:\s]\s*([A-Za-z0-9\-]+)/i);
     if (jobMatch) jobId = jobMatch[1].trim();
+    // Sales rep
+    const repMatch = fullText.match(/(?:SALES|REP|AGENT|SALESPERSON)\s*(?:REP)?\s*[:\s]\s*([A-Za-z\s]+)/i);
+    if (repMatch) salesRep = repMatch[1].trim();
+    // Estimator
+    const estMatch = fullText.match(/(?:ESTIMATOR|QUOTED BY|PREPARED BY)\s*[:\s]\s*([A-Za-z\s]+)/i);
+    if (estMatch) estimator = estMatch[1].trim();
 
-    // Dimensions
-    const widthMatch = fullText.match(/Width\s*\(ft\)\s*=\s*([\d.]+)/i);
-    const lengthMatch = fullText.match(/Length\s*\(ft\)\s*=\s*([\d.]+)/i);
-    const heightMatch = fullText.match(/Eave\s*Height\s*\(ft\)\s*=\s*([\d.]+)/i);
+    // --- LOCATION / ADDRESS EXTRACTION ---
+    // Postal code (Canadian)
+    const postalMatch = fullText.match(/([A-Za-z]\d[A-Za-z])\s?(\d[A-Za-z]\d)/i);
+    if (postalMatch) postalCode = `${postalMatch[1]} ${postalMatch[2]}`.toUpperCase();
+    // Province code
+    const provMatch = fullText.match(/\b(ON|BC|AB|SK|MB|QC|NB|NS|PE|NL|YT|NT|NU)\b/);
+    if (provMatch) province = provMatch[1];
+    // City
+    const cityMatch = fullText.match(/(?:CITY|LOCATION|DELIVER TO|SITE)\s*[:\s]\s*([A-Za-z\s]+?)\s*[,\n]/i);
+    if (cityMatch) city = cityMatch[1].trim();
+
+    // --- DIMENSIONS ---
+    // Multiple dimension patterns
+    const widthMatch = fullText.match(/Width\s*\(?ft\)?\s*=?\s*([\d.]+)/i)
+      || fullText.match(/(\d+)\s*['’]?\s*[xX×]\s*\d+\s*['’]?\s*[xX×]/i);
+    const lengthMatch = fullText.match(/Length\s*\(?ft\)?\s*=?\s*([\d.]+)/i)
+      || fullText.match(/\d+\s*['’]?\s*[xX×]\s*(\d+)\s*['’]?\s*[xX×]/i);
+    const heightMatch = fullText.match(/(?:Eave\s*)?Height\s*\(?ft\)?\s*=?\s*([\d.]+)/i)
+      || fullText.match(/\d+\s*['’]?\s*[xX×]\s*\d+\s*['’]?\s*[xX×]\s*(\d+)/i);
     if (widthMatch) pWidth = parseFloat(widthMatch[1]);
     if (lengthMatch) pLength = parseFloat(lengthMatch[1]);
     if (heightMatch) pHeight = parseFloat(heightMatch[1]);
 
-    // Cost summary — Total line
+    // --- COST / WEIGHT EXTRACTION ---
+    // Total line with weight and cost
     const totalMatch = fullText.match(/Total[:\s]+([\d,]+\.?\d*)\s+([\d,]+\.?\d*)/i);
     if (totalMatch) {
       weight = parseFloat(totalMatch[1].replace(/,/g, ''));
       totalCost = parseFloat(totalMatch[2].replace(/,/g, ''));
     }
+    // Alternative: BUILDING WEIGHT
+    if (!weight) {
+      const bwMatch = fullText.match(/BUILDING\s*WEIGHT\s*[:\s]?\s*([\d,]+\.?\d*)\s*(?:lbs?|pounds?)?/i);
+      if (bwMatch) weight = parseFloat(bwMatch[1].replace(/,/g, ''));
+    }
+    // Alternative: TOTAL WEIGHT
+    if (!weight) {
+      const twMatch = fullText.match(/TOTAL\s*WEIGHT\s*[:\s]?\s*([\d,]+\.?\d*)\s*(?:lbs?)?/i);
+      if (twMatch) weight = parseFloat(twMatch[1].replace(/,/g, ''));
+    }
+    // Alternative: Total Cost / Total Amount
+    if (!totalCost) {
+      const tcMatch = fullText.match(/(?:TOTAL\s*(?:COST|AMOUNT|PRICE)|GRAND\s*TOTAL)\s*[:\s]?\s*\$?([\d,]+\.?\d*)/i);
+      if (tcMatch) totalCost = parseFloat(tcMatch[1].replace(/,/g, ''));
+    }
 
     // PRICE PER WEIGHT
-    const pplbMatch = fullText.match(/PRICE\s+PER\s+WEIGHT\s*\(lb\)\s+([\d.]+)/i);
+    const pplbMatch = fullText.match(/PRICE\s+PER\s+WEIGHT\s*\(?lb\)?\s*[:\s]?\s*\$?([\d.]+)/i)
+      || fullText.match(/\$\s*([\d.]+)\s*\/\s*lb/i)
+      || fullText.match(/([\d.]+)\s*(?:per\s*lb|per\s*pound)/i);
     if (pplbMatch) costPerLb = parseFloat(pplbMatch[1]);
 
-    // Component line items
+    // --- COMPONENT LINE ITEMS ---
     const lines = fullText.split('\n');
     for (const line of lines) {
-      const componentMatch = line.match(/^([A-Za-z][A-Za-z &,]+?)\s+([\d,]+\.?\d*)\s+([\d,]+\.?\d*)\s*$/);
+      // More flexible component matching: name + weight + cost
+      const componentMatch = line.match(/^\s*([A-Za-z][A-Za-z &,/\-]+?)\s+([\d,]+\.?\d*)\s+\$?([\d,]+\.?\d*)\s*$/)
+        || line.match(/^\s*([A-Za-z][A-Za-z &,/\-]+?)\s+([\d,]+\.?\d*)\s+([\d,]+\.?\d*)\s*$/);
       if (componentMatch) {
         const name = componentMatch[1].trim();
         const cWeight = parseFloat(componentMatch[2].replace(/,/g, ''));
         const cCost = parseFloat(componentMatch[3].replace(/,/g, ''));
-        if (name.toLowerCase() === 'total') continue;
-        if (cCost > 0) accessories.push({ name, weight: cWeight, cost: cCost });
+        if (name.toLowerCase() === 'total' || name.toLowerCase() === 'grand total') continue;
+        if (cCost > 0 && cWeight > 0) accessories.push({ name, weight: cWeight, cost: cCost });
       }
     }
 
-    // Fallbacks
+    // --- FALLBACKS ---
     if (weight && totalCost && !costPerLb) costPerLb = totalCost / weight;
     if (weight && costPerLb && !totalCost) totalCost = weight * costPerLb;
+    // If accessories found but no total, sum them
+    if (!totalCost && accessories.length > 0) {
+      totalCost = accessories.reduce((sum, a) => sum + a.cost, 0);
+      weight = weight || accessories.reduce((sum, a) => sum + a.weight, 0);
+      if (weight && totalCost) costPerLb = totalCost / weight;
+    }
 
-    return { weight, costPerLb, totalCost, pWidth, pLength, pHeight, clientName, clientId, jobId, accessories };
+    return {
+      weight, costPerLb, totalCost, pWidth, pLength, pHeight,
+      clientName, clientId, jobId, accessories,
+      // Extra fields from improved extraction
+      province, city, postalCode, salesRep, estimator,
+    };
   };
 
   const identifyMbsWithLLM = async (text: string, filename: string) => {
     const url = import.meta.env.VITE_LOVABLE_PDF_IDENTIFY_URL as string | undefined;
     if (!url) return null;
 
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ filename, text }),
-    });
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filename,
+          text,
+          // Request comprehensive field extraction
+          fields: [
+            'clientName', 'clientId', 'jobId',
+            'width', 'length', 'height',
+            'weight', 'costPerLb', 'totalCost',
+            'province', 'city', 'postalCode',
+            'salesRep', 'estimator',
+            'accessories',
+          ],
+        }),
+      });
 
-    if (!res.ok) return null;
-    const json = await res.json();
-    return json as any;
+      if (!res.ok) {
+        console.warn('[LLM] AI extraction returned status:', res.status);
+        return null;
+      }
+      const json = await res.json();
+      return json as any;
+    } catch (err) {
+      console.warn('[LLM] AI extraction failed:', err);
+      return null;
+    }
   };
 
   const handleFileUpload = async (files: FileList | File[]) => {
@@ -212,12 +301,18 @@ export default function InternalQuoteBuilder() {
                   pWidth: llm.pWidth ?? llm.width ?? parsed.pWidth,
                   pLength: llm.pLength ?? llm.length ?? parsed.pLength,
                   pHeight: llm.pHeight ?? llm.height ?? parsed.pHeight,
-                  // Optional: only override cost figures if LLM provides them.
                   weight: llm.weight ?? parsed.weight,
                   costPerLb: llm.costPerLb ?? llm.cost_per_lb ?? parsed.costPerLb,
                   totalCost: llm.totalCost ?? llm.total_cost ?? parsed.totalCost,
                   accessories: llm.accessories ?? parsed.accessories,
+                  // Additional fields from AI extraction
+                  province: llm.province ?? parsed.province,
+                  city: llm.city ?? parsed.city,
+                  postalCode: llm.postalCode ?? llm.postal_code ?? parsed.postalCode,
+                  salesRep: llm.salesRep ?? llm.sales_rep ?? parsed.salesRep,
+                  estimator: llm.estimator ?? parsed.estimator,
                 };
+                toast.info('AI-assisted field extraction applied');
               }
             }
 
@@ -227,6 +322,12 @@ export default function InternalQuoteBuilder() {
             if (finalParsed.clientName) set('clientName', finalParsed.clientName);
             if (finalParsed.clientId) set('clientId', finalParsed.clientId);
             if (finalParsed.jobId) set('jobId', finalParsed.jobId);
+            // Apply additional extracted fields
+            if (finalParsed.province) set('province', finalParsed.province);
+            if (finalParsed.city) set('city', finalParsed.city);
+            if (finalParsed.postalCode) set('postalCode', finalParsed.postalCode);
+            if (finalParsed.salesRep) set('salesRep', finalParsed.salesRep);
+            if (finalParsed.estimator) set('estimator', finalParsed.estimator);
             setCostData({
               steelWeightLbs: finalParsed.weight,
               supplierCostPerLb: finalParsed.costPerLb,
