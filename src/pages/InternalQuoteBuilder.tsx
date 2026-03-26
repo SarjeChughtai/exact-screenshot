@@ -11,7 +11,8 @@ import { formatCurrency, formatNumber, PROVINCES, getProvinceTax, calcFreight, c
 import { estimateFreightFromLocation } from '@/lib/freightEstimate';
 import type { Quote } from '@/types';
 import { toast } from 'sonner';
-import { Upload, FileText, CheckCircle2, AlertTriangle, Download, Mail, ChevronDown, X } from 'lucide-react';
+import { Upload, FileText, CheckCircle2, AlertTriangle, Download, Mail, ChevronDown, X, Sparkles, Loader2 } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 
 interface CostFileData {
   steelWeightLbs: number;
@@ -53,6 +54,7 @@ export default function InternalQuoteBuilder() {
   const [dragActive, setDragActive] = useState(false);
   const [parsedFiles, setParsedFiles] = useState<ParsedFile[]>([]);
   const [complianceNotes, setComplianceNotes] = useState<string[]>([]);
+  const [aiProcessing, setAiProcessing] = useState(false);
 
   const set = (key: string, val: string) => setForm(f => ({ ...f, [key]: val }));
 
@@ -160,102 +162,132 @@ export default function InternalQuoteBuilder() {
     return { weight, costPerLb, totalCost, pWidth, pLength, pHeight, clientName, clientId, jobId, accessories };
   };
 
-  const identifyMbsWithLLM = async (text: string, filename: string) => {
-    const url = import.meta.env.VITE_LOVABLE_PDF_IDENTIFY_URL as string | undefined;
-    if (!url) return null;
+  const extractWithAI = async (text: string, filename: string) => {
+    try {
+      const { data, error } = await supabase.functions.invoke('extract-quote-data', {
+        body: { text, filename },
+      });
+      if (error) throw error;
+      if (data?.success && data?.data) return data.data;
+      return null;
+    } catch (e) {
+      console.error('AI extraction error:', e);
+      return null;
+    }
+  };
 
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ filename, text }),
-    });
-
-    if (!res.ok) return null;
-    const json = await res.json();
-    return json as any;
+  const applyAIData = (aiData: any) => {
+    if (aiData.width) set('width', String(aiData.width));
+    if (aiData.length) set('length', String(aiData.length));
+    if (aiData.height) set('height', String(aiData.height));
+    if (aiData.client_name) set('clientName', aiData.client_name);
+    if (aiData.client_id) set('clientId', aiData.client_id);
+    if (aiData.job_id) set('jobId', aiData.job_id);
+    if (aiData.job_name) set('jobName', aiData.job_name);
+    if (aiData.province) set('province', aiData.province);
+    if (aiData.city) set('city', aiData.city);
+    if (aiData.address) set('address', aiData.address);
+    if (aiData.postal_code) set('postalCode', aiData.postal_code);
+    if (aiData.insulation_grade) set('insulationGrade', aiData.insulation_grade);
   };
 
   const handleFileUpload = async (files: FileList | File[]) => {
     const fileArr = Array.from(files);
     const newParsedFiles: ParsedFile[] = [];
+    setAiProcessing(true);
 
     for (const file of fileArr) {
       try {
+        let fullText = '';
         if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
           const pages = await extractTextFromPdf(file);
-          const fullText = pages.join('\n');
+          fullText = pages.join('\n');
+        } else {
+          fullText = await file.text();
+        }
 
+        // AI-first extraction
+        const aiResult = await extractWithAI(fullText, file.name);
+
+        if (aiResult) {
+          const docType = aiResult.document_type || 'unknown';
+
+          if (docType === 'insulation') {
+            const total = aiResult.insulation_total || 0;
+            set('insulationCost', String(total));
+            if (aiResult.insulation_grade) set('insulationGrade', aiResult.insulation_grade);
+            newParsedFiles.push({ name: file.name, type: 'insulation', status: 'success', data: aiResult });
+            toast.success(`🤖 AI extracted insulation: ${formatCurrency(total)}`);
+          } else if (docType === 'mbs') {
+            applyAIData(aiResult);
+            const weight = aiResult.weight || 0;
+            const costPerLb = aiResult.cost_per_lb || (aiResult.total_cost && weight ? aiResult.total_cost / weight : 0);
+            const totalCost = aiResult.total_cost || weight * costPerLb;
+            const components = (aiResult.components || []).map((c: any) => ({
+              name: c.name, weight: c.weight || 0, cost: c.cost || 0,
+            }));
+            setCostData({ steelWeightLbs: weight, supplierCostPerLb: costPerLb, totalSupplierCost: totalCost, accessories: components });
+            newParsedFiles.push({ name: file.name, type: 'mbs', status: 'success', data: aiResult });
+            toast.success(`🤖 AI extracted MBS: ${formatNumber(weight)} lbs @ $${costPerLb.toFixed(2)}/lb`);
+          } else {
+            // AI detected unknown but still got some data — apply what we can
+            applyAIData(aiResult);
+            if (aiResult.weight && aiResult.total_cost) {
+              setCostData({
+                steelWeightLbs: aiResult.weight,
+                supplierCostPerLb: aiResult.cost_per_lb || aiResult.total_cost / aiResult.weight,
+                totalSupplierCost: aiResult.total_cost,
+                accessories: (aiResult.components || []).map((c: any) => ({ name: c.name, weight: c.weight || 0, cost: c.cost || 0 })),
+              });
+              newParsedFiles.push({ name: file.name, type: 'mbs', status: 'success', data: aiResult });
+              toast.success(`🤖 AI extracted data from ${file.name}`);
+            } else if (aiResult.insulation_total) {
+              set('insulationCost', String(aiResult.insulation_total));
+              newParsedFiles.push({ name: file.name, type: 'insulation', status: 'success', data: aiResult });
+              toast.success(`🤖 AI extracted insulation: ${formatCurrency(aiResult.insulation_total)}`);
+            } else {
+              newParsedFiles.push({ name: file.name, type: 'unknown', status: 'failed' });
+              toast.error(`AI could not extract useful data from ${file.name}`);
+            }
+          }
+
+          if (aiResult.notes) {
+            toast.info(`AI note: ${aiResult.notes}`, { duration: 5000 });
+          }
+        } else {
+          // Fallback to regex parsing
+          const pages = fullText.split('\n');
           if (detectInsulationPdf(fullText)) {
             const insulationTotal = parseInsulationPdf(fullText);
             set('insulationCost', String(insulationTotal));
             newParsedFiles.push({ name: file.name, type: 'insulation', status: 'success', data: { total: insulationTotal } });
-            toast.success(`Insulation: ${formatCurrency(insulationTotal)}`);
-          } else if (fullText.includes('BUILDING WEIGHT') || fullText.includes('PRICE PER WEIGHT') || fullText.includes('Total:')) {
+            toast.success(`Insulation (regex): ${formatCurrency(insulationTotal)}`);
+          } else {
             const parsed = parseMbsPdf(pages);
-            let finalParsed: typeof parsed = parsed;
-
-            // Regex extraction can miss IDs/names; fall back to an LLM when critical fields are missing.
-            const needsLLM = !parsed.clientId || !parsed.jobId || !parsed.clientName;
-            if (needsLLM) {
-              let llm: any = null;
-              try {
-                llm = await identifyMbsWithLLM(fullText, file.name);
-              } catch {
-                llm = null;
-              }
-              if (llm) {
-                finalParsed = {
-                  ...parsed,
-                  clientName: llm.clientName || llm.client_name || parsed.clientName,
-                  clientId: llm.clientId || llm.client_id || parsed.clientId,
-                  jobId: llm.jobId || llm.job_id || parsed.jobId,
-                  pWidth: llm.pWidth ?? llm.width ?? parsed.pWidth,
-                  pLength: llm.pLength ?? llm.length ?? parsed.pLength,
-                  pHeight: llm.pHeight ?? llm.height ?? parsed.pHeight,
-                  // Optional: only override cost figures if LLM provides them.
-                  weight: llm.weight ?? parsed.weight,
-                  costPerLb: llm.costPerLb ?? llm.cost_per_lb ?? parsed.costPerLb,
-                  totalCost: llm.totalCost ?? llm.total_cost ?? parsed.totalCost,
-                  accessories: llm.accessories ?? parsed.accessories,
-                };
-              }
+            if (parsed.weight > 0) {
+              if (parsed.pWidth) set('width', String(parsed.pWidth));
+              if (parsed.pLength) set('length', String(parsed.pLength));
+              if (parsed.pHeight) set('height', String(parsed.pHeight));
+              if (parsed.clientName) set('clientName', parsed.clientName);
+              if (parsed.clientId) set('clientId', parsed.clientId);
+              if (parsed.jobId) set('jobId', parsed.jobId);
+              setCostData({
+                steelWeightLbs: parsed.weight, supplierCostPerLb: parsed.costPerLb,
+                totalSupplierCost: parsed.totalCost, accessories: parsed.accessories,
+              });
+              newParsedFiles.push({ name: file.name, type: 'mbs', status: 'success', data: parsed });
+              toast.success(`MBS (regex): ${formatNumber(parsed.weight)} lbs`);
+            } else {
+              newParsedFiles.push({ name: file.name, type: 'unknown', status: 'failed' });
+              toast.error(`Could not parse: ${file.name}`);
             }
-
-            if (finalParsed.pWidth) set('width', String(finalParsed.pWidth));
-            if (finalParsed.pLength) set('length', String(finalParsed.pLength));
-            if (finalParsed.pHeight) set('height', String(finalParsed.pHeight));
-            if (finalParsed.clientName) set('clientName', finalParsed.clientName);
-            if (finalParsed.clientId) set('clientId', finalParsed.clientId);
-            if (finalParsed.jobId) set('jobId', finalParsed.jobId);
-            setCostData({
-              steelWeightLbs: finalParsed.weight,
-              supplierCostPerLb: finalParsed.costPerLb,
-              totalSupplierCost: finalParsed.totalCost,
-              accessories: finalParsed.accessories,
-            });
-            newParsedFiles.push({ name: file.name, type: 'mbs', status: 'success', data: finalParsed });
-
-            // Auto freight from postal code if available
-            if (form.postalCode) {
-              const est = await estimateFreightFromLocation(form.postalCode);
-              if (est) set('distance', est.distanceKm.toString());
-            }
-
-            toast.success(`MBS: ${formatNumber(finalParsed.weight)} lbs @ $${finalParsed.costPerLb.toFixed(2)}/lb | ${finalParsed.pWidth}×${finalParsed.pLength}×${finalParsed.pHeight}`);
-          } else {
-            newParsedFiles.push({ name: file.name, type: 'unknown', status: 'failed' });
-            toast.error(`Could not identify: ${file.name}`);
           }
-        } else {
-          const text = await file.text();
-          // Attempt MBS text parse
-          const parsed = parseMbsPdf([text]);
-          if (parsed.weight > 0) {
-            setCostData({ steelWeightLbs: parsed.weight, supplierCostPerLb: parsed.costPerLb, totalSupplierCost: parsed.totalCost, accessories: parsed.accessories });
-            newParsedFiles.push({ name: file.name, type: 'mbs', status: 'success' });
-          } else {
-            newParsedFiles.push({ name: file.name, type: 'unknown', status: 'failed' });
-          }
+        }
+
+        // Auto freight from postal code
+        if (form.postalCode) {
+          const est = await estimateFreightFromLocation(form.postalCode);
+          if (est) set('distance', est.distanceKm.toString());
         }
       } catch {
         newParsedFiles.push({ name: file.name, type: 'unknown', status: 'failed' });
@@ -263,6 +295,7 @@ export default function InternalQuoteBuilder() {
       }
     }
     setParsedFiles(prev => [...prev, ...newParsedFiles]);
+    setAiProcessing(false);
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -395,18 +428,32 @@ export default function InternalQuoteBuilder() {
         <div className="space-y-5">
           {/* Multi-file Upload */}
           <div
-            className={`bg-card border-2 border-dashed rounded-lg p-6 text-center transition-colors ${dragActive ? 'border-accent bg-accent/5' : 'border-border'}`}
+            className={`bg-card border-2 border-dashed rounded-lg p-6 text-center transition-colors ${dragActive ? 'border-accent bg-accent/5' : aiProcessing ? 'border-primary bg-primary/5' : 'border-border'}`}
             onDragOver={e => { e.preventDefault(); setDragActive(true); }}
             onDragLeave={() => setDragActive(false)}
             onDrop={handleDrop}
           >
-            <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-            <p className="text-sm font-medium">Drop MBS cost files + insulation quotes</p>
-            <p className="text-xs text-muted-foreground mt-1">PDF, CSV, TXT — drop multiple files at once</p>
-            <label className="mt-3 inline-block">
-              <input type="file" className="hidden" accept=".csv,.txt,.pdf" multiple onChange={e => e.target.files && handleFileUpload(e.target.files)} />
-              <Button variant="outline" size="sm" asChild><span>Or browse files</span></Button>
-            </label>
+            {aiProcessing ? (
+              <>
+                <Loader2 className="h-8 w-8 mx-auto text-primary mb-2 animate-spin" />
+                <p className="text-sm font-medium flex items-center justify-center gap-1.5">
+                  <Sparkles className="h-4 w-4 text-primary" /> AI extracting quote data...
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">Analyzing document structure and extracting all line items</p>
+              </>
+            ) : (
+              <>
+                <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                <p className="text-sm font-medium flex items-center justify-center gap-1.5">
+                  <Sparkles className="h-4 w-4 text-primary" /> AI-Powered Document Extraction
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">Drop MBS cost files + insulation quotes — AI extracts all fields automatically</p>
+                <label className="mt-3 inline-block">
+                  <input type="file" className="hidden" accept=".csv,.txt,.pdf" multiple onChange={e => e.target.files && handleFileUpload(e.target.files)} />
+                  <Button variant="outline" size="sm" asChild><span>Or browse files</span></Button>
+                </label>
+              </>
+            )}
           </div>
 
           {/* Parsed files list */}
