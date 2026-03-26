@@ -615,6 +615,13 @@ export default function InternalQuoteBuilder() {
               <div><Label className="text-xs">Length (ft)</Label><Input className="input-blue mt-1" value={form.length} onChange={e => set('length', e.target.value)} /></div>
               <div><Label className="text-xs">Height (ft)</Label><Input className="input-blue mt-1" value={form.height} onChange={e => set('height', e.target.value)} /></div>
             </div>
+            {/* Pitch & Height impact notes for estimator */}
+            {(parseFloat(form.pitch) > 1 || parseFloat(form.height) > 14) && (
+              <div className="bg-muted rounded-md p-3 text-xs space-y-1">
+                {parseFloat(form.pitch) > 1 && <p className="text-muted-foreground">📐 {pitchCostMultiplier(parseFloat(form.pitch)).note}</p>}
+                {parseFloat(form.height) > 14 && <p className="text-muted-foreground">📏 {heightCostMultiplier(parseFloat(form.height)).note}</p>}
+              </div>
+            )}
             <div className="grid grid-cols-3 gap-3">
               <div><Label className="text-xs">Distance (km)</Label><Input className="input-blue mt-1" value={form.distance} onChange={e => set('distance', e.target.value)} /></div>
               <div>
