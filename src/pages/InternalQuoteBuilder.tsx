@@ -732,9 +732,9 @@ export default function InternalQuoteBuilder() {
 
 function QRow({ label, value, bold }: { label: string; value: number; bold?: boolean }) {
   return (
-    <div className={`flex justify-between ${bold ? 'font-bold' : ''}`}>
+    <div className={`flex justify-between py-0.5 ${bold ? 'font-bold text-base' : ''}`} style={{ lineHeight: '2.2' }}>
       <span>{label}</span>
-      <span>{formatCurrency(value)}</span>
+      <span className="font-mono">{formatCurrency(value)}</span>
     </div>
   );
 }
