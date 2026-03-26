@@ -366,8 +366,6 @@ export default function InternalQuoteBuilder() {
       `ALL FIGURES SOURCE: 143 MBS projects for steel tiers, 48 Silvercote quotes for insulation, foundation schedule v1`,
     ].filter(Boolean);
     setComplianceNotes(notes);
-    ].filter(Boolean);
-    setComplianceNotes(notes);
 
     const q: Quote = {
       id: crypto.randomUUID(),
@@ -378,7 +376,7 @@ export default function InternalQuoteBuilder() {
       province: form.province, city: form.city, address: form.address, postalCode: form.postalCode,
       width: w, length: l, height: h, sqft, weight,
       baseSteelCost: costData.totalSupplierCost, steelAfter12: steelAfterSupplierMarkup,
-      markup: tieredMarkupAmount + additionalMarkupAmount, adjustedSteel,
+      markup: tieredMarkupAmount, adjustedSteel,
       engineering, foundation, foundationType: form.foundationType,
       gutters: guttersVal, liners: linersVal, insulation, insulationGrade: form.insulationGrade,
       freight, combinedTotal, perSqft: combinedTotal / sqft, perLb: finalPerLb,
