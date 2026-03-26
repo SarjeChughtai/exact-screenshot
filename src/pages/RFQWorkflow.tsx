@@ -26,6 +26,7 @@ export default function RFQWorkflow() {
     carriers: [], quotedPrices: {}, selectedCarrier: '', selectedPrice: 0,
     status: 'Draft', sentDate: '', responseDate: '', notes: ''
   });
+  const [requestType, setRequestType] = useState<'estimate' | 'sold_job'>('estimate');
 
   const canEdit = hasAnyRole('admin', 'owner', 'freight', 'operations');
 
@@ -68,7 +69,7 @@ export default function RFQWorkflow() {
       status: form.status as RFQStatus || 'Draft',
       sentDate: form.sentDate || '',
       responseDate: form.responseDate || '',
-      notes: form.notes || '',
+      notes: `[${requestType === 'sold_job' ? 'SOLD JOB' : 'ESTIMATE'}] ${form.notes || ''}`.trim(),
       createdAt: new Date().toISOString()
     };
     addRFQ(rfq);
@@ -79,6 +80,7 @@ export default function RFQWorkflow() {
       carriers: [], quotedPrices: {}, selectedCarrier: '', selectedPrice: 0,
       status: 'Draft', sentDate: '', responseDate: '', notes: ''
     });
+    setRequestType('estimate');
     toast.success('RFQ Created');
   };
 
@@ -212,7 +214,17 @@ export default function RFQWorkflow() {
               <label className="text-xs font-medium mb-1 block">Delivery Address</label>
               <Input className="input-blue h-9" value={form.deliveryAddress} onChange={e => setForm({...form, deliveryAddress: e.target.value})} />
             </div>
-            <div className="lg:col-span-4">
+            <div>
+              <label className="text-xs font-medium mb-1 block">Request Type</label>
+              <Select value={requestType} onValueChange={v => setRequestType(v as 'estimate' | 'sold_job')}>
+                <SelectTrigger className="input-blue h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="estimate">Estimate</SelectItem>
+                  <SelectItem value="sold_job">Sold Job</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="lg:col-span-3">
               <label className="text-xs font-medium mb-1 block">Notes / Special Instructions</label>
               <Textarea className="input-blue" value={form.notes} onChange={e => setForm({...form, notes: e.target.value})} />
             </div>
