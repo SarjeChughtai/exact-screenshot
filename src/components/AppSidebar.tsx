@@ -2,7 +2,7 @@ import {
   Calculator, FileText, ClipboardList, Briefcase, DollarSign,
   BarChart3, CreditCard, Users, Truck, Factory, Award, FileSpreadsheet,
   Receipt, TrendingUp, Building2, ChevronDown, FileInput,
-  Shield, User, Settings as SettingsIcon, Send
+  Shield, User, Settings as SettingsIcon, Send, Bell
 } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import { useLocation } from 'react-router-dom';
@@ -78,6 +78,7 @@ const menuGroups: MenuGroup[] = [
   {
     label: 'System',
     items: [
+      { path: '/notifications', label: 'Notifications', icon: Bell, module: 'settings' },
       { path: '/settings', label: 'Settings', icon: SettingsIcon, module: 'settings' },
       { path: '/audit-log', label: 'Audit Log', icon: ClipboardList, module: 'settings' },
     ],

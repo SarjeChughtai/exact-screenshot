@@ -32,6 +32,7 @@ import CommissionProfit from "@/pages/CommissionProfit";
 import CommissionStatement from "@/pages/CommissionStatement";
 import AuditLog from "@/pages/AuditLog";
 import Settings from "@/pages/Settings";
+import Notifications from "@/pages/Notifications";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -73,6 +74,7 @@ const App = () => (
                           <Route path="/commission" element={<CommissionProfit />} />
                           <Route path="/commission-statement" element={<CommissionStatement />} />
                           <Route path="/settings" element={<Settings />} />
+                          <Route path="/notifications" element={<Notifications />} />
                           <Route path="/audit-log" element={<AuditLog />} />
                           <Route path="*" element={<NotFound />} />
                         </Routes>
