@@ -23,7 +23,7 @@ export default function DealPL() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold text-foreground">Deal P&L</h2>
+        <h2 className="text-2xl font-bold text-foreground">Deal Exposure</h2>
         <p className="text-sm text-muted-foreground mt-1">Cash position per deal — click to see payment details</p>
       </div>
 
