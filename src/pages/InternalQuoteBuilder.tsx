@@ -651,11 +651,25 @@ export default function InternalQuoteBuilder() {
 
           {/* Markup Controls */}
           <div className="bg-card border rounded-lg p-5 space-y-4">
-            <h3 className="text-sm font-semibold uppercase tracking-wide text-destructive">Supplier Markup</h3>
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-destructive">Markup Controls</h3>
             <div>
               <Label className="text-xs">Supplier Markup on $/lb (%)</Label>
               <Input className="input-blue mt-1" type="number" step="0.5" value={supplierMarkupPct} onChange={e => setSupplierMarkupPct(e.target.value)} />
             </div>
+            <div className="flex items-center justify-between">
+              <Label className="text-xs">Bundle supplier increase into steel cost</Label>
+              <Switch checked={bundleSupplierIntoSteel} onCheckedChange={setBundleSupplierIntoSteel} />
+            </div>
+            <p className="text-[10px] text-muted-foreground">
+              {bundleSupplierIntoSteel ? 'Supplier increase is baked into steel price — not shown separately' : 'Supplier increase shown as separate line item'}
+            </p>
+            <div className="flex items-center justify-between">
+              <Label className="text-xs">Show internal (tiered) markup</Label>
+              <Switch checked={showInternalMarkup} onCheckedChange={setShowInternalMarkup} />
+            </div>
+            <p className="text-[10px] text-muted-foreground">
+              {showInternalMarkup ? 'Internal tiered markup visible in compliance notes' : 'Internal markup hidden — baked into steel price silently'}
+            </p>
             {costData.supplierCostPerLb > 0 && (
               <div className="bg-muted rounded-md p-3 text-xs space-y-1">
                 <div className="flex justify-between"><span>Original $/lb:</span><span className="font-mono">${costData.supplierCostPerLb.toFixed(2)}</span></div>
