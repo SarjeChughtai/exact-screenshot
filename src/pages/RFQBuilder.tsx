@@ -334,7 +334,7 @@ export default function RFQBuilder() {
         </div>
         <div className="section">
           <div className="row"><span className="label">Openings</span><span>Left end / Right end / Front wall / Back wall</span></div>
-          <div style="white-space:pre-wrap; margin-top:6px;">
+          <div style={{ whiteSpace: 'pre-wrap', marginTop: '6px' }}>
             {`Left end: ${openings.leftEnd}\nRight end: ${openings.rightEnd}\nFront side wall: ${openings.frontSideWall}\nBack side wall: ${openings.backSideWall}`}
           </div>
         </div>
