@@ -19,13 +19,20 @@ export default function Settings() {
   const { hasAnyRole } = useRoles();
   const isAdmin = hasAnyRole('admin', 'owner');
 
-  const [newPerson, setNewPerson] = useState({ name: '', email: '', role: 'sales_rep' as PersonnelEntry['role'] });
+  const [newPerson, setNewPerson] = useState({ name: '', email: '', roles: ['sales_rep'] as PersonnelEntry['roles'] });
+
+  const toggleNewRole = (role: PersonnelEntry['roles'][number]) => {
+    setNewPerson(p => ({
+      ...p,
+      roles: p.roles.includes(role) ? p.roles.filter(r => r !== role) : [...p.roles, role],
+    }));
+  };
 
   const addPerson = () => {
-    if (!newPerson.name) return;
-    const entry: PersonnelEntry = { id: crypto.randomUUID(), ...newPerson };
+    if (!newPerson.name || newPerson.roles.length === 0) { toast.error('Name and at least one role required'); return; }
+    const entry: PersonnelEntry = { id: crypto.randomUUID(), name: newPerson.name, email: newPerson.email, role: newPerson.roles[0], roles: newPerson.roles };
     updateSettings({ personnel: [...settings.personnel, entry] });
-    setNewPerson({ name: '', email: '', role: 'sales_rep' });
+    setNewPerson({ name: '', email: '', roles: ['sales_rep'] });
     toast.success('Person added');
   };
 
