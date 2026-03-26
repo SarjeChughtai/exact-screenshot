@@ -2,7 +2,7 @@ import {
   Calculator, FileText, ClipboardList, Briefcase, DollarSign,
   BarChart3, CreditCard, Users, Truck, Factory, Award, FileSpreadsheet,
   Receipt, TrendingUp, Building2, ChevronDown, FileInput,
-  Shield, User, Settings as SettingsIcon, Send, LogOut
+  Shield, User, Settings as SettingsIcon, Send, LogOut, List, Store
 } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import { useLocation } from 'react-router-dom';
@@ -41,20 +41,21 @@ const menuGroups: MenuGroup[] = [
     label: 'Quotes',
     items: [
       { path: '/estimator', label: 'Quick Estimator', icon: Calculator, module: 'estimator' },
+      { path: '/quote-rfq', label: 'Quote RFQ', icon: Send, module: 'quote-log' },
+      { path: '/estimates-log', label: 'Estimates Log', icon: List, module: 'estimator' },
+      { path: '/quote-log', label: 'Quote Log', icon: ClipboardList, module: 'quote-log' },
       { path: '/internal-quote-builder', label: 'Internal Quote Builder', icon: FileInput, module: 'internal-quote-builder' },
       { path: '/quote-builder', label: 'Sales Quote Builder', icon: FileText, module: 'quote-builder' },
-      { path: '/quote-log', label: 'Quote Log', icon: ClipboardList, module: 'quote-log' },
-      { path: '/quote-rfq', label: 'Quote RFQ', icon: Send, module: 'quote-log' },
     ],
   },
   {
     label: 'Deals',
     items: [
       { path: '/deals', label: 'Master Deals', icon: Briefcase, module: 'deals' },
-      { path: '/deal-pl', label: 'Deal P&L', icon: BarChart3, module: 'deal-pl' },
-      { path: '/commission', label: 'Commission & Profit', icon: Award, module: 'commission' },
       { path: '/production', label: 'Production Status', icon: Factory, module: 'production' },
       { path: '/internal-costs', label: 'Internal Costs', icon: DollarSign, module: 'internal-costs' },
+      { path: '/commission', label: 'Commission & Profit', icon: Award, module: 'commission' },
+      { path: '/deal-pl', label: 'Deal Exposure', icon: BarChart3, module: 'deal-pl' },
     ],
   },
   {
@@ -76,6 +77,13 @@ const menuGroups: MenuGroup[] = [
     ],
   },
   {
+    label: 'Dealer',
+    items: [
+      { path: '/dealer-rfq', label: 'Dealer RFQ', icon: Store, module: 'dealer-rfq' },
+      { path: '/dealer-log', label: 'My Requests', icon: ClipboardList, module: 'dealer-log' },
+    ],
+  },
+  {
     label: 'System',
     items: [
       { path: '/settings', label: 'Settings', icon: SettingsIcon, module: 'settings' },
@@ -83,8 +91,6 @@ const menuGroups: MenuGroup[] = [
     ],
   },
 ];
-
-
 
 
 export function AppSidebar() {
