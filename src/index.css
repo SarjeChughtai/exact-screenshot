@@ -1,0 +1,82 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+@layer base {
+  :root {
+    --background: 220 20% 97%;
+    --foreground: 220 30% 10%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 220 30% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 30% 10%;
+
+    --primary: 220 60% 18%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 215 25% 92%;
+    --secondary-foreground: 220 30% 15%;
+
+    --muted: 215 20% 94%;
+    --muted-foreground: 215 15% 50%;
+
+    --accent: 210 80% 55%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 142 60% 40%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 38 92% 15%;
+
+    --info: 210 80% 55%;
+    --info-foreground: 0 0% 100%;
+
+    --steel-navy: 220 60% 18%;
+    --steel-navy-light: 220 40% 30%;
+    --steel-blue: 210 80% 55%;
+    --steel-slate: 215 20% 65%;
+    --steel-input: 210 70% 94%;
+
+    --border: 215 25% 88%;
+    --input: 215 25% 88%;
+    --ring: 210 80% 55%;
+
+    --radius: 0.5rem;
+
+    --sidebar-background: 220 60% 14%;
+    --sidebar-foreground: 215 30% 85%;
+    --sidebar-primary: 210 80% 55%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 50% 22%;
+    --sidebar-accent-foreground: 215 30% 90%;
+    --sidebar-border: 220 40% 25%;
+    --sidebar-ring: 210 80% 55%;
+    --sidebar-muted: 215 20% 55%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-sans;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+}
+
+@layer components {
+  .status-paid { @apply bg-emerald-100 text-emerald-800 border-emerald-200; }
+  .status-partial { @apply bg-amber-100 text-amber-800 border-amber-200; }
+  .status-unpaid { @apply bg-red-100 text-red-800 border-red-200; }
+  .status-cancelled { @apply bg-gray-200 text-gray-500; }
+  .input-blue { background-color: hsl(var(--steel-input)); }
+}

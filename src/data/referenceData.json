@@ -1,0 +1,680 @@
+{
+  "steel_pricing": {
+    "source": "143 deduplicated MBS projects, March 2026",
+    "tiers": [
+      {
+        "min_sqft": 0,
+        "label": "0-999",
+        "avg_cost_sqft": 33.98,
+        "avg_wt_sqft": 10.97,
+        "projects": 36,
+        "min_cost": 19.16,
+        "max_cost": 54.71,
+        "avg_price_lb": 2.3
+      },
+      {
+        "min_sqft": 1000,
+        "label": "1000-1999",
+        "avg_cost_sqft": 25.38,
+        "avg_wt_sqft": 9.39,
+        "projects": 34,
+        "min_cost": 15.14,
+        "max_cost": 35.34,
+        "avg_price_lb": 2.19
+      },
+      {
+        "min_sqft": 2000,
+        "label": "2000-2999",
+        "avg_cost_sqft": 21.81,
+        "avg_wt_sqft": 7.46,
+        "projects": 21,
+        "min_cost": 12.42,
+        "max_cost": 41.69,
+        "avg_price_lb": 2.18
+      },
+      {
+        "min_sqft": 3000,
+        "label": "3000-3999",
+        "avg_cost_sqft": 21.95,
+        "avg_wt_sqft": 5.02,
+        "projects": 11,
+        "min_cost": 14.12,
+        "max_cost": 25.75,
+        "avg_price_lb": 2.14
+      },
+      {
+        "min_sqft": 4000,
+        "label": "4000-4999",
+        "avg_cost_sqft": 20.62,
+        "avg_wt_sqft": 8.25,
+        "projects": 11,
+        "min_cost": 13.79,
+        "max_cost": 28.11,
+        "avg_price_lb": 2.09
+      },
+      {
+        "min_sqft": 5000,
+        "label": "5000-5999",
+        "avg_cost_sqft": 17.14,
+        "avg_wt_sqft": 8.12,
+        "projects": 1,
+        "min_cost": 17.14,
+        "max_cost": 17.14,
+        "avg_price_lb": 2.11
+      },
+      {
+        "min_sqft": 6000,
+        "label": "6000-6999",
+        "avg_cost_sqft": 15.05,
+        "avg_wt_sqft": 7.26,
+        "projects": 5,
+        "min_cost": 13.03,
+        "max_cost": 18.03,
+        "avg_price_lb": 2.07
+      },
+      {
+        "min_sqft": 7000,
+        "label": "7000-7999",
+        "avg_cost_sqft": 18.02,
+        "avg_wt_sqft": 4.16,
+        "projects": 4,
+        "min_cost": 12.72,
+        "max_cost": 22.58,
+        "avg_price_lb": 2.1
+      },
+      {
+        "min_sqft": 8000,
+        "label": "8000-8999",
+        "avg_cost_sqft": 15.85,
+        "avg_wt_sqft": 7.57,
+        "projects": 3,
+        "min_cost": 13.16,
+        "max_cost": 19.82,
+        "avg_price_lb": 2.08
+      },
+      {
+        "min_sqft": 9000,
+        "label": "9000-9999",
+        "avg_cost_sqft": 19.56,
+        "avg_wt_sqft": 3.98,
+        "projects": 2,
+        "min_cost": 15.92,
+        "max_cost": 23.2,
+        "avg_price_lb": 2.0
+      },
+      {
+        "min_sqft": 10000,
+        "label": "10000-14999",
+        "avg_cost_sqft": 16.23,
+        "avg_wt_sqft": 3.62,
+        "projects": 6,
+        "min_cost": 11.92,
+        "max_cost": 21.18,
+        "avg_price_lb": 2.14
+      },
+      {
+        "min_sqft": 15000,
+        "label": "15000-19999",
+        "avg_cost_sqft": 15.5,
+        "avg_wt_sqft": 6.0,
+        "projects": 3,
+        "min_cost": 11.49,
+        "max_cost": 19.91,
+        "avg_price_lb": 1.95
+      },
+      {
+        "min_sqft": 20000,
+        "label": "20000-29999",
+        "avg_cost_sqft": 26.21,
+        "avg_wt_sqft": 9.93,
+        "projects": 5,
+        "min_cost": 16.8,
+        "max_cost": 32.73,
+        "avg_price_lb": 2.19
+      },
+      {
+        "min_sqft": 30000,
+        "label": "30000+",
+        "avg_cost_sqft": 22.32,
+        "avg_wt_sqft": 11.32,
+        "projects": 1,
+        "min_cost": 22.32,
+        "max_cost": 22.32,
+        "avg_price_lb": 1.97
+      }
+    ]
+  },
+  "insulation_pricing": {
+    "source": "48 deduplicated Silvercote quotes, March 2026",
+    "note": "Material prices already include 12.5% supplier markup. Delivery excluded - varies by location.",
+    "grades": [
+      {
+        "grade": "R13/R13",
+        "material_per_sqft": 1.61,
+        "total_per_sqft": 1.86,
+        "avg_delivery": 786,
+        "quotes": 2
+      },
+      {
+        "grade": "R20/R13",
+        "material_per_sqft": 1.83,
+        "total_per_sqft": 2.34,
+        "avg_delivery": 983,
+        "quotes": 1
+      },
+      {
+        "grade": "R20/R19",
+        "material_per_sqft": 1.96,
+        "total_per_sqft": 2.5,
+        "avg_delivery": 1626,
+        "quotes": 2
+      },
+      {
+        "grade": "R20/R20",
+        "material_per_sqft": 2.05,
+        "total_per_sqft": 2.92,
+        "avg_delivery": 2573,
+        "quotes": 20
+      },
+      {
+        "grade": "R25/R19",
+        "material_per_sqft": 2.08,
+        "total_per_sqft": 2.14,
+        "avg_delivery": 1934,
+        "quotes": 1
+      },
+      {
+        "grade": "R28/R20",
+        "material_per_sqft": 2.62,
+        "total_per_sqft": 2.83,
+        "avg_delivery": 2495,
+        "quotes": 2
+      },
+      {
+        "grade": "R30/R20",
+        "material_per_sqft": 2.55,
+        "total_per_sqft": 2.79,
+        "avg_delivery": 2220,
+        "quotes": 3
+      },
+      {
+        "grade": "R30/R25",
+        "material_per_sqft": 2.43,
+        "total_per_sqft": 2.93,
+        "avg_delivery": 2587,
+        "quotes": 11
+      },
+      {
+        "grade": "R30/R28",
+        "material_per_sqft": 2.64,
+        "total_per_sqft": 2.97,
+        "avg_delivery": 1394,
+        "quotes": 3
+      },
+      {
+        "grade": "R30/R30",
+        "material_per_sqft": 3.45,
+        "total_per_sqft": 3.81,
+        "avg_delivery": 5633,
+        "quotes": 3
+      }
+    ]
+  },
+  "foundation_schedule": {
+    "source": "Canada Steel internal schedule. Always round UP to next tier.",
+    "frost_wall_multiplier": 1.65,
+    "frost_wall_note": "Frost wall ~65% more than slab. Based on $1,500-$1,700 slab vs $2,500-$3,200 frost wall quotes.",
+    "tiers": [
+      {
+        "sqft": 3000,
+        "slab_cost": 1700
+      },
+      {
+        "sqft": 4000,
+        "slab_cost": 1950
+      },
+      {
+        "sqft": 5000,
+        "slab_cost": 2200
+      },
+      {
+        "sqft": 6000,
+        "slab_cost": 2450
+      },
+      {
+        "sqft": 7000,
+        "slab_cost": 2700
+      },
+      {
+        "sqft": 8000,
+        "slab_cost": 2950
+      },
+      {
+        "sqft": 9000,
+        "slab_cost": 3200
+      },
+      {
+        "sqft": 10000,
+        "slab_cost": 3450
+      },
+      {
+        "sqft": 11000,
+        "slab_cost": 3550
+      },
+      {
+        "sqft": 12000,
+        "slab_cost": 3650
+      },
+      {
+        "sqft": 13000,
+        "slab_cost": 3750
+      },
+      {
+        "sqft": 14000,
+        "slab_cost": 3850
+      },
+      {
+        "sqft": 15000,
+        "slab_cost": 3950
+      },
+      {
+        "sqft": 16000,
+        "slab_cost": 4050
+      },
+      {
+        "sqft": 17000,
+        "slab_cost": 4150
+      },
+      {
+        "sqft": 18000,
+        "slab_cost": 4250
+      },
+      {
+        "sqft": 19000,
+        "slab_cost": 4350
+      },
+      {
+        "sqft": 20000,
+        "slab_cost": 4450
+      },
+      {
+        "sqft": 21000,
+        "slab_cost": 4550
+      },
+      {
+        "sqft": 22000,
+        "slab_cost": 4650
+      },
+      {
+        "sqft": 23000,
+        "slab_cost": 4750
+      },
+      {
+        "sqft": 24000,
+        "slab_cost": 4850
+      },
+      {
+        "sqft": 25000,
+        "slab_cost": 4950
+      },
+      {
+        "sqft": 26000,
+        "slab_cost": 5050
+      },
+      {
+        "sqft": 27000,
+        "slab_cost": 5150
+      },
+      {
+        "sqft": 28000,
+        "slab_cost": 5250
+      },
+      {
+        "sqft": 29000,
+        "slab_cost": 5350
+      },
+      {
+        "sqft": 30000,
+        "slab_cost": 5450
+      }
+    ],
+    "over_30k_rule": "Add $100 per additional 1,000 sqft above 30,000"
+  },
+  "engineering_fees": {
+    "base_hours": 8,
+    "rate_per_hour": 150,
+    "base_fee": 1200,
+    "sell_markup": 500,
+    "complexity_factors": [
+      {
+        "item": "Clear span up to 80ft",
+        "factor": 1.0,
+        "default": "Y"
+      },
+      {
+        "item": "Clear span 80-120ft",
+        "factor": 1.5,
+        "default": "N"
+      },
+      {
+        "item": "2-3 buildings combined",
+        "factor": 1.5,
+        "default": "N"
+      },
+      {
+        "item": "4-5 buildings combined",
+        "factor": 2.0,
+        "default": "N"
+      },
+      {
+        "item": "Crane up to 10T (brackets)",
+        "factor": 1.5,
+        "default": "N"
+      },
+      {
+        "item": "Crane up to 50T (columns)",
+        "factor": 2.0,
+        "default": "N"
+      },
+      {
+        "item": "1 Mezzanine",
+        "factor": 1.25,
+        "default": "N"
+      },
+      {
+        "item": "2-4 Mezzanines same elevation",
+        "factor": 1.5,
+        "default": "N"
+      },
+      {
+        "item": "Fascia / Parapets / Canopy",
+        "factor": 1.25,
+        "default": "N"
+      },
+      {
+        "item": "Large openings (sliding/bi-fold/hydraulic)",
+        "factor": 1.5,
+        "default": "N"
+      },
+      {
+        "item": "Jack Beams",
+        "factor": 1.25,
+        "default": "N"
+      },
+      {
+        "item": "Custom loadings",
+        "factor": 1.25,
+        "default": "N"
+      }
+    ]
+  },
+  "tax_rates": {
+    "note": "For steel building orders: HST provinces use HST. QC uses GST+QST. All others GST only (PST does not apply to steel orders).",
+    "provinces": [
+      {
+        "name": "Alberta",
+        "code": "AB",
+        "type": "GST",
+        "gst": 0.05,
+        "pst": 0,
+        "order_rate": 0.05
+      },
+      {
+        "name": "British Columbia",
+        "code": "BC",
+        "type": "GST",
+        "gst": 0.05,
+        "pst": 0.07,
+        "order_rate": 0.05
+      },
+      {
+        "name": "Manitoba",
+        "code": "MB",
+        "type": "GST",
+        "gst": 0.05,
+        "pst": 0.07,
+        "order_rate": 0.05
+      },
+      {
+        "name": "New Brunswick",
+        "code": "NB",
+        "type": "HST",
+        "gst": 0,
+        "pst": 0,
+        "hst": 0.15,
+        "order_rate": 0.15
+      },
+      {
+        "name": "Newfoundland & Labrador",
+        "code": "NL",
+        "type": "HST",
+        "gst": 0,
+        "pst": 0,
+        "hst": 0.15,
+        "order_rate": 0.15
+      },
+      {
+        "name": "Nova Scotia",
+        "code": "NS",
+        "type": "HST",
+        "gst": 0,
+        "pst": 0,
+        "hst": 0.15,
+        "order_rate": 0.15
+      },
+      {
+        "name": "Ontario",
+        "code": "ON",
+        "type": "HST",
+        "gst": 0,
+        "pst": 0,
+        "hst": 0.13,
+        "order_rate": 0.13
+      },
+      {
+        "name": "Prince Edward Island",
+        "code": "PE",
+        "type": "HST",
+        "gst": 0,
+        "pst": 0,
+        "hst": 0.15,
+        "order_rate": 0.15
+      },
+      {
+        "name": "Quebec",
+        "code": "QC",
+        "type": "GST+QST",
+        "gst": 0.05,
+        "qst": 0.09975,
+        "order_rate": 0.14975
+      },
+      {
+        "name": "Saskatchewan",
+        "code": "SK",
+        "type": "GST",
+        "gst": 0.05,
+        "pst": 0.06,
+        "order_rate": 0.05
+      },
+      {
+        "name": "Northwest Territories",
+        "code": "NT",
+        "type": "GST",
+        "gst": 0.05,
+        "pst": 0,
+        "order_rate": 0.05
+      },
+      {
+        "name": "Yukon",
+        "code": "YT",
+        "type": "GST",
+        "gst": 0.05,
+        "pst": 0,
+        "order_rate": 0.05
+      },
+      {
+        "name": "Nunavut",
+        "code": "NU",
+        "type": "GST",
+        "gst": 0.05,
+        "pst": 0,
+        "order_rate": 0.05
+      }
+    ]
+  },
+  "freight_logic": {
+    "origin": "Bradford, ON",
+    "truck_type": "FTL unshared flatbed (always)",
+    "base_rate_per_km": 4.0,
+    "minimum": 4000,
+    "overweight_threshold_lbs": 40000,
+    "overweight_surcharge": 1500,
+    "remote_modifiers": {
+      "none": 0,
+      "moderate": 500,
+      "remote": 1500,
+      "extreme": 3000
+    },
+    "formula": "MAX($4,000, distance_km x $4.00) + remote_modifier + overweight_surcharge",
+    "benchmarks": [
+      {
+        "region": "Small Ontario",
+        "range": "$4,000-$6,000",
+        "distance": "< 500 km"
+      },
+      {
+        "region": "Mid Ontario / Quebec",
+        "range": "$5,500-$8,000",
+        "distance": "500-1,000 km"
+      },
+      {
+        "region": "Prairies (AB/SK/MB)",
+        "range": "$7,000-$12,000",
+        "distance": "2,000-3,500 km"
+      },
+      {
+        "region": "BC Interior",
+        "range": "$8,000-$14,000",
+        "distance": "3,500-4,500 km"
+      },
+      {
+        "region": "Maritimes (NB/NS/PE)",
+        "range": "$6,000-$10,000",
+        "distance": "1,200-1,800 km"
+      },
+      {
+        "region": "Newfoundland",
+        "range": "$12,000-$18,000",
+        "distance": "Includes ferry"
+      }
+    ]
+  },
+  "markup_rules": {
+    "supplier_increase": {
+      "rate": 0.12,
+      "note": "12% applied to $/lb, then multiplied by weight"
+    },
+    "internal_markup_tiers": [
+      {
+        "max_value": 50000,
+        "rate": 0.1,
+        "label": "Under $50K = 10%"
+      },
+      {
+        "max_value": 200000,
+        "rate": 0.075,
+        "label": "$50K-$200K = 7.5%"
+      },
+      {
+        "max_value": 500000,
+        "rate": 0.065,
+        "label": "$200K-$500K = 6.5%"
+      },
+      {
+        "max_value": 1000000,
+        "rate": 0.055,
+        "label": "$500K-$1M = 5.5%"
+      },
+      {
+        "max_value": 999999999,
+        "rate": 0.05,
+        "label": "Over $1M = 5%"
+      }
+    ],
+    "minimum_margin": {
+      "threshold": 30000,
+      "minimum_margin_dollars": 3000,
+      "note": "If steel after supplier increase < $30K, ensure at least $3,000 margin"
+    },
+    "drawings_markup": 500,
+    "drawings_note": "Add $500 to internal engineering and foundation costs",
+    "internal_margin": {
+      "rate": 0.05,
+      "note": "5% applied to subtotal in estimator. NOT applied in quote builder (markup tiers handle it)."
+    },
+    "insulation_markup": {
+      "rate": 0,
+      "note": "No markup. Silvercote prices already include 12.5% supplier markup. Pass through at cost."
+    },
+    "target_price_per_lb": {
+      "min": 2.15,
+      "max": 2.3,
+      "note": "Sanity check range for final steel $/lb"
+    }
+  },
+  "commission_rules": {
+    "sales_rep": {
+      "rate": 0.3,
+      "note": "30% of Gross Profit",
+      "base_toggle": "Toggle per deal: 'True' (real internal GP) or 'Rep-Visible' (marked-up costs GP)",
+      "payout_schedule": [
+        {
+          "stage": "1st Deposit",
+          "trigger": "Client pays 30% of sale price",
+          "payout_pct": 0.5
+        },
+        {
+          "stage": "2nd Deposit",
+          "trigger": "Client pays 70% of sale price",
+          "payout_pct": 0.25
+        },
+        {
+          "stage": "3rd Deposit / Final",
+          "trigger": "Client pays 100% of sale price",
+          "payout_pct": 0.25
+        }
+      ]
+    },
+    "owners": {
+      "count": 3,
+      "rate_each": 0.05,
+      "base": "TRUE Gross Profit (always, never marked-up)",
+      "trigger": "Due at 2nd deposit (70% marker)"
+    },
+    "estimator": {
+      "rate": 0.05,
+      "base": "TRUE Gross Profit",
+      "trigger": "Due at 2nd deposit (70% marker)"
+    }
+  },
+  "factory_schedule": {
+    "supplier": "TSC",
+    "payments": [
+      {
+        "stage": "1st Payment",
+        "pct": 0.15,
+        "trigger": "To begin work and secure price"
+      },
+      {
+        "stage": "2nd Payment",
+        "pct": 0.5,
+        "trigger": "To begin production"
+      },
+      {
+        "stage": "Final Payment",
+        "pct": 0.35,
+        "trigger": "Due upon pickup / before shipping"
+      }
+    ]
+  }
+}
