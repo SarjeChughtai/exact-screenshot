@@ -677,38 +677,31 @@ export default function InternalQuoteBuilder() {
                 </div>
               )}
 
-              <div id="internal-quote-output" className="font-mono text-sm space-y-2 bg-muted p-4 rounded-md" style={{ lineHeight: '1.8' }}>
-                <p className="font-bold text-base">Internal Quote — {quote.jobId}</p>
-                <p className="text-xs text-muted-foreground">Client: {quote.clientName} (ID: {quote.clientId})</p>
-                <p className="text-xs text-muted-foreground">Job Name: {quote.jobName}</p>
-                <p className="text-xs text-muted-foreground">Sales Rep: {quote.salesRep} | Estimator: {quote.estimator}</p>
-                <p className="text-xs text-muted-foreground">Building: {quote.width}′ × {quote.length}′ × {quote.height}′ | {formatNumber(quote.sqft)} sqft | {formatNumber(quote.weight)} lbs</p>
-                <p className="text-xs text-muted-foreground">Location: {quote.city}, {quote.province} {quote.postalCode}</p>
-                <br />
-                <div className="border-b pb-1 mb-1 text-xs font-semibold text-destructive">Cost Breakdown (with markups)</div>
-                <QRow label="Raw Supplier Steel" value={costData.totalSupplierCost} />
-                <QRow label={`Supplier Markup (${supplierMarkupPct}%)`} value={quote.steelAfter12 - costData.totalSupplierCost} />
-                <QRow label="Steel After Supplier Markup" value={quote.steelAfter12} />
-                {tieredMarkupInfo && <QRow label={`Tiered Steel Markup (${(tieredMarkupInfo.rate * 100).toFixed(1)}%)`} value={tieredMarkupInfo.amount} />}
-                <QRow label="Adjusted Steel Cost" value={quote.adjustedSteel} bold />
-                <QRow label="  $/lb after all markups" value={quote.perLb} />
-                <br />
-                <QRow label="Engineering Fee" value={quote.engineering} />
+              <div id="internal-quote-output" className="text-sm space-y-3 bg-muted p-5 rounded-md" style={{ lineHeight: '2.2', fontFamily: 'Inter, system-ui, sans-serif' }}>
+                <p className="font-bold text-lg">Internal Quote — {quote.jobId}</p>
+                <p className="text-sm text-muted-foreground">Client: <strong>{quote.clientName}</strong> (ID: {quote.clientId})</p>
+                <p className="text-sm text-muted-foreground">Job Name: <strong>{quote.jobName}</strong></p>
+                <p className="text-sm text-muted-foreground">Sales Rep: {quote.salesRep} | Estimator: {quote.estimator}</p>
+                <p className="text-sm text-muted-foreground">Building: <strong>{quote.width}′ × {quote.length}′ × {quote.height}′</strong> | {formatNumber(quote.sqft)} sqft | {formatNumber(quote.weight)} lbs | Pitch: {form.pitch}:12</p>
+                <p className="text-sm text-muted-foreground">Location: {quote.city}, {quote.province} {quote.postalCode}</p>
+                <div className="h-3" />
+                <div className="border-b pb-1 mb-2 text-sm font-bold text-foreground">Cost Breakdown</div>
+                <QRow label="Steel" value={quote.adjustedSteel} bold />
+                <QRow label="Engineering Drawings" value={quote.engineering} />
                 <QRow label="Foundation Drawing" value={quote.foundation} />
-                <QRow label="Gutters" value={quote.gutters} />
-                <QRow label="Liners" value={quote.liners} />
-                <QRow label="Insulation" value={quote.insulation} />
+                {quote.gutters > 0 && <QRow label="Gutters" value={quote.gutters} />}
+                {quote.liners > 0 && <QRow label="Liners" value={quote.liners} />}
+                {quote.insulation > 0 && <QRow label="Insulation" value={quote.insulation} />}
                 <QRow label={`Freight Estimate (${form.distance}km, ${form.remoteLevel})`} value={quote.freight} />
-                <br />
-                {parseFloat(internalMarkupPct) > 0 && <QRow label={`Additional Internal (${internalMarkupPct}%)`} value={quote.markup - (tieredMarkupInfo?.amount || 0)} />}
-                <QRow label="COMBINED TOTAL" value={quote.combinedTotal} bold />
-                <QRow label="  $/sqft" value={quote.perSqft} />
-                <br />
-                <QRow label={`Contingency (${quote.contingencyPct}%)`} value={quote.contingency} />
+                <div className="h-2" />
+                <QRow label="SUBTOTAL" value={quote.combinedTotal} bold />
+                <QRow label="$/sqft" value={quote.perSqft} />
+                <div className="h-2" />
+                {quote.contingency > 0 && <QRow label={`Contingency (${quote.contingencyPct}%)`} value={quote.contingency} />}
                 <QRow label="GST/HST" value={quote.gstHst} />
                 {quote.qst > 0 && <QRow label="QST" value={quote.qst} />}
-                <br />
-                <div className="flex justify-between font-bold text-base"><span>GRAND TOTAL</span><span>{formatCurrency(quote.grandTotal)}</span></div>
+                <div className="h-3" />
+                <div className="flex justify-between font-bold text-lg border-t pt-2"><span>GRAND TOTAL</span><span>{formatCurrency(quote.grandTotal)}</span></div>
               </div>
             </div>
 
