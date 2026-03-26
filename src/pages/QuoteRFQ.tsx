@@ -370,14 +370,14 @@ export default function QuoteRFQ() {
               </div>
               {form.liners && (
                 <>
-                  <div>
+                   <div>
                     <Label className="text-[10px]">Location</Label>
                     <Select value={form.linerLocation} onValueChange={v => set('linerLocation', v)}>
                       <SelectTrigger className="input-blue mt-1 h-8 text-xs"><SelectValue placeholder="Select..." /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="roof">Roof</SelectItem>
-                        <SelectItem value="wall">Wall</SelectItem>
-                        <SelectItem value="both">Both</SelectItem>
+                        <SelectItem value="walls">Walls</SelectItem>
+                        <SelectItem value="roof_walls">Roof & Walls</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
