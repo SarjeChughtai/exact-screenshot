@@ -16,7 +16,7 @@ import { MapPin, Lightbulb } from 'lucide-react';
 import { useAppContext } from '@/context/AppContext';
 import { useRoles } from '@/context/RoleContext';
 import { toast } from 'sonner';
-import type { Quote, Deal } from '@/types';
+import type { Quote } from '@/types';
 
 interface EstimateResult {
   sqft: number; weight: number;
@@ -29,7 +29,7 @@ interface EstimateResult {
 
 export default function QuickEstimator() {
   const navigate = useNavigate();
-  const { addQuote, addDeal } = useAppContext();
+  const { addQuote } = useAppContext();
   const { currentUser } = useRoles();
 
   const [width, setWidth] = useState('');
@@ -201,40 +201,8 @@ export default function QuickEstimator() {
       status: 'Sent',
     };
 
-    const deal: Deal = {
-      jobId,
-      jobName: quote.jobName,
-      clientName: quote.clientName,
-      clientId: quote.clientId,
-      salesRep: currentUser.name,
-      estimator: currentUser.name,
-      teamLead: '',
-      province,
-      city,
-      address: '',
-      postalCode,
-      width: w,
-      length: l,
-      height: h,
-      sqft: result.sqft,
-      weight: result.weight,
-      taxRate: prov.order_rate,
-      taxType: prov.type,
-      orderType: '',
-      dateSigned: date,
-      dealStatus: 'Lead',
-      paymentStatus: 'UNPAID',
-      productionStatus: 'Submitted',
-      freightStatus: 'Pending',
-      insulationStatus: 'Pending',
-      deliveryDate: '',
-      pickupDate: '',
-      notes: '',
-    };
-
     await addQuote(quote);
-    await addDeal(deal);
-    toast.success('RFQ created (Stage 1)');
+    toast.success('Quote created — convert to Deal from the Quote Log when ready');
     navigate(`/rfq-builder?jobId=${encodeURIComponent(jobId)}`);
   };
 

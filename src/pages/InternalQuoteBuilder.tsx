@@ -60,7 +60,7 @@ function generateCostSavingTips(form: any, costData: CostFileData, quote: Quote 
 }
 
 export default function InternalQuoteBuilder() {
-  const { addQuote, addDeal, deals, quotes } = useAppContext();
+  const { addQuote, deals, quotes } = useAppContext();
   const { settings, getSalesReps } = useSettings();
 
   const [form, setForm] = useState({
@@ -481,42 +481,7 @@ export default function InternalQuoteBuilder() {
     if (!quote) return;
     addQuote(quote);
 
-    const existingDeal = deals.find(d => d.jobId === quote.jobId);
-    if (!existingDeal) {
-      addDeal({
-        jobId: quote.jobId,
-        jobName: quote.jobName,
-        clientName: quote.clientName,
-        clientId: quote.clientId,
-        salesRep: quote.salesRep,
-        estimator: quote.estimator,
-        teamLead: '',
-        province: quote.province,
-        city: quote.city,
-        address: quote.address,
-        postalCode: quote.postalCode,
-        width: quote.width,
-        length: quote.length,
-        height: quote.height,
-        sqft: quote.sqft,
-        weight: quote.weight,
-        taxRate: 0,
-        taxType: '',
-        orderType: 'New',
-        dateSigned: '',
-        dealStatus: 'Quoted',
-        paymentStatus: 'UNPAID',
-        productionStatus: 'Submitted',
-        freightStatus: 'Pending',
-        insulationStatus: '',
-        deliveryDate: '',
-        pickupDate: '',
-        notes: '',
-      });
-      toast.success(`Deal ${quote.jobId} auto-created`);
-    }
-
-    toast.success('Internal quote saved to Quote Log');
+    toast.success('Quote saved to Quote Log — convert to Deal from the Quote Log when ready');
   };
 
   const downloadPdf = () => {

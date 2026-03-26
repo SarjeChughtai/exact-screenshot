@@ -117,8 +117,10 @@ export default function QuoteLog() {
                   </Select>
                 </td>
                 <td className="px-3 py-2">
-                  {q.status === 'Won' && (
-                    <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => convertToDeal(q)}>→ Deal</Button>
+                  {deals.find(d => d.jobId === q.jobId) ? (
+                    <span className="text-xs text-muted-foreground">Deal exists</span>
+                  ) : (
+                    <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => convertToDeal(q)}>→ Convert to Deal</Button>
                   )}
                 </td>
               </tr>
