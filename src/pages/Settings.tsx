@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useSettings, type PersonnelEntry } from '@/context/SettingsContext';
 import { useAppContext } from '@/context/AppContext';
 import { useRoles } from '@/context/RoleContext';
+import { useAuth } from '@/context/AuthContext';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -10,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { Download, Upload, Plus, Trash2 } from 'lucide-react';
+import { UserManagement } from '@/components/UserManagement';
 
 export default function Settings() {
   const { settings, updateSettings } = useSettings();
