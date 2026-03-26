@@ -79,6 +79,8 @@ export default function InternalQuoteBuilder() {
 
   const [supplierMarkupPct, setSupplierMarkupPct] = useState(String(settings.supplierIncreasePct));
   const [internalMarkupPct] = useState('0');
+  const [showInternalMarkup, setShowInternalMarkup] = useState(true);
+  const [bundleSupplierIntoSteel, setBundleSupplierIntoSteel] = useState(true);
   const [buildings, setBuildings] = useState<BuildingTab[]>([
     { label: 'Building 1', costData: { steelWeightLbs: 0, supplierCostPerLb: 0, totalSupplierCost: 0, accessories: [] }, files: [], width: '', length: '', height: '14', pitch: '1' },
   ]);
