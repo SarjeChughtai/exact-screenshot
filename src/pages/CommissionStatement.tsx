@@ -1,18 +1,28 @@
 import { useState } from 'react';
 import { useAppContext } from '@/context/AppContext';
+import { useRoles } from '@/context/RoleContext';
 import { formatCurrency } from '@/lib/calculations';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { Download } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Download, Lock } from 'lucide-react';
 
 export default function CommissionStatement() {
   const { deals, internalCosts, payments } = useAppContext();
+  const { hasAnyRole } = useRoles();
+
+  const isAdmin = hasAnyRole('admin', 'owner');
+
   const [selectedJob, setSelectedJob] = useState('');
   const [payThroughStage, setPayThroughStage] = useState('1');
   const [stage1Paid, setStage1Paid] = useState(false);
   const [stage2Paid, setStage2Paid] = useState(false);
+
+  // Admin-only visibility controls — off by default
+  const [showOwnerPayout, setShowOwnerPayout] = useState(false);
+  const [showEstimatorPayout, setShowEstimatorPayout] = useState(false);
 
   const deal = deals.find(d => d.jobId === selectedJob);
   const ic = internalCosts.find(c => c.jobId === selectedJob);
@@ -108,6 +118,24 @@ export default function CommissionStatement() {
             <Label className="text-xs">2nd Stage Already Paid</Label>
           </div>
         </div>
+
+        {/* Admin-only visibility controls */}
+        {isAdmin && (
+          <div className="border-t pt-3 space-y-2">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Lock className="h-3 w-3" />
+              <span className="font-semibold uppercase tracking-wider">Admin Controls</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <Label className="text-xs">Show Owner Payout</Label>
+              <Switch checked={showOwnerPayout} onCheckedChange={setShowOwnerPayout} />
+            </div>
+            <div className="flex items-center justify-between">
+              <Label className="text-xs">Show Estimator Payout</Label>
+              <Switch checked={showEstimatorPayout} onCheckedChange={setShowEstimatorPayout} />
+            </div>
+          </div>
+        )}
       </div>
 
       {deal && (
@@ -144,13 +172,26 @@ export default function CommissionStatement() {
               <Row label={`3rd (25%) — ${eligible3 ? '✓ Eligible (100% paid)' : '✗ Not yet (<100% paid)'}`} value={comm3} />
             </div>
 
-            <div className="border-t pt-3 space-y-2">
-              <p className="text-xs text-muted-foreground font-sans font-semibold">Owner Payouts (3 × 5% of TRUE GP at 70% marker)</p>
-              <Row label={`Owner Payout (each) — ${ownerEligible ? '✓ Eligible' : '✗ Not yet'}`} value={ownerEach} />
-              <Row label="Owner Total (×3)" value={ownerEach * 3} />
-              <p className="text-xs text-muted-foreground font-sans font-semibold mt-2">Estimator Payout (5% of TRUE GP at 70% marker)</p>
-              <Row label={`Estimator — ${ownerEligible ? '✓ Eligible' : '✗ Not yet'}`} value={estimatorComm} />
-            </div>
+            {/* Owner Payout — admin-only toggle */}
+            {isAdmin && showOwnerPayout && (
+              <div className="border-t pt-3 space-y-2">
+                <p className="text-xs text-muted-foreground font-sans font-semibold">
+                  Owner Payouts (3 × 5% of TRUE GP at 70% marker)
+                </p>
+                <Row label={`Owner Payout (each) — ${ownerEligible ? '✓ Eligible' : '✗ Not yet'}`} value={ownerEach} />
+                <Row label="Owner Total (×3)" value={ownerEach * 3} />
+              </div>
+            )}
+
+            {/* Estimator Payout — admin-only toggle */}
+            {isAdmin && showEstimatorPayout && (
+              <div className="border-t pt-3 space-y-2">
+                <p className="text-xs text-muted-foreground font-sans font-semibold">
+                  Estimator Payout (5% of TRUE GP at 70% marker)
+                </p>
+                <Row label={`Estimator — ${ownerEligible ? '✓ Eligible' : '✗ Not yet'}`} value={estimatorComm} />
+              </div>
+            )}
 
             <div className="border-t pt-3 space-y-2">
               <Row label="Client Paid to Date" value={clientPaid} />
