@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useAppContext } from '@/context/AppContext';
 import { useSettings } from '@/context/SettingsContext';
-import { formatCurrency, formatNumber, PROVINCES, getProvinceTax, calcFreight, calcEngineeringFromFactor, lookupFoundation, calcMarkup, getMarkupRate } from '@/lib/calculations';
+import { formatCurrency, formatNumber, PROVINCES, getProvinceTax, calcFreight, calcEngineeringFromFactor, lookupFoundation, calcMarkup, getMarkupRate, autoComplexityFactor, pitchCostMultiplier, heightCostMultiplier } from '@/lib/calculations';
 import { estimateFreightFromLocation } from '@/lib/freightEstimate';
 import type { Quote } from '@/types';
 import { toast } from 'sonner';
@@ -38,8 +38,8 @@ export default function InternalQuoteBuilder() {
     salesRep: '', estimator: '', province: 'ON',
     city: '', address: '', postalCode: '',
     width: '', length: '', height: '14',
+    pitch: '1',
     distance: '200', remoteLevel: 'none',
-    complexityFactor: '1.0',
     foundationType: 'slab' as 'slab' | 'frost_wall',
     insulationCost: '0', insulationGrade: '',
     gutters: '0', liners: '0',
@@ -309,6 +309,7 @@ export default function InternalQuoteBuilder() {
     const w = parseFloat(form.width) || 0;
     const l = parseFloat(form.length) || 0;
     const h = parseFloat(form.height) || 14;
+    const pitch = parseFloat(form.pitch) || 1;
     const sqft = w * l;
     if (!sqft || !costData.steelWeightLbs || !costData.totalSupplierCost) {
       toast.error('Enter dimensions and steel cost data');
@@ -317,25 +318,30 @@ export default function InternalQuoteBuilder() {
 
     const weight = costData.steelWeightLbs;
     const supplierMarkup = parseFloat(supplierMarkupPct) / 100;
-    const additionalMarkup = parseFloat(internalMarkupPct) / 100;
 
     const adjustedCostPerLb = costData.supplierCostPerLb * (1 + supplierMarkup);
     const steelAfterSupplierMarkup = adjustedCostPerLb * weight;
     const tieredMarkupAmount = calcMarkup(steelAfterSupplierMarkup);
     const tieredRate = getMarkupRate(steelAfterSupplierMarkup);
-    const adjustedSteel = steelAfterSupplierMarkup + tieredMarkupAmount;
+    
+    // Apply pitch and height multipliers to steel
+    const pitchMult = pitchCostMultiplier(pitch);
+    const heightMult = heightCostMultiplier(h);
+    
+    // Adjusted steel = steel after supplier + tiered markup, then pitch/height adjustments
+    const adjustedSteel = (steelAfterSupplierMarkup + tieredMarkupAmount) * pitchMult.multiplier * heightMult.multiplier;
     setTieredMarkupInfo({ rate: tieredRate, amount: tieredMarkupAmount });
 
-    const engineering = calcEngineeringFromFactor(parseFloat(form.complexityFactor) || 1);
+    // Auto-calculate engineering complexity
+    const complexity = autoComplexityFactor(w, l, h);
+    const engineering = calcEngineeringFromFactor(complexity.factor);
     const foundation = lookupFoundation(sqft, form.foundationType);
     const insulation = parseFloat(form.insulationCost) || 0;
     const guttersVal = parseFloat(form.gutters) || 0;
     const linersVal = parseFloat(form.liners) || 0;
     const freight = calcFreight(parseFloat(form.distance) || 0, weight, form.remoteLevel);
 
-    const subtotal = adjustedSteel + engineering + foundation + insulation + guttersVal + linersVal + freight;
-    const additionalMarkupAmount = subtotal * additionalMarkup;
-    const combinedTotal = subtotal + additionalMarkupAmount;
+    const combinedTotal = adjustedSteel + engineering + foundation + insulation + guttersVal + linersVal + freight;
     const contingency = combinedTotal * (parseFloat(form.contingencyPct) || 0) / 100;
     const totalPlusCont = combinedTotal + contingency;
     const taxes = getProvinceTax(form.province);
@@ -344,19 +350,22 @@ export default function InternalQuoteBuilder() {
     const qst = taxes.type === 'GST+QST' ? totalPlusCont * (taxes.qst || 0.09975) : 0;
     const finalPerLb = adjustedSteel / weight;
 
-    // Build compliance notes
+    // Build compliance notes (internal only — not on quote)
     const notes: string[] = [
       `Base Steel (from MBS): ${formatCurrency(costData.totalSupplierCost)} at ${formatNumber(weight)} lbs = $${costData.supplierCostPerLb.toFixed(2)}/lb`,
       `+${supplierMarkupPct}% Supplier: $/lb goes from $${costData.supplierCostPerLb.toFixed(2)} to $${adjustedCostPerLb.toFixed(2)} → steel becomes ${formatCurrency(steelAfterSupplierMarkup)}`,
       `Tiered Markup: tier = ${(tieredRate * 100).toFixed(1)}%, amount = ${formatCurrency(tieredMarkupAmount)}${tieredMarkupAmount === 3000 ? ' ($3K minimum applied)' : ''}`,
+      pitchMult.multiplier > 1 ? `Pitch Adjustment: ${pitchMult.note} → ×${pitchMult.multiplier}` : '',
+      heightMult.multiplier > 1 ? `Height Adjustment: ${heightMult.note} → ×${heightMult.multiplier}` : '',
       `Adjusted Steel: ${formatCurrency(adjustedSteel)} → final $/lb = $${finalPerLb.toFixed(2)} (${finalPerLb >= 2.15 && finalPerLb <= 2.30 ? 'IN RANGE' : 'CHECK'} vs $2.15–$2.30)`,
-      `Engineering: base $1,200 × factor ${form.complexityFactor} = ${formatCurrency(1200 * (parseFloat(form.complexityFactor) || 1))} + $500 markup = ${formatCurrency(engineering)}`,
+      `Engineering: auto-complexity = ${complexity.factor} (${complexity.reason}) → ${formatCurrency(engineering)}`,
       `Foundation: sqft=${formatNumber(sqft)}, type=${form.foundationType}, base=${formatCurrency(foundation - 500)} + $500 = ${formatCurrency(foundation)}`,
       `Insulation: ${formatCurrency(insulation)} (pass-through, no markup)`,
       `Freight: MAX($4,000, ${form.distance}km × $4) + remote(${form.remoteLevel}) + overweight = ${formatCurrency(freight)}`,
-      additionalMarkup > 0 ? `Internal Additional: ${internalMarkupPct}% of ${formatCurrency(subtotal)} = ${formatCurrency(additionalMarkupAmount)}` : '',
       `Tax: province = ${form.province}, type = ${taxes.type}, rate = ${(taxRate * 100).toFixed(2)}%`,
       `ALL FIGURES SOURCE: 143 MBS projects for steel tiers, 48 Silvercote quotes for insulation, foundation schedule v1`,
+    ].filter(Boolean);
+    setComplianceNotes(notes);
     ].filter(Boolean);
     setComplianceNotes(notes);
 
