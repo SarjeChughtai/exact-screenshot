@@ -222,7 +222,7 @@ export default function InternalQuoteBuilder() {
             applyAIData(aiResult);
             const weight = aiResult.weight || 0;
             const costPerLb = aiResult.cost_per_lb || (aiResult.total_cost && weight ? aiResult.total_cost / weight : 0);
-            const totalCost = aiData.total_cost || weight * costPerLb;
+            const totalCost = aiResult.total_cost || weight * costPerLb;
             const components = (aiResult.components || []).map((c: any) => ({
               name: c.name, weight: c.weight || 0, cost: c.cost || 0,
             }));
