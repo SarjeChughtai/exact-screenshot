@@ -12,7 +12,7 @@ import {
   pitchCostMultiplier, heightCostMultiplier
 } from '@/lib/calculations';
 import { estimateFreightFromLocation } from '@/lib/freightEstimate';
-import { MapPin } from 'lucide-react';
+import { MapPin, Lightbulb } from 'lucide-react';
 import { useAppContext } from '@/context/AppContext';
 import { useRoles } from '@/context/RoleContext';
 import { toast } from 'sonner';
@@ -49,6 +49,7 @@ export default function QuickEstimator() {
   const [selectedFactors, setSelectedFactors] = useState<string[]>(['Clear span up to 80ft']);
   const [contingencyPct, setContingencyPct] = useState('5');
   const [result, setResult] = useState<EstimateResult | null>(null);
+  const [costSavingTips, setCostSavingTips] = useState<string[]>([]);
 
   const toggleFactor = (item: string) => {
     setSelectedFactors(prev => prev.includes(item) ? prev.filter(f => f !== item) : [...prev, item]);
