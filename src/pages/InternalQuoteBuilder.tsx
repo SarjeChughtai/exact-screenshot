@@ -60,7 +60,7 @@ function generateCostSavingTips(form: any, costData: CostFileData, quote: Quote 
 }
 
 export default function InternalQuoteBuilder() {
-  const { addQuote, quotes } = useAppContext();
+  const { addQuote, deals, quotes } = useAppContext();
   const { settings, getSalesReps } = useSettings();
 
   const [form, setForm] = useState({
