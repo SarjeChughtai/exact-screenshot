@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, ReactNode, useCallback } from 'react';
 
-export type UserRole = 'admin' | 'owner' | 'accounting' | 'operations' | 'sales_rep' | 'freight';
+export type UserRole = 'admin' | 'owner' | 'accounting' | 'operations' | 'sales_rep' | 'freight' | 'estimator';
 
 export interface UserProfile {
   id: string;
@@ -22,7 +22,7 @@ const MODULE_ACCESS: Record<string, UserRole[]> = {
   estimator: ['admin', 'owner', 'sales_rep'],
   'quote-builder': ['admin', 'owner', 'sales_rep'],
   'internal-quote-builder': ['admin', 'owner'],
-  'quote-log': ['admin', 'owner', 'sales_rep', 'operations'],
+  'quote-log': ['admin', 'owner', 'sales_rep', 'operations', 'estimator'],
   'rfq-builder': ['admin', 'owner', 'sales_rep'],
   deals: ['admin', 'owner', 'operations', 'sales_rep'],
   'deal-pl': ['admin', 'owner', 'accounting'],
@@ -85,6 +85,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   operations: 'Operations',
   sales_rep: 'Sales Rep',
   freight: 'Freight',
+  estimator: 'Estimator',
 };
 
-export const ALL_ROLES: UserRole[] = ['admin', 'owner', 'accounting', 'operations', 'sales_rep', 'freight'];
+export const ALL_ROLES: UserRole[] = ['admin', 'owner', 'accounting', 'operations', 'sales_rep', 'freight', 'estimator'];

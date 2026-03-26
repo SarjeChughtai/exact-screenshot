@@ -91,6 +91,7 @@ const DEMO_USERS: { label: string; roles: UserRole[] }[] = [
   { label: 'Operations', roles: ['operations'] },
   { label: 'Sales Rep', roles: ['sales_rep'] },
   { label: 'Freight', roles: ['freight'] },
+  { label: 'Estimator', roles: ['estimator'] },
 ];
 
 export function AppSidebar() {

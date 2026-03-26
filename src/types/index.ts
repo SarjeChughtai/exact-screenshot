@@ -37,9 +37,34 @@ export interface Quote {
   qst: number;
   grandTotal: number;
   status: QuoteStatus;
+  // Quote workflow assignment fields
+  assignedEstimator?: string;
+  costDocumentName?: string;
+  estimatorNotes?: string;
+  estimatorSubmittedAt?: string;
 }
 
-export type QuoteStatus = 'Draft' | 'Sent' | 'Follow Up' | 'Won' | 'Lost' | 'Expired';
+export type QuoteStatus =
+  | 'Draft'
+  | 'New Request'
+  | 'Sent'            // legacy alias for "Quote Requested"
+  | 'Quote Requested'
+  | 'Quote Received'
+  | 'Quote Sent'
+  | 'Internal Review'
+  | 'Follow Up'
+  | 'Won'
+  | 'Lost'
+  | 'Expired';
+
+/** Estimator role: who is assigned the quote and what doc they uploaded */
+export interface QuoteAssignment {
+  assignedEstimator: string;
+  costDocumentUrl?: string;
+  costDocumentName?: string;
+  estimatorNotes?: string;
+  submittedAt?: string;
+}
 
 export type DealStatus = 'Lead' | 'Quoted' | 'Pending Payment' | 'In Progress' | 'In Production' | 'Shipped' | 'Delivered' | 'Complete' | 'Cancelled' | 'On Hold';
 export type PaymentStatus = 'PAID' | 'PARTIAL' | 'UNPAID';

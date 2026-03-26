@@ -182,7 +182,7 @@ export default function QuickEstimator() {
       gstHst: result.gstHst,
       qst: result.qst,
       grandTotal: result.grandTotal,
-      status: 'Sent',
+      status: 'New Request',
     };
 
     const deal: Deal = {
