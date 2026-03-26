@@ -43,6 +43,7 @@ const menuGroups: MenuGroup[] = [
       { path: '/estimator', label: 'Quick Estimator', icon: Calculator, module: 'estimator' },
       { path: '/internal-quote-builder', label: 'Internal Quote Builder', icon: FileInput, module: 'internal-quote-builder' },
       { path: '/quote-builder', label: 'Sales Quote Builder', icon: FileText, module: 'quote-builder' },
+      { path: '/rfq-builder', label: 'RFQ Builder', icon: FileInput, module: 'rfq-builder' },
       { path: '/quote-log', label: 'Quote Log', icon: ClipboardList, module: 'quote-log' },
     ],
   },

@@ -26,6 +26,7 @@ import DealPL from "@/pages/DealPL";
 import MonthlyHST from "@/pages/MonthlyHST";
 import FreightBoard from "@/pages/FreightBoard";
 import RFQWorkflow from "@/pages/RFQWorkflow";
+import RFQBuilder from "@/pages/RFQBuilder";
 import ProductionStatus from "@/pages/ProductionStatus";
 import CommissionProfit from "@/pages/CommissionProfit";
 import CommissionStatement from "@/pages/CommissionStatement";
@@ -67,6 +68,7 @@ const App = () => (
                           <Route path="/monthly-hst" element={<MonthlyHST />} />
                           <Route path="/freight" element={<FreightBoard />} />
                           <Route path="/rfq" element={<RFQWorkflow />} />
+                          <Route path="/rfq-builder" element={<RFQBuilder />} />
                           <Route path="/production" element={<ProductionStatus />} />
                           <Route path="/commission" element={<CommissionProfit />} />
                           <Route path="/commission-statement" element={<CommissionStatement />} />
