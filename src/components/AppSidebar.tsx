@@ -2,11 +2,12 @@ import {
   Calculator, FileText, ClipboardList, Briefcase, DollarSign,
   BarChart3, CreditCard, Users, Truck, Factory, Award, FileSpreadsheet,
   Receipt, TrendingUp, Building2, ChevronDown, FileInput,
-  Shield, User, Settings as SettingsIcon, Send
+  Shield, User, Settings as SettingsIcon, Send, LogOut
 } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import { useLocation } from 'react-router-dom';
-import { useRoles, ROLE_LABELS, ALL_ROLES, type UserRole } from '@/context/RoleContext';
+import { useRoles, ROLE_LABELS, type UserRole } from '@/context/RoleContext';
+import { useAuth } from '@/context/AuthContext';
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent,
   SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem,
@@ -14,8 +15,7 @@ import {
 } from '@/components/ui/sidebar';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Badge } from '@/components/ui/badge';
-import { Checkbox } from '@/components/ui/checkbox';
-import { useState } from 'react';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 interface MenuItem {
