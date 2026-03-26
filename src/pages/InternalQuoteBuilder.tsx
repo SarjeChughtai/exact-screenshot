@@ -29,7 +29,7 @@ interface ParsedFile {
 }
 
 export default function InternalQuoteBuilder() {
-  const { addQuote, deals, quotes } = useAppContext();
+  const { addQuote, addDeal, deals, quotes } = useAppContext();
   const { settings, getSalesReps } = useSettings();
 
   const [form, setForm] = useState({
@@ -381,6 +381,43 @@ export default function InternalQuoteBuilder() {
   const saveToLog = () => {
     if (!quote) return;
     addQuote(quote);
+
+    // Auto-create deal if job ID doesn't exist
+    const existingDeal = deals.find(d => d.jobId === quote.jobId);
+    if (!existingDeal) {
+      addDeal({
+        jobId: quote.jobId,
+        jobName: quote.jobName,
+        clientName: quote.clientName,
+        clientId: quote.clientId,
+        salesRep: quote.salesRep,
+        estimator: quote.estimator,
+        teamLead: '',
+        province: quote.province,
+        city: quote.city,
+        address: quote.address,
+        postalCode: quote.postalCode,
+        width: quote.width,
+        length: quote.length,
+        height: quote.height,
+        sqft: quote.sqft,
+        weight: quote.weight,
+        taxRate: 0,
+        taxType: '',
+        orderType: 'New',
+        dateSigned: '',
+        dealStatus: 'Quoted',
+        paymentStatus: 'UNPAID',
+        productionStatus: 'Submitted',
+        freightStatus: 'Pending',
+        insulationStatus: '',
+        deliveryDate: '',
+        pickupDate: '',
+        notes: '',
+      });
+      toast.success(`Deal ${quote.jobId} auto-created`);
+    }
+
     toast.success('Internal quote saved to Quote Log');
   };
 
@@ -390,8 +427,9 @@ export default function InternalQuoteBuilder() {
     if (!printContent) return;
     const win = window.open('', '_blank');
     if (!win) return;
-    win.document.write(`<html><head><title>Internal Quote - ${quote.jobId}</title><style>body{font-family:monospace;font-size:12px;padding:20px;} .bold{font-weight:bold;} .header{text-align:center;margin-bottom:20px;} .row{display:flex;justify-content:space-between;margin:2px 0;} .divider{border-top:1px solid #ccc;margin:8px 0;} .warning{color:red;font-weight:bold;}</style></head><body>`);
-    win.document.write(`<div class="header"><h2>INTERNAL SALES QUOTE — ${quote.jobId}</h2><p class="warning">CONFIDENTIAL — INTERNAL USE ONLY</p></div>`);
+    const pdfTitle = `Internal Quote - ${quote.clientName} - ${quote.clientId} - ${quote.jobName || quote.jobId}`;
+    win.document.write(`<html><head><title>${pdfTitle}</title><style>body{font-family:monospace;font-size:12px;padding:20px;line-height:1.8;} .bold{font-weight:bold;} .header{text-align:center;margin-bottom:24px;} .row{display:flex;justify-content:space-between;margin:6px 0;} .divider{border-top:1px solid #ccc;margin:12px 0;} .warning{color:red;font-weight:bold;} .spacer{height:10px;}</style></head><body>`);
+    win.document.write(`<div class="header"><h2>INTERNAL SALES QUOTE — ${quote.jobId}</h2><p>${quote.clientName} (ID: ${quote.clientId}) — ${quote.jobName}</p><p class="warning">CONFIDENTIAL — INTERNAL USE ONLY</p></div>`);
     win.document.write(printContent.innerHTML);
     win.document.write('</body></html>');
     win.document.close();
@@ -630,10 +668,11 @@ export default function InternalQuoteBuilder() {
                 </div>
               )}
 
-              <div id="internal-quote-output" className="font-mono text-sm space-y-1 bg-muted p-4 rounded-md">
+              <div id="internal-quote-output" className="font-mono text-sm space-y-2 bg-muted p-4 rounded-md" style={{ lineHeight: '1.8' }}>
                 <p className="font-bold text-base">Internal Quote — {quote.jobId}</p>
                 <p className="text-xs text-muted-foreground">Client: {quote.clientName} (ID: {quote.clientId})</p>
-                <p className="text-xs text-muted-foreground">Sales Rep: {quote.salesRep}</p>
+                <p className="text-xs text-muted-foreground">Job Name: {quote.jobName}</p>
+                <p className="text-xs text-muted-foreground">Sales Rep: {quote.salesRep} | Estimator: {quote.estimator}</p>
                 <p className="text-xs text-muted-foreground">Building: {quote.width}′ × {quote.length}′ × {quote.height}′ | {formatNumber(quote.sqft)} sqft | {formatNumber(quote.weight)} lbs</p>
                 <p className="text-xs text-muted-foreground">Location: {quote.city}, {quote.province} {quote.postalCode}</p>
                 <br />

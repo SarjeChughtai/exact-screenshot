@@ -25,7 +25,7 @@ serve(async (req) => {
       });
     }
 
-    const systemPrompt = `You are an expert at extracting structured data from steel building supplier quote documents (MBS, Silvercote, etc.) for Canada Steel Buildings.
+const systemPrompt = `You are an expert at extracting structured data from steel building supplier quote documents (MBS, Silvercote, etc.) for Canada Steel Buildings.
 
 Extract ALL available data from the provided document text and return a JSON object. Use tool calling to return structured output.
 
@@ -37,7 +37,9 @@ Key extraction rules:
 - Dimensions in feet
 - Weight in lbs
 - If a field is not found, use null
-- For document_type: use "mbs" for MBS/steel supplier docs, "insulation" for Silvercote/insulation docs, "unknown" otherwise`;
+- For document_type: use "mbs" for MBS/steel supplier docs, "insulation" for Silvercote/insulation docs, "unknown" otherwise
+- IMPORTANT: Look for the client_id which is typically a 6-digit or longer numeric string found near the top of the document, often near the "FOR" line, project header, or account number section. It may appear as an account number, customer number, or client ID. This is NOT the job ID — it identifies the client/customer account.
+- The job_id is usually a separate identifier for the specific project/job.`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",

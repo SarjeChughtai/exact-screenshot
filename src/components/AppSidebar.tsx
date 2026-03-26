@@ -44,6 +44,7 @@ const menuGroups: MenuGroup[] = [
       { path: '/internal-quote-builder', label: 'Internal Quote Builder', icon: FileInput, module: 'internal-quote-builder' },
       { path: '/quote-builder', label: 'Sales Quote Builder', icon: FileText, module: 'quote-builder' },
       { path: '/quote-log', label: 'Quote Log', icon: ClipboardList, module: 'quote-log' },
+      { path: '/quote-rfq', label: 'Quote RFQ', icon: Send, module: 'quote-log' },
     ],
   },
   {

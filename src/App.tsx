@@ -26,6 +26,7 @@ import DealPL from "@/pages/DealPL";
 import MonthlyHST from "@/pages/MonthlyHST";
 import FreightBoard from "@/pages/FreightBoard";
 import RFQWorkflow from "@/pages/RFQWorkflow";
+import QuoteRFQ from "@/pages/QuoteRFQ";
 import ProductionStatus from "@/pages/ProductionStatus";
 import CommissionProfit from "@/pages/CommissionProfit";
 import CommissionStatement from "@/pages/CommissionStatement";
@@ -57,6 +58,7 @@ const App = () => (
                           <Route path="/internal-quote-builder" element={<InternalQuoteBuilder />} />
                           <Route path="/quote-builder" element={<QuoteBuilder />} />
                           <Route path="/quote-log" element={<QuoteLog />} />
+                          <Route path="/quote-rfq" element={<QuoteRFQ />} />
                           <Route path="/deals" element={<MasterDeals />} />
                           <Route path="/internal-costs" element={<InternalCosts />} />
                           <Route path="/financials" element={<ProjectedFinancials />} />
