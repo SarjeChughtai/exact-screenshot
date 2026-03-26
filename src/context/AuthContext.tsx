@@ -12,58 +12,39 @@ interface AuthContextType {
   signOut: () => Promise<void>;
   hasRole: (role: string) => boolean;
   hasAnyRole: (roles: string[]) => boolean;
-  isDevMode: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
-
-// Dev mode mock session for when Supabase is not available
-const DEV_MOCK_USER: User = {
-  id: 'dev-user-001',
-  email: 'admin@canadasteel.ca',
-  app_metadata: {},
-  user_metadata: { name: 'Dev Admin' },
-  aud: 'authenticated',
-  created_at: new Date().toISOString(),
-} as User;
-
-const DEV_MOCK_SESSION: Session = {
-  access_token: 'dev-token',
-  refresh_token: 'dev-refresh',
-  expires_in: 999999,
-  expires_at: Date.now() / 1000 + 999999,
-  token_type: 'bearer',
-  user: DEV_MOCK_USER,
-} as Session;
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [userRoles, setUserRoles] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isDevMode, setIsDevMode] = useState(false);
 
   const fetchRoles = async (userId: string) => {
-    const { data, error } = await supabase
-      .from('user_roles')
-      .select('role')
-      .eq('user_id', userId);
-    if (!error && data) {
-      setUserRoles(data.map((r: any) => r.role));
+    try {
+      const { data, error } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', userId);
+      if (!error && data) {
+        setUserRoles(data.map((r: any) => r.role));
+      }
+    } catch (err) {
+      console.warn('[Auth] Could not fetch roles:', err);
     }
   };
 
   useEffect(() => {
-    let timeoutId: ReturnType<typeof setTimeout>;
-
     // Set up auth listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        if (session?.user) {
+      async (_event, newSession) => {
+        setSession(newSession);
+        setUser(newSession?.user ?? null);
+        if (newSession?.user) {
           // Use setTimeout to avoid Supabase client deadlock
-          setTimeout(() => fetchRoles(session.user.id), 0);
+          setTimeout(() => fetchRoles(newSession.user.id), 0);
         } else {
           setUserRoles([]);
         }
@@ -72,34 +53,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     );
 
     // THEN check existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchRoles(session.user.id);
+    supabase.auth.getSession().then(({ data: { session: existingSession } }) => {
+      setSession(existingSession);
+      setUser(existingSession?.user ?? null);
+      if (existingSession?.user) {
+        fetchRoles(existingSession.user.id);
       }
       setLoading(false);
-    }).catch(() => {
-      // If Supabase is unreachable, enable dev mode
-      console.warn('[Auth] Supabase unreachable — enabling dev mode');
-      setSession(DEV_MOCK_SESSION);
-      setUser(DEV_MOCK_USER);
-      setUserRoles(['admin']);
-      setIsDevMode(true);
+    }).catch((err) => {
+      // If Supabase is unreachable, do NOT auto-login — require real auth
+      console.warn('[Auth] Supabase unreachable:', err);
+      setSession(null);
+      setUser(null);
+      setUserRoles([]);
       setLoading(false);
     });
 
-    // Safety timeout: if loading takes > 3s, fallback to dev mode
-    timeoutId = setTimeout(() => {
-      if (loading) {
-        console.warn('[Auth] Timed out waiting for Supabase — enabling dev mode');
-        setSession(DEV_MOCK_SESSION);
-        setUser(DEV_MOCK_USER);
-        setUserRoles(['admin']);
-        setIsDevMode(true);
-        setLoading(false);
-      }
-    }, 3000);
+    // Safety timeout: if loading takes > 8s, stop loading but stay unauthenticated
+    const timeoutId = setTimeout(() => {
+      setLoading(prev => {
+        if (prev) {
+          console.warn('[Auth] Timed out waiting for Supabase — user must sign in');
+          return false;
+        }
+        return prev;
+      });
+    }, 8000);
 
     return () => {
       subscription.unsubscribe();
@@ -122,14 +101,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
-    if (isDevMode) {
-      // In dev mode, just clear local state
-      setSession(null);
-      setUser(null);
-      setUserRoles([]);
-      return;
-    }
     await supabase.auth.signOut();
+    setSession(null);
+    setUser(null);
     setUserRoles([]);
   };
 
@@ -138,7 +112,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider value={{
-      session, user, userRoles, loading, isDevMode,
+      session, user, userRoles, loading,
       signUp, signIn, signOut, hasRole, hasAnyRole,
     }}>
       {children}
