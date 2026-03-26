@@ -83,14 +83,8 @@ const menuGroups: MenuGroup[] = [
   },
 ];
 
-const DEMO_USERS: { label: string; roles: UserRole[] }[] = [
-  { label: 'Admin', roles: ['admin'] },
-  { label: 'Owner', roles: ['owner'] },
-  { label: 'Accounting', roles: ['accounting'] },
-  { label: 'Operations', roles: ['operations'] },
-  { label: 'Sales Rep', roles: ['sales_rep'] },
-  { label: 'Freight', roles: ['freight'] },
-];
+
+
 
 export function AppSidebar() {
   const { state } = useSidebar();
