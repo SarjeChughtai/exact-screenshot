@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useAppContext } from '@/context/AppContext';
 import { useSettings } from '@/context/SettingsContext';
-import { formatCurrency, formatNumber, PROVINCES, getProvinceTax, calcFreight, calcEngineeringFromFactor, lookupFoundation, calcMarkup, getMarkupRate } from '@/lib/calculations';
+import { formatCurrency, formatNumber, PROVINCES, getProvinceTax, calcFreight, calcEngineeringFromFactor, lookupFoundation, calcMarkup, getMarkupRate, autoComplexityFactor, pitchCostMultiplier, heightCostMultiplier } from '@/lib/calculations';
 import { estimateFreightFromLocation } from '@/lib/freightEstimate';
 import type { Quote } from '@/types';
 import { toast } from 'sonner';
@@ -38,8 +38,8 @@ export default function InternalQuoteBuilder() {
     salesRep: '', estimator: '', province: 'ON',
     city: '', address: '', postalCode: '',
     width: '', length: '', height: '14',
+    pitch: '1',
     distance: '200', remoteLevel: 'none',
-    complexityFactor: '1.0',
     foundationType: 'slab' as 'slab' | 'frost_wall',
     insulationCost: '0', insulationGrade: '',
     gutters: '0', liners: '0',
@@ -48,7 +48,7 @@ export default function InternalQuoteBuilder() {
   });
 
   const [supplierMarkupPct, setSupplierMarkupPct] = useState(String(settings.supplierIncreasePct));
-  const [internalMarkupPct, setInternalMarkupPct] = useState('0');
+  const [internalMarkupPct] = useState('0');
   const [costData, setCostData] = useState<CostFileData>({ steelWeightLbs: 0, supplierCostPerLb: 0, totalSupplierCost: 0, accessories: [] });
   const [quote, setQuote] = useState<Quote | null>(null);
   const [tieredMarkupInfo, setTieredMarkupInfo] = useState<{ rate: number; amount: number } | null>(null);
@@ -309,6 +309,7 @@ export default function InternalQuoteBuilder() {
     const w = parseFloat(form.width) || 0;
     const l = parseFloat(form.length) || 0;
     const h = parseFloat(form.height) || 14;
+    const pitch = parseFloat(form.pitch) || 1;
     const sqft = w * l;
     if (!sqft || !costData.steelWeightLbs || !costData.totalSupplierCost) {
       toast.error('Enter dimensions and steel cost data');
@@ -317,25 +318,30 @@ export default function InternalQuoteBuilder() {
 
     const weight = costData.steelWeightLbs;
     const supplierMarkup = parseFloat(supplierMarkupPct) / 100;
-    const additionalMarkup = parseFloat(internalMarkupPct) / 100;
 
     const adjustedCostPerLb = costData.supplierCostPerLb * (1 + supplierMarkup);
     const steelAfterSupplierMarkup = adjustedCostPerLb * weight;
     const tieredMarkupAmount = calcMarkup(steelAfterSupplierMarkup);
     const tieredRate = getMarkupRate(steelAfterSupplierMarkup);
-    const adjustedSteel = steelAfterSupplierMarkup + tieredMarkupAmount;
+    
+    // Apply pitch and height multipliers to steel
+    const pitchMult = pitchCostMultiplier(pitch);
+    const heightMult = heightCostMultiplier(h);
+    
+    // Adjusted steel = steel after supplier + tiered markup, then pitch/height adjustments
+    const adjustedSteel = (steelAfterSupplierMarkup + tieredMarkupAmount) * pitchMult.multiplier * heightMult.multiplier;
     setTieredMarkupInfo({ rate: tieredRate, amount: tieredMarkupAmount });
 
-    const engineering = calcEngineeringFromFactor(parseFloat(form.complexityFactor) || 1);
+    // Auto-calculate engineering complexity
+    const complexity = autoComplexityFactor(w, l, h);
+    const engineering = calcEngineeringFromFactor(complexity.factor);
     const foundation = lookupFoundation(sqft, form.foundationType);
     const insulation = parseFloat(form.insulationCost) || 0;
     const guttersVal = parseFloat(form.gutters) || 0;
     const linersVal = parseFloat(form.liners) || 0;
     const freight = calcFreight(parseFloat(form.distance) || 0, weight, form.remoteLevel);
 
-    const subtotal = adjustedSteel + engineering + foundation + insulation + guttersVal + linersVal + freight;
-    const additionalMarkupAmount = subtotal * additionalMarkup;
-    const combinedTotal = subtotal + additionalMarkupAmount;
+    const combinedTotal = adjustedSteel + engineering + foundation + insulation + guttersVal + linersVal + freight;
     const contingency = combinedTotal * (parseFloat(form.contingencyPct) || 0) / 100;
     const totalPlusCont = combinedTotal + contingency;
     const taxes = getProvinceTax(form.province);
@@ -344,17 +350,18 @@ export default function InternalQuoteBuilder() {
     const qst = taxes.type === 'GST+QST' ? totalPlusCont * (taxes.qst || 0.09975) : 0;
     const finalPerLb = adjustedSteel / weight;
 
-    // Build compliance notes
+    // Build compliance notes (internal only — not on quote)
     const notes: string[] = [
       `Base Steel (from MBS): ${formatCurrency(costData.totalSupplierCost)} at ${formatNumber(weight)} lbs = $${costData.supplierCostPerLb.toFixed(2)}/lb`,
       `+${supplierMarkupPct}% Supplier: $/lb goes from $${costData.supplierCostPerLb.toFixed(2)} to $${adjustedCostPerLb.toFixed(2)} → steel becomes ${formatCurrency(steelAfterSupplierMarkup)}`,
       `Tiered Markup: tier = ${(tieredRate * 100).toFixed(1)}%, amount = ${formatCurrency(tieredMarkupAmount)}${tieredMarkupAmount === 3000 ? ' ($3K minimum applied)' : ''}`,
+      pitchMult.multiplier > 1 ? `Pitch Adjustment: ${pitchMult.note} → ×${pitchMult.multiplier}` : '',
+      heightMult.multiplier > 1 ? `Height Adjustment: ${heightMult.note} → ×${heightMult.multiplier}` : '',
       `Adjusted Steel: ${formatCurrency(adjustedSteel)} → final $/lb = $${finalPerLb.toFixed(2)} (${finalPerLb >= 2.15 && finalPerLb <= 2.30 ? 'IN RANGE' : 'CHECK'} vs $2.15–$2.30)`,
-      `Engineering: base $1,200 × factor ${form.complexityFactor} = ${formatCurrency(1200 * (parseFloat(form.complexityFactor) || 1))} + $500 markup = ${formatCurrency(engineering)}`,
+      `Engineering: auto-complexity = ${complexity.factor} (${complexity.reason}) → ${formatCurrency(engineering)}`,
       `Foundation: sqft=${formatNumber(sqft)}, type=${form.foundationType}, base=${formatCurrency(foundation - 500)} + $500 = ${formatCurrency(foundation)}`,
       `Insulation: ${formatCurrency(insulation)} (pass-through, no markup)`,
       `Freight: MAX($4,000, ${form.distance}km × $4) + remote(${form.remoteLevel}) + overweight = ${formatCurrency(freight)}`,
-      additionalMarkup > 0 ? `Internal Additional: ${internalMarkupPct}% of ${formatCurrency(subtotal)} = ${formatCurrency(additionalMarkupAmount)}` : '',
       `Tax: province = ${form.province}, type = ${taxes.type}, rate = ${(taxRate * 100).toFixed(2)}%`,
       `ALL FIGURES SOURCE: 143 MBS projects for steel tiers, 48 Silvercote quotes for insulation, foundation schedule v1`,
     ].filter(Boolean);
@@ -369,7 +376,7 @@ export default function InternalQuoteBuilder() {
       province: form.province, city: form.city, address: form.address, postalCode: form.postalCode,
       width: w, length: l, height: h, sqft, weight,
       baseSteelCost: costData.totalSupplierCost, steelAfter12: steelAfterSupplierMarkup,
-      markup: tieredMarkupAmount + additionalMarkupAmount, adjustedSteel,
+      markup: tieredMarkupAmount, adjustedSteel,
       engineering, foundation, foundationType: form.foundationType,
       gutters: guttersVal, liners: linersVal, insulation, insulationGrade: form.insulationGrade,
       freight, combinedTotal, perSqft: combinedTotal / sqft, perLb: finalPerLb,
@@ -429,8 +436,20 @@ export default function InternalQuoteBuilder() {
     const win = window.open('', '_blank');
     if (!win) return;
     const pdfTitle = `Internal Quote - ${quote.clientName} - ${quote.clientId} - ${quote.jobName || quote.jobId}`;
-    win.document.write(`<html><head><title>${pdfTitle}</title><style>body{font-family:monospace;font-size:12px;padding:20px;line-height:1.8;} .bold{font-weight:bold;} .header{text-align:center;margin-bottom:24px;} .row{display:flex;justify-content:space-between;margin:6px 0;} .divider{border-top:1px solid #ccc;margin:12px 0;} .warning{color:red;font-weight:bold;} .spacer{height:10px;}</style></head><body>`);
-    win.document.write(`<div class="header"><h2>INTERNAL SALES QUOTE — ${quote.jobId}</h2><p>${quote.clientName} (ID: ${quote.clientId}) — ${quote.jobName}</p><p class="warning">CONFIDENTIAL — INTERNAL USE ONLY</p></div>`);
+    win.document.write(`<html><head><title>${pdfTitle}</title>
+      <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+      <style>
+        body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; font-size: 14px; padding: 40px; line-height: 2.2; color: #1a1a1a; }
+        .bold { font-weight: 700; }
+        .header { text-align: center; margin-bottom: 32px; border-bottom: 2px solid #333; padding-bottom: 16px; }
+        .header h2 { font-size: 20px; font-weight: 700; margin: 0 0 8px 0; }
+        .header p { margin: 4px 0; font-size: 13px; color: #555; }
+        .row { display: flex; justify-content: space-between; margin: 8px 0; padding: 4px 0; }
+        .divider { border-top: 1px solid #ddd; margin: 16px 0; }
+        .warning { color: #dc2626; font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
+        .spacer { height: 16px; }
+      </style></head><body>`);
+    win.document.write(`<div class="header"><h2>INTERNAL SALES QUOTE — ${quote.jobId}</h2><p>${quote.clientName} (ID: ${quote.clientId}) — ${quote.jobName}</p><p class="warning">⚠ Confidential — Internal Use Only</p></div>`);
     win.document.write(printContent.innerHTML);
     win.document.write('</body></html>');
     win.document.close();
@@ -547,17 +566,10 @@ export default function InternalQuoteBuilder() {
 
           {/* Markup Controls */}
           <div className="bg-card border rounded-lg p-5 space-y-4">
-            <h3 className="text-sm font-semibold uppercase tracking-wide text-destructive">Markup Controls</h3>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label className="text-xs">Supplier Markup on $/lb (%)</Label>
-                <Input className="input-blue mt-1" type="number" step="0.5" value={supplierMarkupPct} onChange={e => setSupplierMarkupPct(e.target.value)} />
-              </div>
-              <div>
-                <Label className="text-xs">Additional Internal Markup (%)</Label>
-                <Input className="input-blue mt-1" type="number" step="0.5" value={internalMarkupPct} onChange={e => setInternalMarkupPct(e.target.value)} />
-                <p className="text-[10px] text-muted-foreground mt-1">Extra margin beyond tiered steel markup (default 0%)</p>
-              </div>
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-destructive">Supplier Markup</h3>
+            <div>
+              <Label className="text-xs">Supplier Markup on $/lb (%)</Label>
+              <Input className="input-blue mt-1" type="number" step="0.5" value={supplierMarkupPct} onChange={e => setSupplierMarkupPct(e.target.value)} />
             </div>
             {costData.supplierCostPerLb > 0 && (
               <div className="bg-muted rounded-md p-3 text-xs space-y-1">
@@ -603,6 +615,13 @@ export default function InternalQuoteBuilder() {
               <div><Label className="text-xs">Length (ft)</Label><Input className="input-blue mt-1" value={form.length} onChange={e => set('length', e.target.value)} /></div>
               <div><Label className="text-xs">Height (ft)</Label><Input className="input-blue mt-1" value={form.height} onChange={e => set('height', e.target.value)} /></div>
             </div>
+            {/* Pitch & Height impact notes for estimator */}
+            {(parseFloat(form.pitch) > 1 || parseFloat(form.height) > 14) && (
+              <div className="bg-muted rounded-md p-3 text-xs space-y-1">
+                {parseFloat(form.pitch) > 1 && <p className="text-muted-foreground">📐 {pitchCostMultiplier(parseFloat(form.pitch)).note}</p>}
+                {parseFloat(form.height) > 14 && <p className="text-muted-foreground">📏 {heightCostMultiplier(parseFloat(form.height)).note}</p>}
+              </div>
+            )}
             <div className="grid grid-cols-3 gap-3">
               <div><Label className="text-xs">Distance (km)</Label><Input className="input-blue mt-1" value={form.distance} onChange={e => set('distance', e.target.value)} /></div>
               <div>
@@ -629,7 +648,7 @@ export default function InternalQuoteBuilder() {
               </div>
             </div>
             <div className="grid grid-cols-3 gap-3">
-              <div><Label className="text-xs">Complexity Factor</Label><Input className="input-blue mt-1" value={form.complexityFactor} onChange={e => set('complexityFactor', e.target.value)} /></div>
+              <div><Label className="text-xs">Roof Pitch (:12)</Label><Input className="input-blue mt-1" value={form.pitch} onChange={e => set('pitch', e.target.value)} placeholder="1" /></div>
               <div><Label className="text-xs">Contingency %</Label><Input className="input-blue mt-1" value={form.contingencyPct} onChange={e => set('contingencyPct', e.target.value)} /></div>
               <div><Label className="text-xs">Insulation ($)</Label><Input className="input-blue mt-1" value={form.insulationCost} onChange={e => set('insulationCost', e.target.value)} /></div>
             </div>
@@ -665,38 +684,31 @@ export default function InternalQuoteBuilder() {
                 </div>
               )}
 
-              <div id="internal-quote-output" className="font-mono text-sm space-y-2 bg-muted p-4 rounded-md" style={{ lineHeight: '1.8' }}>
-                <p className="font-bold text-base">Internal Quote — {quote.jobId}</p>
-                <p className="text-xs text-muted-foreground">Client: {quote.clientName} (ID: {quote.clientId})</p>
-                <p className="text-xs text-muted-foreground">Job Name: {quote.jobName}</p>
-                <p className="text-xs text-muted-foreground">Sales Rep: {quote.salesRep} | Estimator: {quote.estimator}</p>
-                <p className="text-xs text-muted-foreground">Building: {quote.width}′ × {quote.length}′ × {quote.height}′ | {formatNumber(quote.sqft)} sqft | {formatNumber(quote.weight)} lbs</p>
-                <p className="text-xs text-muted-foreground">Location: {quote.city}, {quote.province} {quote.postalCode}</p>
-                <br />
-                <div className="border-b pb-1 mb-1 text-xs font-semibold text-destructive">Cost Breakdown (with markups)</div>
-                <QRow label="Raw Supplier Steel" value={costData.totalSupplierCost} />
-                <QRow label={`Supplier Markup (${supplierMarkupPct}%)`} value={quote.steelAfter12 - costData.totalSupplierCost} />
-                <QRow label="Steel After Supplier Markup" value={quote.steelAfter12} />
-                {tieredMarkupInfo && <QRow label={`Tiered Steel Markup (${(tieredMarkupInfo.rate * 100).toFixed(1)}%)`} value={tieredMarkupInfo.amount} />}
-                <QRow label="Adjusted Steel Cost" value={quote.adjustedSteel} bold />
-                <QRow label="  $/lb after all markups" value={quote.perLb} />
-                <br />
-                <QRow label="Engineering Fee" value={quote.engineering} />
+              <div id="internal-quote-output" className="text-sm space-y-3 bg-muted p-5 rounded-md" style={{ lineHeight: '2.2', fontFamily: 'Inter, system-ui, sans-serif' }}>
+                <p className="font-bold text-lg">Internal Quote — {quote.jobId}</p>
+                <p className="text-sm text-muted-foreground">Client: <strong>{quote.clientName}</strong> (ID: {quote.clientId})</p>
+                <p className="text-sm text-muted-foreground">Job Name: <strong>{quote.jobName}</strong></p>
+                <p className="text-sm text-muted-foreground">Sales Rep: {quote.salesRep} | Estimator: {quote.estimator}</p>
+                <p className="text-sm text-muted-foreground">Building: <strong>{quote.width}′ × {quote.length}′ × {quote.height}′</strong> | {formatNumber(quote.sqft)} sqft | {formatNumber(quote.weight)} lbs | Pitch: {form.pitch}:12</p>
+                <p className="text-sm text-muted-foreground">Location: {quote.city}, {quote.province} {quote.postalCode}</p>
+                <div className="h-3" />
+                <div className="border-b pb-1 mb-2 text-sm font-bold text-foreground">Cost Breakdown</div>
+                <QRow label="Steel" value={quote.adjustedSteel} bold />
+                <QRow label="Engineering Drawings" value={quote.engineering} />
                 <QRow label="Foundation Drawing" value={quote.foundation} />
-                <QRow label="Gutters" value={quote.gutters} />
-                <QRow label="Liners" value={quote.liners} />
-                <QRow label="Insulation" value={quote.insulation} />
+                {quote.gutters > 0 && <QRow label="Gutters" value={quote.gutters} />}
+                {quote.liners > 0 && <QRow label="Liners" value={quote.liners} />}
+                {quote.insulation > 0 && <QRow label="Insulation" value={quote.insulation} />}
                 <QRow label={`Freight Estimate (${form.distance}km, ${form.remoteLevel})`} value={quote.freight} />
-                <br />
-                {parseFloat(internalMarkupPct) > 0 && <QRow label={`Additional Internal (${internalMarkupPct}%)`} value={quote.markup - (tieredMarkupInfo?.amount || 0)} />}
-                <QRow label="COMBINED TOTAL" value={quote.combinedTotal} bold />
-                <QRow label="  $/sqft" value={quote.perSqft} />
-                <br />
-                <QRow label={`Contingency (${quote.contingencyPct}%)`} value={quote.contingency} />
+                <div className="h-2" />
+                <QRow label="SUBTOTAL" value={quote.combinedTotal} bold />
+                <QRow label="$/sqft" value={quote.perSqft} />
+                <div className="h-2" />
+                {quote.contingency > 0 && <QRow label={`Contingency (${quote.contingencyPct}%)`} value={quote.contingency} />}
                 <QRow label="GST/HST" value={quote.gstHst} />
                 {quote.qst > 0 && <QRow label="QST" value={quote.qst} />}
-                <br />
-                <div className="flex justify-between font-bold text-base"><span>GRAND TOTAL</span><span>{formatCurrency(quote.grandTotal)}</span></div>
+                <div className="h-3" />
+                <div className="flex justify-between font-bold text-lg border-t pt-2"><span>GRAND TOTAL</span><span>{formatCurrency(quote.grandTotal)}</span></div>
               </div>
             </div>
 
@@ -727,9 +739,9 @@ export default function InternalQuoteBuilder() {
 
 function QRow({ label, value, bold }: { label: string; value: number; bold?: boolean }) {
   return (
-    <div className={`flex justify-between ${bold ? 'font-bold' : ''}`}>
+    <div className={`flex justify-between py-0.5 ${bold ? 'font-bold text-base' : ''}`} style={{ lineHeight: '2.2' }}>
       <span>{label}</span>
-      <span>{formatCurrency(value)}</span>
+      <span className="font-mono">{formatCurrency(value)}</span>
     </div>
   );
 }

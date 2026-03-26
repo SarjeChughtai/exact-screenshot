@@ -8,7 +8,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import {
   calcSteelCost, calcEngineering, lookupFoundation, lookupInsulation,
   calcInsulationArea, calcFreight, calcTax, formatCurrency, formatNumber,
-  PROVINCES, INSULATION_GRADES, ENGINEERING_FACTORS, REMOTE_LEVELS, getProvinceTax
+  PROVINCES, INSULATION_GRADES, ENGINEERING_FACTORS, REMOTE_LEVELS, getProvinceTax,
+  pitchCostMultiplier, heightCostMultiplier
 } from '@/lib/calculations';
 import { estimateFreightFromLocation } from '@/lib/freightEstimate';
 import { MapPin } from 'lucide-react';
@@ -34,6 +35,7 @@ export default function QuickEstimator() {
   const [width, setWidth] = useState('');
   const [length, setLength] = useState('');
   const [height, setHeight] = useState('');
+  const [pitch, setPitch] = useState('1');
   const [province, setProvince] = useState('ON');
   const [distance, setDistance] = useState('200');
   const [remoteLevel, setRemoteLevel] = useState('none');
@@ -238,7 +240,15 @@ export default function QuickEstimator() {
             <div><Label className="text-xs">Width (ft)</Label><Input className="input-blue mt-1" value={width} onChange={e => setWidth(e.target.value)} /></div>
             <div><Label className="text-xs">Length (ft)</Label><Input className="input-blue mt-1" value={length} onChange={e => setLength(e.target.value)} /></div>
             <div><Label className="text-xs">Height (ft)</Label><Input className="input-blue mt-1" value={height} onChange={e => setHeight(e.target.value)} /></div>
+            <div><Label className="text-xs">Roof Pitch (:12)</Label><Input className="input-blue mt-1" value={pitch} onChange={e => setPitch(e.target.value)} placeholder="1" /></div>
           </div>
+          {/* Pitch & Height impact notes */}
+          {(parseFloat(pitch) > 1 || parseFloat(height) > 14) && (
+            <div className="bg-muted rounded-md p-3 text-xs space-y-1">
+              {parseFloat(pitch) > 1 && <p className="text-muted-foreground">📐 {pitchCostMultiplier(parseFloat(pitch)).note}</p>}
+              {parseFloat(height) > 14 && <p className="text-muted-foreground">📏 {heightCostMultiplier(parseFloat(height)).note}</p>}
+            </div>
+          )}
 
           {/* Location-based freight estimation */}
           <div className="bg-accent/5 border border-accent/20 rounded-lg p-3 space-y-2">
