@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, ReactNode, useCallback, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 
-export type UserRole = 'admin' | 'owner' | 'accounting' | 'operations' | 'sales_rep' | 'freight';
+export type UserRole = 'admin' | 'owner' | 'accounting' | 'operations' | 'sales_rep' | 'freight' | 'dealer';
 
 export interface UserProfile {
   id: string;
@@ -36,7 +36,10 @@ const MODULE_ACCESS: Record<string, UserRole[]> = {
   'monthly-hst': ['admin', 'owner', 'accounting'],
   'commission-statement': ['admin', 'owner', 'accounting'],
   freight: ['admin', 'owner', 'freight', 'operations'],
+  rfq: ['admin', 'owner', 'freight', 'operations'],
   settings: ['admin', 'owner', 'accounting', 'operations', 'sales_rep', 'freight'],
+  'dealer-rfq': ['dealer'],
+  'dealer-log': ['dealer'],
 };
 
 const RoleContext = createContext<RoleContextType | null>(null);
@@ -51,7 +54,6 @@ export function RoleProvider({ children }: { children: ReactNode }) {
     roles: (userRoles as UserRole[]) || [],
   });
 
-  // Sync with auth context
   useEffect(() => {
     setCurrentUserState({
       id: user?.id || '',
@@ -93,6 +95,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   operations: 'Operations',
   sales_rep: 'Sales Rep',
   freight: 'Freight',
+  dealer: 'Dealer',
 };
 
-export const ALL_ROLES: UserRole[] = ['admin', 'owner', 'accounting', 'operations', 'sales_rep', 'freight'];
+export const ALL_ROLES: UserRole[] = ['admin', 'owner', 'accounting', 'operations', 'sales_rep', 'freight', 'dealer'];
