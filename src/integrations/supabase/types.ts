@@ -19,6 +19,7 @@ export type Database = {
           created_at: string
           email: string
           id: string
+          name: string
           requested_role: Database["public"]["Enums"]["app_role"]
           reviewed_at: string | null
           reviewed_by: string | null
@@ -29,6 +30,7 @@ export type Database = {
           created_at?: string
           email?: string
           id?: string
+          name?: string
           requested_role: Database["public"]["Enums"]["app_role"]
           reviewed_at?: string | null
           reviewed_by?: string | null
@@ -39,10 +41,44 @@ export type Database = {
           created_at?: string
           email?: string
           id?: string
+          name?: string
           requested_role?: Database["public"]["Enums"]["app_role"]
           reviewed_at?: string | null
           reviewed_by?: string | null
           status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      notifications: {
+        Row: {
+          created_at: string
+          id: string
+          link: string | null
+          message: string
+          read: boolean
+          title: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          link?: string | null
+          message?: string
+          read?: boolean
+          title: string
+          type?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          link?: string | null
+          message?: string
+          read?: boolean
+          title?: string
+          type?: string
           user_id?: string
         }
         Relationships: []

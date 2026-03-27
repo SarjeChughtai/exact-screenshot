@@ -7,10 +7,12 @@ import { AuthProvider } from "@/context/AuthContext";
 import { AppProvider } from "@/context/AppContext";
 import { RoleProvider } from "@/context/RoleContext";
 import { SettingsProvider } from "@/context/SettingsContext";
+import { NotificationsProvider } from "@/context/NotificationsContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import Layout from "@/components/Layout";
 import Auth from "@/pages/Auth";
 import ResetPassword from "@/pages/ResetPassword";
+import PendingApproval from "@/pages/PendingApproval";
 import Dashboard from "@/pages/Dashboard";
 import QuickEstimator from "@/pages/QuickEstimator";
 import QuoteBuilder from "@/pages/QuoteBuilder";
@@ -46,12 +48,14 @@ const App = () => (
         <RoleProvider>
           <SettingsProvider>
             <AppProvider>
+              <NotificationsProvider>
               <Toaster />
               <Sonner />
               <BrowserRouter>
                 <Routes>
                   <Route path="/auth" element={<Auth />} />
                   <Route path="/reset-password" element={<ResetPassword />} />
+                  <Route path="/pending" element={<PendingApproval />} />
                   <Route path="*" element={
                     <ProtectedRoute>
                       <Layout>
@@ -87,6 +91,7 @@ const App = () => (
                   } />
                 </Routes>
               </BrowserRouter>
+              </NotificationsProvider>
             </AppProvider>
           </SettingsProvider>
         </RoleProvider>
