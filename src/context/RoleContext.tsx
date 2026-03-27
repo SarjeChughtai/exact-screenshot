@@ -38,8 +38,8 @@ const MODULE_ACCESS: Record<string, UserRole[]> = {
   freight: ['admin', 'owner', 'freight', 'operations'],
   rfq: ['admin', 'owner', 'freight', 'operations'],
   settings: ['admin', 'owner', 'accounting', 'operations', 'sales_rep', 'freight'],
-  'dealer-rfq': ['dealer'],
-  'dealer-log': ['dealer'],
+  'dealer-rfq': ['admin', 'owner', 'dealer'],
+  'dealer-log': ['admin', 'owner', 'dealer'],
 };
 
 const RoleContext = createContext<RoleContextType | null>(null);
