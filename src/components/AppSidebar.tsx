@@ -2,7 +2,7 @@ import {
   Calculator, FileText, ClipboardList, Briefcase, DollarSign,
   BarChart3, CreditCard, Users, Truck, Factory, Award, FileSpreadsheet,
   Receipt, TrendingUp, Building2, ChevronDown, FileInput,
-  Shield, User, Settings as SettingsIcon, Send, LogOut, List, Store, Eye, EyeOff
+  Shield, User, Settings as SettingsIcon, Send, LogOut, List, Store, Eye, EyeOff, Database
 } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import { useLocation } from 'react-router-dom';
@@ -48,6 +48,7 @@ const menuGroups: MenuGroup[] = [
       { path: '/estimates-log', label: 'Estimates Log', icon: List, module: 'estimator' },
       { path: '/quote-log', label: 'Quote Log', icon: ClipboardList, module: 'quote-log' },
       { path: '/internal-quote-builder', label: 'Internal Quote Builder', icon: FileInput, module: 'internal-quote-builder' },
+      { path: '/draft-log', label: 'Draft Log', icon: FileText, module: 'draft-log' },
       { path: '/quote-builder', label: 'Sales Quote Builder', icon: FileText, module: 'quote-builder' },
     ],
   },
@@ -91,6 +92,7 @@ const menuGroups: MenuGroup[] = [
     items: [
       { path: '/settings', label: 'Settings', icon: SettingsIcon, module: 'settings' },
       { path: '/audit-log', label: 'Audit Log', icon: ClipboardList, module: 'settings' },
+      { path: '/master-data', label: 'Master Data', icon: Database, module: 'master-data' },
     ],
   },
 ];

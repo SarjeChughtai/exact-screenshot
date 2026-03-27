@@ -30,6 +30,7 @@ interface AppContextType extends AppState {
   updateQuote: (id: string, updates: Partial<Quote>) => void;
   addDeal: (d: Deal) => void;
   updateDeal: (jobId: string, updates: Partial<Deal>) => void;
+  deleteDeal: (jobId: string) => void;
   addInternalCost: (ic: InternalCost) => void;
   updateInternalCost: (jobId: string, updates: Partial<InternalCost>) => void;
   addPayment: (p: PaymentEntry) => void;
@@ -283,6 +284,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } catch {}
   }, [currentUser]);
 
+  const deleteDeal = useCallback(async (jobId: string) => {
+    setState(prev => {
+      const existing = prev.deals.find(d => d.jobId === jobId);
+      if (existing) logAudit(currentUser?.name || 'System', 'DELETE', 'Deal', jobId, { jobId }, existing);
+      return { ...prev, deals: prev.deals.filter(d => d.jobId !== jobId) };
+    });
+    try {
+      await supabase.from('deals').delete().eq('job_id', jobId);
+    } catch {}
+  }, [currentUser]);
+
   // --- Internal Costs ---
   const addInternalCost = useCallback(async (ic: InternalCost) => {
     setState(prev => ({ ...prev, internalCosts: [...prev.internalCosts, ic] }));
@@ -421,7 +433,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   return (
     <AppContext.Provider value={{
-      ...state, addQuote, updateQuote, addDeal, updateDeal,
+      ...state, addQuote, updateQuote, addDeal, updateDeal, deleteDeal,
       addInternalCost, updateInternalCost, addPayment, updatePayment, deletePayment,
       addProduction, updateProduction, addFreight, updateFreight,
       addRFQ, updateRFQ, deleteRFQ,

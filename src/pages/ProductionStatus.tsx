@@ -3,6 +3,7 @@ import { useSettings } from '@/context/SettingsContext';
 import { formatNumber } from '@/lib/calculations';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useRoles } from '@/context/RoleContext';
+import { Plus } from 'lucide-react';
 
 export default function ProductionStatus() {
   const { deals, updateDeal } = useAppContext();
@@ -21,9 +22,16 @@ export default function ProductionStatus() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold text-foreground">Production Status</h2>
-        <p className="text-sm text-muted-foreground mt-1">Amalgamated view — pulls from Master Deals</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-foreground">Production Status</h2>
+          <p className="text-sm text-muted-foreground mt-1">Amalgamated view — pulls from Master Deals</p>
+        </div>
+        {canEdit && (
+          <a href="/deals" className="inline-flex items-center gap-1 text-sm text-primary hover:underline">
+            <Plus className="h-3.5 w-3.5" /> Add Deal via Master Deals
+          </a>
+        )}
       </div>
 
       <div className="bg-card border rounded-lg overflow-x-auto">

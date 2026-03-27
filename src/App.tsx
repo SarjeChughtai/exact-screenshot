@@ -37,6 +37,8 @@ import AuditLog from "@/pages/AuditLog";
 import Settings from "@/pages/Settings";
 import DealerRFQ from "@/pages/DealerRFQ";
 import DealerLog from "@/pages/DealerLog";
+import DraftLog from "@/pages/DraftLog";
+import MasterData from "@/pages/MasterData";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -84,6 +86,8 @@ const App = () => (
                           <Route path="/audit-log" element={<AuditLog />} />
                           <Route path="/dealer-rfq" element={<DealerRFQ />} />
                           <Route path="/dealer-log" element={<DealerLog />} />
+                          <Route path="/draft-log" element={<DraftLog />} />
+                          <Route path="/master-data" element={<MasterData />} />
                           <Route path="*" element={<NotFound />} />
                         </Routes>
                       </Layout>

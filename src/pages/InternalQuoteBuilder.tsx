@@ -8,7 +8,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Switch } from '@/components/ui/switch';
 import { useAppContext } from '@/context/AppContext';
 import { useSettings } from '@/context/SettingsContext';
-import { formatCurrency, formatNumber, PROVINCES, getProvinceTax, calcFreight, calcEngineeringFromFactor, lookupFoundation, calcMarkup, getMarkupRate, autoComplexityFactor, pitchCostMultiplier, heightCostMultiplier } from '@/lib/calculations';
+import { formatCurrency, formatNumber, PROVINCES, getProvinceTax, calcFreight, calcEngineeringFromFactor, lookupFoundation, calcMarkup, getMarkupRate, autoComplexityFactor } from '@/lib/calculations';
 import { estimateFreightFromLocation } from '@/lib/freightEstimate';
 import type { Quote } from '@/types';
 import { toast } from 'sonner';
@@ -50,8 +50,8 @@ function generateCostSavingTips(form: any, costData: CostFileData, quote: Quote 
   const h = parseFloat(form.height) || 14;
   const pitch = parseFloat(form.pitch) || 1;
 
-  if (pitch > 2) tips.push(`📐 Reducing roof pitch from ${pitch}:12 to 1:12 could save ~${((pitchCostMultiplier(pitch).multiplier - 1) * 100).toFixed(0)}% on steel costs.`);
-  if (h > 16) tips.push(`📏 A ${h}ft eave height adds ~${((heightCostMultiplier(h).multiplier - 1) * 100).toFixed(0)}% to steel. Consider ${Math.min(h, 16)}ft if clearance allows.`);
+  if (pitch > 2) tips.push(`📐 Reducing roof pitch from ${pitch}:12 to 1:12 could save on steel costs.`);
+  if (h > 16) tips.push(`📏 Eave height of ${h}ft — consider ${Math.min(h, 16)}ft if clearance allows.`);
   if (w > 80) tips.push(`🏗️ Buildings over 80ft wide require multi-span framing — significantly more costly. If possible, keep width ≤ 80ft.`);
   if (form.foundationType === 'frost_wall') tips.push(`🧱 Frost wall foundations cost ~65% more than slab. Verify if slab-on-grade is feasible for this site.`);
   if (form.remoteLevel === 'extreme') tips.push(`🚛 Extreme remote freight adds $3,000+. Consider a staging/pickup arrangement to reduce cost.`);
@@ -94,6 +94,18 @@ export default function InternalQuoteBuilder() {
   const [aiProcessing, setAiProcessing] = useState(false);
   const [costSavingTips, setCostSavingTips] = useState<string[]>([]);
   const [locationSource, setLocationSource] = useState('');
+  const [singleSlope, setSingleSlope] = useState(false);
+  const [leftEaveHeight, setLeftEaveHeight] = useState('14');
+  const [rightEaveHeight, setRightEaveHeight] = useState('14');
+
+  const handleEaveHeightChange = (side: 'left' | 'right', value: string) => {
+    const left = side === 'left' ? value : leftEaveHeight;
+    const right = side === 'right' ? value : rightEaveHeight;
+    if (side === 'left') setLeftEaveHeight(value);
+    else setRightEaveHeight(value);
+    const maxH = Math.max(parseFloat(left) || 0, parseFloat(right) || 0);
+    set('height', maxH > 0 ? String(maxH) : '14');
+  };
 
   const costData = buildings[activeBuildingIdx]?.costData || { steelWeightLbs: 0, supplierCostPerLb: 0, totalSupplierCost: 0, accessories: [] };
   const parsedFiles = buildings[activeBuildingIdx]?.files || [];
@@ -191,10 +203,23 @@ export default function InternalQuoteBuilder() {
 
     const widthMatch = fullText.match(/Width\s*\(ft\)\s*=\s*([\d.]+)/i);
     const lengthMatch = fullText.match(/Length\s*\(ft\)\s*=\s*([\d.]+)/i);
-    const heightMatch = fullText.match(/Eave\s*Height\s*\(ft\)\s*=\s*([\d.]+)/i);
+    // Handles formats: "14" (symmetric) or "14 / 16" (single slope with different eave heights)
+    const heightMatch = fullText.match(/Eave\s*Height\s*\(ft\)\s*=\s*([\d.]+)\s*(?:\/\s*([\d.]+))?/i);
     if (widthMatch) pWidth = parseFloat(widthMatch[1]);
     if (lengthMatch) pLength = parseFloat(lengthMatch[1]);
-    if (heightMatch) pHeight = parseFloat(heightMatch[1]);
+    let pLeftHeight: number | undefined;
+    let pRightHeight: number | undefined;
+    let pIsSingleSlope = false;
+    if (heightMatch) {
+      pLeftHeight = parseFloat(heightMatch[1]);
+      if (heightMatch[2]) {
+        pRightHeight = parseFloat(heightMatch[2]);
+        pIsSingleSlope = pLeftHeight !== pRightHeight;
+        pHeight = Math.max(pLeftHeight, pRightHeight);
+      } else {
+        pHeight = pLeftHeight;
+      }
+    }
 
     // Roof Slope parsing: handles "Roof Slope (rise/12 )= 2.00/ 2.00" and similar formats
     const slopeMatch = fullText.match(/Roof\s*Slope\s*\(?rise\/12\s*\)?\s*=\s*([\d.]+)/i);
@@ -224,7 +249,7 @@ export default function InternalQuoteBuilder() {
     if (weight && totalCost && !costPerLb) costPerLb = totalCost / weight;
     if (weight && costPerLb && !totalCost) totalCost = weight * costPerLb;
 
-    return { weight, costPerLb, totalCost, pWidth, pLength, pHeight, pPitch, clientName, clientId, jobId, accessories };
+    return { weight, costPerLb, totalCost, pWidth, pLength, pHeight, pPitch, clientName, clientId, jobId, accessories, pLeftHeight, pRightHeight, pIsSingleSlope };
   };
 
   const extractWithAI = async (text: string, filename: string) => {
@@ -355,6 +380,9 @@ export default function InternalQuoteBuilder() {
               if (parsed.pWidth) set('width', String(parsed.pWidth));
               if (parsed.pLength) set('length', String(parsed.pLength));
               if (parsed.pHeight) set('height', String(parsed.pHeight));
+              if (parsed.pLeftHeight) setLeftEaveHeight(String(parsed.pLeftHeight));
+              if (parsed.pRightHeight) setRightEaveHeight(String(parsed.pRightHeight));
+              if (parsed.pIsSingleSlope) setSingleSlope(true);
               if (parsed.pPitch) set('pitch', String(parsed.pPitch));
               if (parsed.clientName) set('clientName', parsed.clientName);
               if (parsed.clientId) set('clientId', parsed.clientId);
@@ -440,11 +468,8 @@ export default function InternalQuoteBuilder() {
     const tieredMarkupAmount = calcMarkup(steelAfterSupplierMarkup);
     const tieredRate = getMarkupRate(steelAfterSupplierMarkup);
     
-    const pitchMult = pitchCostMultiplier(pitch);
-    const heightMult = heightCostMultiplier(h);
-    
-    // Adjusted steel = steel after supplier + tiered markup, then pitch/height adjustments — all baked into "Steel" price
-    const adjustedSteel = (steelAfterSupplierMarkup + tieredMarkupAmount) * pitchMult.multiplier * heightMult.multiplier;
+    // Adjusted steel = steel after supplier markup + tiered markup
+    const adjustedSteel = steelAfterSupplierMarkup + tieredMarkupAmount;
     setTieredMarkupInfo({ rate: tieredRate, amount: tieredMarkupAmount });
 
     const complexity = autoComplexityFactor(w, l, h);
@@ -468,8 +493,6 @@ export default function InternalQuoteBuilder() {
       `Base Steel (from MBS): ${formatCurrency(costData.totalSupplierCost)} at ${formatNumber(weight)} lbs = $${costData.supplierCostPerLb.toFixed(2)}/lb`,
       `+${supplierMarkupPct}% Supplier: $/lb goes from $${costData.supplierCostPerLb.toFixed(2)} to $${adjustedCostPerLb.toFixed(2)} → steel becomes ${formatCurrency(steelAfterSupplierMarkup)}`,
       `Tiered Markup: tier = ${(tieredRate * 100).toFixed(1)}%, amount = ${formatCurrency(tieredMarkupAmount)}${tieredMarkupAmount === 3000 ? ' ($3K minimum applied)' : ''}`,
-      pitchMult.multiplier > 1 ? `Pitch Adjustment: ${pitchMult.note} → ×${pitchMult.multiplier}` : '',
-      heightMult.multiplier > 1 ? `Height Adjustment: ${heightMult.note} → ×${heightMult.multiplier}` : '',
       `Adjusted Steel: ${formatCurrency(adjustedSteel)} → final $/lb = $${finalPerLb.toFixed(2)} (${finalPerLb >= 2.15 && finalPerLb <= 2.30 ? 'IN RANGE' : 'CHECK'} vs $2.15–$2.30)`,
       `Engineering: auto-complexity = ${complexity.factor} (${complexity.reason}) → ${formatCurrency(engineering)}`,
       `Foundation: sqft=${formatNumber(sqft)}, type=${form.foundationType}, base=${formatCurrency(foundation - 500)} + $500 = ${formatCurrency(foundation)}`,
@@ -500,6 +523,25 @@ export default function InternalQuoteBuilder() {
       gstHst, qst, grandTotal: totalPlusCont, status: 'Draft',
     };
     setQuote(q);
+
+    // Auto-save to draft log
+    try {
+      const draft = {
+        id: crypto.randomUUID(),
+        savedAt: new Date().toISOString(),
+        jobId: form.jobId,
+        jobName: form.jobName,
+        clientName: form.clientName,
+        salesRep: form.salesRep,
+        buildings: buildings.map(b => ({ label: b.label, width: b.width || form.width, length: b.length || form.length, height: b.height || form.height, pitch: b.pitch || form.pitch })),
+        totalSupplierCost: costData.totalSupplierCost,
+        grandTotal: totalPlusCont,
+        province: form.province,
+      };
+      const existing = JSON.parse(localStorage.getItem('csb_draft_quotes') || '[]');
+      existing.push(draft);
+      localStorage.setItem('csb_draft_quotes', JSON.stringify(existing.slice(-100)));
+    } catch {}
 
     // Generate cost-saving tips
     setCostSavingTips(generateCostSavingTips(form, costData, q));
@@ -762,13 +804,26 @@ export default function InternalQuoteBuilder() {
             <div className="grid grid-cols-3 gap-3">
               <div><Label className="text-xs">Width (ft)</Label><Input className="input-blue mt-1" value={form.width} onChange={e => set('width', e.target.value)} /></div>
               <div><Label className="text-xs">Length (ft)</Label><Input className="input-blue mt-1" value={form.length} onChange={e => set('length', e.target.value)} /></div>
-              <div><Label className="text-xs">Height (ft)</Label><Input className="input-blue mt-1" value={form.height} onChange={e => set('height', e.target.value)} /></div>
+              {!singleSlope ? (
+                <div><Label className="text-xs">Height (ft)</Label><Input className="input-blue mt-1" value={form.height} onChange={e => set('height', e.target.value)} /></div>
+              ) : (
+                <div><Label className="text-xs">Max Height (auto)</Label><Input className="input-blue mt-1 opacity-60" value={form.height} readOnly /></div>
+              )}
             </div>
-            {/* Pitch & Height impact notes */}
-            {(parseFloat(form.pitch) > 1 || parseFloat(form.height) > 14) && (
-              <div className="bg-muted rounded-md p-3 text-xs space-y-1">
-                {parseFloat(form.pitch) > 1 && <p className="text-muted-foreground">📐 {pitchCostMultiplier(parseFloat(form.pitch)).note}</p>}
-                {parseFloat(form.height) > 14 && <p className="text-muted-foreground">📏 {heightCostMultiplier(parseFloat(form.height)).note}</p>}
+            <div className="flex items-center gap-3">
+              <Switch checked={singleSlope} onCheckedChange={v => { setSingleSlope(v); if (!v) { setLeftEaveHeight('14'); setRightEaveHeight('14'); } }} />
+              <Label className="text-xs">Single Slope Building</Label>
+            </div>
+            {singleSlope && (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs">Left Eave Height (ft)</Label>
+                  <Input className="input-blue mt-1" value={leftEaveHeight} onChange={e => handleEaveHeightChange('left', e.target.value)} />
+                </div>
+                <div>
+                  <Label className="text-xs">Right Eave Height (ft)</Label>
+                  <Input className="input-blue mt-1" value={rightEaveHeight} onChange={e => handleEaveHeightChange('right', e.target.value)} />
+                </div>
               </div>
             )}
             <div className="grid grid-cols-3 gap-3">

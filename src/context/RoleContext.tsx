@@ -44,6 +44,8 @@ const MODULE_ACCESS: Record<string, UserRole[]> = {
   settings: ['admin', 'owner', 'accounting', 'operations', 'sales_rep', 'freight'],
   'dealer-rfq': ['admin', 'owner', 'dealer'],
   'dealer-log': ['admin', 'owner', 'dealer'],
+  'draft-log': ['admin', 'owner'],
+  'master-data': ['owner'],
 };
 
 const RoleContext = createContext<RoleContextType | null>(null);

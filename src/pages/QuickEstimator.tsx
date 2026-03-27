@@ -12,7 +12,7 @@ import {
   calcSteelCost, calcEngineering, lookupFoundation, lookupInsulation,
   calcInsulationArea, calcFreight, calcTax, formatCurrency, formatNumber,
   PROVINCES, INSULATION_GRADES, ENGINEERING_FACTORS, REMOTE_LEVELS, getProvinceTax,
-  pitchCostMultiplier, heightCostMultiplier, calcMarkup, getMarkupRate
+  calcMarkup, getMarkupRate
 } from '@/lib/calculations';
 import { estimateFreightFromLocation } from '@/lib/freightEstimate';
 import { MapPin, Lightbulb, ChevronDown, Save } from 'lucide-react';
@@ -103,6 +103,18 @@ export default function QuickEstimator() {
   const [contingencyPct, setContingencyPct] = useState('5');
   const [result, setResult] = useState<EstimateResult | null>(null);
   const [costSavingTips, setCostSavingTips] = useState<string[]>([]);
+  const [singleSlope, setSingleSlope] = useState(false);
+  const [leftEaveHeight, setLeftEaveHeight] = useState('');
+  const [rightEaveHeight, setRightEaveHeight] = useState('');
+
+  const handleEaveHeightChange = (side: 'left' | 'right', value: string) => {
+    const left = side === 'left' ? value : leftEaveHeight;
+    const right = side === 'right' ? value : rightEaveHeight;
+    if (side === 'left') setLeftEaveHeight(value);
+    else setRightEaveHeight(value);
+    const maxH = Math.max(parseFloat(left) || 0, parseFloat(right) || 0);
+    setHeight(maxH > 0 ? String(maxH) : '');
+  };
 
   // Client & rep fields
   const [clientName, setClientName] = useState('');
@@ -168,11 +180,9 @@ export default function QuickEstimator() {
 
     const frt = calcFreight(parseFloat(distance) || 0, steel.weight, remoteLevel);
 
-    // Apply pitch and height multipliers to steel
+    // Pitch recorded for info only — no cost adjustment
     const p = parseFloat(pitch) || 1;
-    const pitchMult = pitchCostMultiplier(p);
-    const heightMult = heightCostMultiplier(h);
-    const adjustedSteel = steel.cost * pitchMult.multiplier * heightMult.multiplier;
+    const adjustedSteel = steel.cost;
 
     // Calculate markup - baked into steel price (hidden from user)
     let markupAmount: number;
@@ -212,8 +222,6 @@ export default function QuickEstimator() {
 
     // Generate cost-saving tips
     const tips: string[] = [];
-    if (p > 2) tips.push(`📐 Reducing roof pitch from ${p}:12 to 1:12 could save ~${((pitchMult.multiplier - 1) * 100).toFixed(0)}% on steel costs.`);
-    if (h > 16) tips.push(`📏 A ${h}ft eave height adds ~${((heightMult.multiplier - 1) * 100).toFixed(0)}% to steel. Consider ${Math.min(h, 16)}ft if clearance allows.`);
     if (w > 80) tips.push(`🏗️ Buildings over 80ft wide require multi-span framing — significantly more costly. Consider ≤ 80ft width.`);
     if (foundationType === 'frost_wall') tips.push(`🧱 Frost wall foundations cost ~65% more than slab. Verify if slab-on-grade is feasible.`);
     if (remoteLevel === 'extreme') tips.push(`🚛 Extreme remote freight adds $3,000+. Consider a staging/pickup arrangement.`);
@@ -238,8 +246,6 @@ export default function QuickEstimator() {
       `Steel base: ${formatCurrency(result.steelCost)} at ${formatNumber(result.weight)} lbs`,
       `Margin baked in: ${result.markupType} = ${formatCurrency(result.markupAmount)}`,
       `Steel shown to client: ${formatCurrency(result.steelWithMargin)}`,
-      `Pitch: ${p}:12 (×${pitchCostMultiplier(p).multiplier})`,
-      `Height: ${h}ft (×${heightCostMultiplier(h).multiplier})`,
       `Engineering factors: ${selectedFactors.join(', ')}`,
     ];
 
@@ -368,8 +374,6 @@ export default function QuickEstimator() {
     `Steel shown (margin baked in): ${formatCurrency(result.steelWithMargin)}`,
     `$/sqft: ${formatCurrency(result.subtotal / result.sqft)}`,
     `Weight: ${formatNumber(result.weight)} lbs`,
-    `Pitch multiplier: ×${pitchCostMultiplier(parseFloat(pitch) || 1).multiplier}`,
-    `Height multiplier: ×${heightCostMultiplier(parseFloat(height) || 14).multiplier}`,
   ] : [];
 
   return (
@@ -405,13 +409,27 @@ export default function QuickEstimator() {
           <div className="grid grid-cols-3 gap-3">
             <div><Label className="text-xs">Width (ft)</Label><Input className="input-blue mt-1" value={width} onChange={e => setWidth(e.target.value)} /></div>
             <div><Label className="text-xs">Length (ft)</Label><Input className="input-blue mt-1" value={length} onChange={e => setLength(e.target.value)} /></div>
-            <div><Label className="text-xs">Height (ft)</Label><Input className="input-blue mt-1" value={height} onChange={e => setHeight(e.target.value)} /></div>
+            {!singleSlope ? (
+              <div><Label className="text-xs">Height (ft)</Label><Input className="input-blue mt-1" value={height} onChange={e => setHeight(e.target.value)} /></div>
+            ) : (
+              <div><Label className="text-xs">Max Height (auto)</Label><Input className="input-blue mt-1 opacity-60" value={height} readOnly /></div>
+            )}
             <div><Label className="text-xs">Roof Pitch (:12)</Label><Input className="input-blue mt-1" value={pitch} onChange={e => setPitch(e.target.value)} placeholder="1" /></div>
           </div>
-          {(parseFloat(pitch) > 1 || parseFloat(height) > 14) && (
-            <div className="bg-muted rounded-md p-3 text-xs space-y-1">
-              {parseFloat(pitch) > 1 && <p className="text-muted-foreground">📐 {pitchCostMultiplier(parseFloat(pitch)).note}</p>}
-              {parseFloat(height) > 14 && <p className="text-muted-foreground">📏 {heightCostMultiplier(parseFloat(height)).note}</p>}
+          <div className="flex items-center gap-3">
+            <Switch checked={singleSlope} onCheckedChange={v => { setSingleSlope(v); if (!v) { setLeftEaveHeight(''); setRightEaveHeight(''); } }} />
+            <Label className="text-xs">Single Slope</Label>
+          </div>
+          {singleSlope && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs">Left Eave Height (ft)</Label>
+                <Input className="input-blue mt-1" value={leftEaveHeight} onChange={e => handleEaveHeightChange('left', e.target.value)} />
+              </div>
+              <div>
+                <Label className="text-xs">Right Eave Height (ft)</Label>
+                <Input className="input-blue mt-1" value={rightEaveHeight} onChange={e => handleEaveHeightChange('right', e.target.value)} />
+              </div>
             </div>
           )}
 

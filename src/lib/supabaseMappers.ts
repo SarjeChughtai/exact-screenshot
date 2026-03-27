@@ -17,6 +17,9 @@ export function dealFromRow(r: any): Deal {
     width: Number(r.width) || 0,
     length: Number(r.length) || 0,
     height: Number(r.height) || 0,
+    leftEaveHeight: r.left_eave_height != null ? Number(r.left_eave_height) : undefined,
+    rightEaveHeight: r.right_eave_height != null ? Number(r.right_eave_height) : undefined,
+    isSingleSlope: r.is_single_slope ?? undefined,
     sqft: Number(r.sqft) || 0,
     weight: Number(r.weight) || 0,
     taxRate: Number(r.tax_rate) || 0,
@@ -44,6 +47,7 @@ export function dealToRow(d: Partial<Deal>): Record<string, any> {
     paymentStatus: 'payment_status', productionStatus: 'production_status',
     freightStatus: 'freight_status', insulationStatus: 'insulation_status',
     deliveryDate: 'delivery_date', pickupDate: 'pickup_date', notes: 'notes',
+    leftEaveHeight: 'left_eave_height', rightEaveHeight: 'right_eave_height', isSingleSlope: 'is_single_slope',
   };
   const row: Record<string, any> = {};
   for (const [k, v] of Object.entries(d)) {
@@ -70,6 +74,10 @@ export function quoteFromRow(r: any): Quote {
     width: Number(r.width) || 0,
     length: Number(r.length) || 0,
     height: Number(r.height) || 0,
+    leftEaveHeight: r.left_eave_height != null ? Number(r.left_eave_height) : undefined,
+    rightEaveHeight: r.right_eave_height != null ? Number(r.right_eave_height) : undefined,
+    isSingleSlope: r.is_single_slope ?? undefined,
+    pitch: r.pitch != null ? Number(r.pitch) : undefined,
     sqft: Number(r.sqft) || 0,
     weight: Number(r.weight) || 0,
     baseSteelCost: Number(r.base_steel_cost) || 0,
@@ -108,6 +116,7 @@ export function quoteToRow(q: Partial<Quote>): Record<string, any> {
     freight: 'freight', combinedTotal: 'combined_total', perSqft: 'per_sqft', perLb: 'per_lb',
     contingencyPct: 'contingency_pct', contingency: 'contingency', gstHst: 'gst_hst',
     qst: 'qst', grandTotal: 'grand_total', status: 'status',
+    leftEaveHeight: 'left_eave_height', rightEaveHeight: 'right_eave_height', isSingleSlope: 'is_single_slope', pitch: 'pitch',
   };
   const row: Record<string, any> = {};
   for (const [k, v] of Object.entries(q)) {

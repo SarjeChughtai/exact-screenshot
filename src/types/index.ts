@@ -14,6 +14,10 @@ export interface Quote {
   width: number;
   length: number;
   height: number;
+  leftEaveHeight?: number;
+  rightEaveHeight?: number;
+  isSingleSlope?: boolean;
+  pitch?: number;
   sqft: number;
   weight: number;
   baseSteelCost: number;
@@ -61,6 +65,9 @@ export interface Deal {
   width: number;
   length: number;
   height: number;
+  leftEaveHeight?: number;
+  rightEaveHeight?: number;
+  isSingleSlope?: boolean;
   sqft: number;
   weight: number;
   taxRate: number;
