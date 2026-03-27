@@ -7,8 +7,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { toast } from 'sonner';
 import { Send, Store } from 'lucide-react';
 import { PROVINCES } from '@/lib/calculations';
+import { useAuth } from '@/context/AuthContext';
+import { useRoles } from '@/context/RoleContext';
 
 export default function DealerRFQ() {
+  const { user } = useAuth();
+  const { hasRole } = useRoles();
+  const isOwner = hasRole('owner');
+
   const [form, setForm] = useState({
     clientName: '', clientId: '', contactEmail: '', contactPhone: '',
     province: 'ON', city: '', address: '', postalCode: '',
@@ -31,6 +37,8 @@ export default function DealerRFQ() {
       ...form,
       status: 'Submitted',
       createdAt: new Date().toISOString(),
+      submittedBy: user?.email || 'unknown',
+      submittedByRole: isOwner ? 'owner' : 'dealer',
     });
     localStorage.setItem('csb_dealer_requests', JSON.stringify(requests));
 
@@ -47,8 +55,8 @@ export default function DealerRFQ() {
   return (
     <div className="max-w-3xl space-y-6">
       <div>
-        <h2 className="text-2xl font-bold flex items-center gap-2"><Store className="h-6 w-6" /> Dealer RFQ</h2>
-        <p className="text-sm text-muted-foreground mt-1">Submit a request for quotation for your client</p>
+        <h2 className="text-2xl font-bold flex items-center gap-2"><Store className="h-6 w-6" /> {isOwner ? 'Dealer RFQ (Owner View)' : 'Dealer RFQ'}</h2>
+        <p className="text-sm text-muted-foreground mt-1">{isOwner ? 'Submit RFQs on behalf of dealers and review submissions in Dealer Log.' : 'Submit a request for quotation for your client.'}</p>
       </div>
 
       <div className="space-y-5">
