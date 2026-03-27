@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { toast } from 'sonner';
 import { Download, Upload, Plus, Trash2 } from 'lucide-react';
 import { UserManagement } from '@/components/UserManagement';
+import CRMSettings from '@/components/CRMSettings';
 
 export default function Settings() {
   const { settings, updateSettings } = useSettings();
@@ -90,8 +91,9 @@ export default function Settings() {
           {isAdmin && <TabsTrigger value="estimator">Estimator</TabsTrigger>}
           <TabsTrigger value="statuses">Status Options</TabsTrigger>
           <TabsTrigger value="personnel">Personnel</TabsTrigger>
-          {isAdmin && <TabsTrigger value="users">Users & Access</TabsTrigger>}
-          <TabsTrigger value="data">Data</TabsTrigger>
+           {isAdmin && <TabsTrigger value="users">Users & Access</TabsTrigger>}
+           {isAdmin && <TabsTrigger value="crm">CRM</TabsTrigger>}
+           <TabsTrigger value="data">Data</TabsTrigger>
         </TabsList>
 
         {isAdmin && (
@@ -258,6 +260,12 @@ export default function Settings() {
         {isAdmin && (
           <TabsContent value="users" className="space-y-4">
             <UserManagement />
+          </TabsContent>
+        )}
+
+        {isAdmin && (
+          <TabsContent value="crm" className="space-y-4">
+            <CRMSettings />
           </TabsContent>
         )}
 
