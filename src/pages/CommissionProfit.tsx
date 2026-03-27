@@ -38,6 +38,8 @@ export default function CommissionProfit() {
 
     const ownerEach = trueGP * 0.05;
     const estimatorComm = trueGP * 0.05;
+    const marketingFee = trueGP * 0.05;
+    const retainedEarnings = trueGP - totalRepCommission - marketingFee - ownerEach * 3 - estimatorComm;
 
     // Track what's been paid vs owed
     const commPaid = 0; // TODO: track actual commission payments
@@ -48,6 +50,7 @@ export default function CommissionProfit() {
       clientPaid, paidPct, depositStage, comm1, comm2, comm3,
       ownerEach, estimatorComm, commOwing,
       comm1Due: paidPct >= 30, comm2Due: paidPct >= 70, comm3Due: paidPct >= 100,
+      marketingFee, retainedEarnings,
     };
   });
 
@@ -77,6 +80,8 @@ export default function CommissionProfit() {
               ))}
               {isAdmin && <th className="px-3 py-2 text-left font-medium">Owner ×3</th>}
               {isAdmin && <th className="px-3 py-2 text-left font-medium">Estimator</th>}
+              {isAdmin && <th className="px-3 py-2 text-left font-medium">Marketing (5%)</th>}
+              {isAdmin && <th className="px-3 py-2 text-left font-medium">Retained</th>}
             </tr>
           </thead>
           <tbody>
@@ -98,6 +103,8 @@ export default function CommissionProfit() {
                 <td className="px-3 py-2 font-mono font-semibold">{formatCurrency(r.commOwing)}</td>
                 {isAdmin && <td className="px-3 py-2 font-mono">{formatCurrency(r.ownerEach)}</td>}
                 {isAdmin && <td className="px-3 py-2 font-mono">{formatCurrency(r.estimatorComm)}</td>}
+                {isAdmin && <td className="px-3 py-2 font-mono">{formatCurrency(r.marketingFee)}</td>}
+                {isAdmin && <td className={`px-3 py-2 font-mono ${r.retainedEarnings < 0 ? 'text-destructive' : 'text-success'}`}>{formatCurrency(r.retainedEarnings)}</td>}
               </tr>
             ))}
           </tbody>

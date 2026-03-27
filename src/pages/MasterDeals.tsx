@@ -6,23 +6,38 @@ import { formatNumber, formatCurrency } from '@/lib/calculations';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { ChevronDown, ChevronRight } from 'lucide-react';
-import type { DealStatus } from '@/types';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { ChevronDown, ChevronRight, Edit, Trash2, Plus } from 'lucide-react';
+import type { Deal, DealStatus } from '@/types';
 
 const DEAL_STATUS_LABELS: Record<string, string> = {
   Lead: 'Request for Quote',
 };
 
+const EMPTY_DEAL: Partial<Deal> = {
+  jobId: '', jobName: '', clientName: '', clientId: '',
+  salesRep: '', estimator: '', teamLead: '', province: 'ON',
+  city: '', address: '', postalCode: '',
+  width: 0, length: 0, height: 0,
+  dealStatus: 'Lead',
+};
+
 export default function MasterDeals() {
-  const { deals, updateDeal, payments, internalCosts } = useAppContext();
+  const { deals, updateDeal, deleteDeal, addDeal, payments, internalCosts } = useAppContext();
   const { currentUser, hasAnyRole } = useRoles();
   const { settings } = useSettings();
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterRep, setFilterRep] = useState<string>('all');
   const [searchClient, setSearchClient] = useState('');
   const [expandedJob, setExpandedJob] = useState<string | null>(null);
+  const [editingDeal, setEditingDeal] = useState<Deal | null>(null);
+  const [showAddDeal, setShowAddDeal] = useState(false);
+  const [newDeal, setNewDeal] = useState<Partial<Deal>>(EMPTY_DEAL);
 
   const canEdit = hasAnyRole('admin', 'owner', 'operations');
+  const isAdminOwner = hasAnyRole('admin', 'owner');
   const isSalesRep = !hasAnyRole('admin', 'owner', 'accounting', 'operations', 'freight');
 
   const visibleDeals = isSalesRep
@@ -39,14 +54,64 @@ export default function MasterDeals() {
 
   const toggle = (jobId: string) => setExpandedJob(prev => prev === jobId ? null : jobId);
 
+  const handleSaveEdit = () => {
+    if (!editingDeal) return;
+    updateDeal(editingDeal.jobId, editingDeal);
+    setEditingDeal(null);
+  };
+
+  const handleAddDeal = () => {
+    if (!newDeal.jobId) return;
+    const deal: Deal = {
+      jobId: newDeal.jobId || '',
+      jobName: newDeal.jobName || '',
+      clientName: newDeal.clientName || '',
+      clientId: newDeal.clientId || '',
+      salesRep: newDeal.salesRep || '',
+      estimator: newDeal.estimator || '',
+      teamLead: newDeal.teamLead || '',
+      province: newDeal.province || 'ON',
+      city: newDeal.city || '',
+      address: newDeal.address || '',
+      postalCode: newDeal.postalCode || '',
+      width: Number(newDeal.width) || 0,
+      length: Number(newDeal.length) || 0,
+      height: Number(newDeal.height) || 0,
+      sqft: (Number(newDeal.width) || 0) * (Number(newDeal.length) || 0),
+      weight: 0,
+      taxRate: 0,
+      taxType: '',
+      orderType: '',
+      dateSigned: '',
+      dealStatus: newDeal.dealStatus || 'Lead',
+      paymentStatus: 'UNPAID',
+      productionStatus: 'Submitted',
+      freightStatus: 'Pending',
+      insulationStatus: '',
+      deliveryDate: '',
+      pickupDate: '',
+      notes: '',
+    };
+    addDeal(deal);
+    setShowAddDeal(false);
+    setNewDeal(EMPTY_DEAL);
+  };
+
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold text-foreground">Master Deals</h2>
-        <p className="text-sm text-muted-foreground mt-1">
-          {filtered.length} of {visibleDeals.length} deals shown
-          {isSalesRep && ' (your deals only)'}
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-foreground">Master Deals</h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            {filtered.length} of {visibleDeals.length} deals shown
+            {isSalesRep && ' (your deals only)'}
+          </p>
+        </div>
+        {isAdminOwner && (
+          <Button size="sm" onClick={() => setShowAddDeal(true)}>
+            <Plus className="h-3 w-3 mr-1" /> Add Deal
+          </Button>
+        )}
       </div>
 
       <div className="flex flex-wrap gap-3">
@@ -77,11 +142,12 @@ export default function MasterDeals() {
               {['Job ID', 'Job Name', 'Client', 'Sales Rep', 'Province', 'Deal Status', 'Client Pmt', 'Factory Pmt', 'Production', 'Insulation', 'Freight'].map(h => (
                 <th key={h} className="px-2 py-2 text-left font-medium whitespace-nowrap">{h}</th>
               ))}
+              {isAdminOwner && <th className="px-2 py-2 text-left font-medium">Actions</th>}
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
-              <tr><td colSpan={12} className="px-3 py-8 text-center text-muted-foreground">No deals found</td></tr>
+              <tr><td colSpan={isAdminOwner ? 13 : 12} className="px-3 py-8 text-center text-muted-foreground">No deals found</td></tr>
             ) : filtered.map(d => {
               const isExpanded = expandedJob === d.jobId;
               const ic = internalCosts.find(c => c.jobId === d.jobId);
@@ -114,10 +180,36 @@ export default function MasterDeals() {
                     <td className="px-2 py-2 text-xs">{d.productionStatus}</td>
                     <td className="px-2 py-2 text-xs">{d.insulationStatus || '—'}</td>
                     <td className="px-2 py-2 text-xs">{d.freightStatus}</td>
+                    {isAdminOwner && (
+                      <td className="px-2 py-2" onClick={e => e.stopPropagation()}>
+                        <div className="flex gap-1">
+                          <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setEditingDeal({ ...d })}>
+                            <Edit className="h-3 w-3" />
+                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+                                <Trash2 className="h-3 w-3 text-destructive" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Delete Deal</AlertDialogTitle>
+                                <AlertDialogDescription>Delete {d.jobId} - {d.clientName}? This cannot be undone.</AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => deleteDeal(d.jobId)}>Delete</AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                   {isExpanded && (
                     <tr key={`${d.jobId}-detail`} className="bg-muted/30">
-                      <td colSpan={12} className="p-4">
+                      <td colSpan={isAdminOwner ? 13 : 12} className="p-4">
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
                           <div>
                             <p className="font-semibold text-muted-foreground mb-1">Project Info</p>
@@ -165,6 +257,85 @@ export default function MasterDeals() {
           </tbody>
         </table>
       </div>
+
+      {/* Edit Deal Dialog */}
+      <Dialog open={!!editingDeal} onOpenChange={open => !open && setEditingDeal(null)}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Deal — {editingDeal?.jobId}</DialogTitle>
+          </DialogHeader>
+          {editingDeal && (
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              {[
+                ['jobId', 'Job ID'], ['jobName', 'Job Name'], ['clientName', 'Client Name'],
+                ['clientId', 'Client ID'], ['salesRep', 'Sales Rep'], ['estimator', 'Estimator'],
+                ['teamLead', 'Team Lead'], ['province', 'Province'], ['city', 'City'],
+                ['address', 'Address'], ['postalCode', 'Postal Code'],
+              ].map(([key, label]) => (
+                <div key={key}>
+                  <label className="text-xs font-medium text-muted-foreground">{label}</label>
+                  <Input className="mt-1" value={(editingDeal as any)[key] || ''} onChange={e => setEditingDeal(prev => prev ? { ...prev, [key]: e.target.value } : null)} />
+                </div>
+              ))}
+              {[['width', 'Width (ft)'], ['length', 'Length (ft)'], ['height', 'Height (ft)']].map(([key, label]) => (
+                <div key={key}>
+                  <label className="text-xs font-medium text-muted-foreground">{label}</label>
+                  <Input className="mt-1" type="number" value={(editingDeal as any)[key] || ''} onChange={e => setEditingDeal(prev => prev ? { ...prev, [key]: parseFloat(e.target.value) || 0 } : null)} />
+                </div>
+              ))}
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Deal Status</label>
+                <Select value={editingDeal.dealStatus} onValueChange={v => setEditingDeal(prev => prev ? { ...prev, dealStatus: v as DealStatus } : null)}>
+                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                  <SelectContent>{settings.dealStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingDeal(null)}>Cancel</Button>
+            <Button onClick={handleSaveEdit}>Save Changes</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Deal Dialog */}
+      <Dialog open={showAddDeal} onOpenChange={setShowAddDeal}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Add Deal</DialogTitle>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            {[
+              ['jobId', 'Job ID *'], ['jobName', 'Job Name'], ['clientName', 'Client Name'],
+              ['clientId', 'Client ID'], ['salesRep', 'Sales Rep'], ['estimator', 'Estimator'],
+              ['province', 'Province'], ['city', 'City'], ['address', 'Address'], ['postalCode', 'Postal Code'],
+            ].map(([key, label]) => (
+              <div key={key}>
+                <label className="text-xs font-medium text-muted-foreground">{label}</label>
+                <Input className="mt-1" value={(newDeal as any)[key] || ''} onChange={e => setNewDeal(prev => ({ ...prev, [key]: e.target.value }))} />
+              </div>
+            ))}
+            {[['width', 'Width (ft)'], ['length', 'Length (ft)'], ['height', 'Height (ft)']].map(([key, label]) => (
+              <div key={key}>
+                <label className="text-xs font-medium text-muted-foreground">{label}</label>
+                <Input className="mt-1" type="number" value={(newDeal as any)[key] || ''} onChange={e => setNewDeal(prev => ({ ...prev, [key]: parseFloat(e.target.value) || 0 }))} />
+              </div>
+            ))}
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">Deal Status</label>
+              <Select value={newDeal.dealStatus || 'Lead'} onValueChange={v => setNewDeal(prev => ({ ...prev, dealStatus: v as DealStatus }))}>
+                <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                <SelectContent>{settings.dealStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setShowAddDeal(false); setNewDeal(EMPTY_DEAL); }}>Cancel</Button>
+            <Button onClick={handleAddDeal} disabled={!newDeal.jobId}>Add Deal</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

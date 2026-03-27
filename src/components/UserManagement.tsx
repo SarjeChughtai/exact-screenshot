@@ -106,7 +106,7 @@ export function UserManagement() {
 
       const userList: UserWithRoles[] = Object.entries(grouped).map(([userId, roles]) => ({
         userId,
-        email: allEmails[userId] || userId.substring(0, 8) + '...',
+        email: allEmails[userId] || '(email not found)',
         name: allNames[userId] || '',
         roles,
       }));
