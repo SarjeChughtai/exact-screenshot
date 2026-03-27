@@ -39,6 +39,7 @@ export default function CommissionProfit() {
     const ownerEach = trueGP * 0.05;
     const estimatorComm = trueGP * 0.05;
     const marketingFee = trueGP * 0.05;
+    // ownerEach × 3 = three equal owner draws (e.g. 3 owners at 5% each)
     const retainedEarnings = trueGP - totalRepCommission - marketingFee - ownerEach * 3 - estimatorComm;
 
     // Track what's been paid vs owed

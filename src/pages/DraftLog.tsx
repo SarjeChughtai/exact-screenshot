@@ -77,7 +77,7 @@ export default function DraftLog() {
                 <td className="px-3 py-2">{d.clientName || '—'}</td>
                 <td className="px-3 py-2 text-xs">{d.salesRep || '—'}</td>
                 <td className="px-3 py-2 text-xs">{d.province}</td>
-                <td className="px-3 py-2 text-xs">{d.buildings.map(b => `${b.width}×${b.length}×${b.height}`).join(', ')}</td>
+                <td className="px-3 py-2 text-xs">{d.buildings.map(b => `${b.width || '?'}×${b.length || '?'}×${b.height || '?'}`).join(', ')}</td>
                 <td className="px-3 py-2 font-mono font-semibold">{formatCurrency(d.grandTotal)}</td>
                 <td className="px-3 py-2">
                   <Button variant="ghost" size="sm" onClick={() => deleteDraft(d.id)}>

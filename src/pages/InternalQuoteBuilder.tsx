@@ -194,6 +194,7 @@ export default function InternalQuoteBuilder() {
 
     const widthMatch = fullText.match(/Width\s*\(ft\)\s*=\s*([\d.]+)/i);
     const lengthMatch = fullText.match(/Length\s*\(ft\)\s*=\s*([\d.]+)/i);
+    // Handles formats: "14" (symmetric) or "14 / 16" (single slope with different eave heights)
     const heightMatch = fullText.match(/Eave\s*Height\s*\(ft\)\s*=\s*([\d.]+)\s*(?:\/\s*([\d.]+))?/i);
     if (widthMatch) pWidth = parseFloat(widthMatch[1]);
     if (lengthMatch) pLength = parseFloat(lengthMatch[1]);
