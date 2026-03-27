@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { formatCurrency } from '@/lib/calculations';
 import { exportToCSV } from '@/lib/csvExport';
+import { supabase } from '@/integrations/supabase/client';
 
 const ENTITY_TYPES: EntityType[] = ['Deal', 'Quote', 'Payment', 'InternalCost', 'Production', 'Freight', 'RFQ', 'Other'];
 const ACTIONS: AuditAction[] = ['CREATE', 'UPDATE', 'DELETE'];
@@ -14,9 +15,26 @@ export default function AuditLog() {
   const [search, setSearch] = useState('');
   const [entityFilter, setEntityFilter] = useState<string>('ALL');
   const [actionFilter, setActionFilter] = useState<string>('ALL');
+  const [userLabels, setUserLabels] = useState<Record<string, string>>({});
 
   useEffect(() => {
     setLogs(getAuditLog());
+
+    // Fetch user name/email from access_requests to resolve UUIDs
+    supabase
+      .from('access_requests')
+      .select('user_id, email, name')
+      .then(({ data }) => {
+        if (data) {
+          const labels: Record<string, string> = {};
+          data.forEach((r: any) => {
+            labels[r.user_id] = r.name && r.name !== r.email
+              ? `${r.name} (${r.email})`
+              : r.email;
+          });
+          setUserLabels(labels);
+        }
+      });
   }, []);
 
   const filteredLogs = useMemo(() => {
@@ -26,9 +44,10 @@ export default function AuditLog() {
 
       if (search) {
         const q = search.toLowerCase();
+        const userLabel = (userLabels[log.userId] || log.userId).toLowerCase();
         if (
           !log.entityId.toLowerCase().includes(q) &&
-          !log.userId.toLowerCase().includes(q) &&
+          !userLabel.includes(q) &&
           !log.changes.toLowerCase().includes(q)
         ) {
           return false;
@@ -37,13 +56,13 @@ export default function AuditLog() {
 
       return true;
     });
-  }, [logs, search, entityFilter, actionFilter]);
+  }, [logs, search, entityFilter, actionFilter, userLabels]);
 
   const handleExport = () => {
-    const headers = ['Timestamp', 'User ID', 'Action', 'Entity Type', 'Entity ID', 'Changes', 'Previous Values'];
+    const headers = ['Timestamp', 'User', 'Action', 'Entity Type', 'Entity ID', 'Changes', 'Previous Values'];
     const rows = filteredLogs.map(l => [
       new Date(l.timestamp).toLocaleString(),
-      l.userId,
+      userLabels[l.userId] || l.userId,
       l.action,
       l.entityType,
       l.entityId,
@@ -103,7 +122,7 @@ export default function AuditLog() {
             ) : filteredLogs.map(log => (
               <tr key={log.id} className="border-b hover:bg-muted/50">
                 <td className="px-3 py-2 text-xs truncate whitespace-nowrap">{new Date(log.timestamp).toLocaleString()}</td>
-                <td className="px-3 py-2 text-xs font-mono">{log.userId}</td>
+                <td className="px-3 py-2 text-xs">{userLabels[log.userId] || log.userId}</td>
                 <td className="px-3 py-2">
                   <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                     log.action === 'CREATE' ? 'bg-green-100 text-green-800' :

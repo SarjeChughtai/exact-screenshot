@@ -277,7 +277,7 @@ export function UserManagement() {
                       <p className="text-sm font-medium">{u.email}</p>
                     )}
                   </div>
-                  <p className="text-[10px] text-muted-foreground font-mono">{u.userId.substring(0, 8)}...</p>
+
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {u.roles.map(r => (
