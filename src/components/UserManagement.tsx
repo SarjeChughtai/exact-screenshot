@@ -75,22 +75,34 @@ export function UserManagement() {
         grouped[r.user_id].push(r);
       });
 
-      // Build user list — we get emails and names from access_requests
+      const userIds = Object.keys(grouped);
+
+      // Fetch display info directly from auth.users via SECURITY DEFINER function
       const allEmails: Record<string, string> = {};
       const allNames: Record<string, string> = {};
-      reqData?.forEach((r: any) => {
-        allEmails[r.user_id] = r.email;
-        if (r.name) allNames[r.user_id] = r.name;
+
+      const { data: displayInfo } = await supabase.rpc('get_user_display_info', {
+        user_ids: userIds,
       });
 
-      // Also fetch past requests for emails and names
-      const { data: allReqs } = await supabase
-        .from('access_requests')
-        .select('user_id, email, name');
-      allReqs?.forEach((r: any) => {
-        allEmails[r.user_id] = r.email;
-        if (r.name) allNames[r.user_id] = r.name;
-      });
+      if (displayInfo) {
+        (displayInfo as { id: string; email: string; display_name: string }[]).forEach(u => {
+          if (u.email) allEmails[u.id] = u.email;
+          if (u.display_name) allNames[u.id] = u.display_name;
+        });
+      }
+
+      // Fallback: also check access_requests for any users not resolved above
+      const unresolvedIds = userIds.filter(id => !allEmails[id]);
+      if (unresolvedIds.length > 0) {
+        const { data: allReqs } = await supabase
+          .from('access_requests')
+          .select('user_id, email, name');
+        allReqs?.forEach((r: any) => {
+          if (!allEmails[r.user_id]) allEmails[r.user_id] = r.email;
+          if (!allNames[r.user_id] && r.name) allNames[r.user_id] = r.name;
+        });
+      }
 
       const userList: UserWithRoles[] = Object.entries(grouped).map(([userId, roles]) => ({
         userId,
