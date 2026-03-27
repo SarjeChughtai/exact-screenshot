@@ -274,13 +274,13 @@ export default function MasterDeals() {
               ].map(([key, label]) => (
                 <div key={key}>
                   <label className="text-xs font-medium text-muted-foreground">{label}</label>
-                  <Input className="mt-1" value={(editingDeal as any)[key] || ''} onChange={e => setEditingDeal(prev => prev ? { ...prev, [key]: e.target.value } : null)} />
+                  <Input className="mt-1" value={(editingDeal[key as keyof Deal] as string) || ''} onChange={e => setEditingDeal(prev => prev ? { ...prev, [key]: e.target.value } : null)} />
                 </div>
               ))}
               {[['width', 'Width (ft)'], ['length', 'Length (ft)'], ['height', 'Height (ft)']].map(([key, label]) => (
                 <div key={key}>
                   <label className="text-xs font-medium text-muted-foreground">{label}</label>
-                  <Input className="mt-1" type="number" value={(editingDeal as any)[key] || ''} onChange={e => setEditingDeal(prev => prev ? { ...prev, [key]: parseFloat(e.target.value) || 0 } : null)} />
+                  <Input className="mt-1" type="number" value={(editingDeal[key as keyof Deal] as number) || ''} onChange={e => setEditingDeal(prev => prev ? { ...prev, [key]: parseFloat(e.target.value) || 0 } : null)} />
                 </div>
               ))}
               <div>
@@ -313,13 +313,13 @@ export default function MasterDeals() {
             ].map(([key, label]) => (
               <div key={key}>
                 <label className="text-xs font-medium text-muted-foreground">{label}</label>
-                <Input className="mt-1" value={(newDeal as any)[key] || ''} onChange={e => setNewDeal(prev => ({ ...prev, [key]: e.target.value }))} />
+                <Input className="mt-1" value={(newDeal[key as keyof Deal] as string) || ''} onChange={e => setNewDeal(prev => ({ ...prev, [key]: e.target.value }))} />
               </div>
             ))}
             {[['width', 'Width (ft)'], ['length', 'Length (ft)'], ['height', 'Height (ft)']].map(([key, label]) => (
               <div key={key}>
                 <label className="text-xs font-medium text-muted-foreground">{label}</label>
-                <Input className="mt-1" type="number" value={(newDeal as any)[key] || ''} onChange={e => setNewDeal(prev => ({ ...prev, [key]: parseFloat(e.target.value) || 0 }))} />
+                <Input className="mt-1" type="number" value={(newDeal[key as keyof Deal] as number) || ''} onChange={e => setNewDeal(prev => ({ ...prev, [key]: parseFloat(e.target.value) || 0 }))} />
               </div>
             ))}
             <div>

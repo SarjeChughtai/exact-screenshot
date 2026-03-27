@@ -98,6 +98,15 @@ export default function InternalQuoteBuilder() {
   const [leftEaveHeight, setLeftEaveHeight] = useState('14');
   const [rightEaveHeight, setRightEaveHeight] = useState('14');
 
+  const handleEaveHeightChange = (side: 'left' | 'right', value: string) => {
+    const left = side === 'left' ? value : leftEaveHeight;
+    const right = side === 'right' ? value : rightEaveHeight;
+    if (side === 'left') setLeftEaveHeight(value);
+    else setRightEaveHeight(value);
+    const maxH = Math.max(parseFloat(left) || 0, parseFloat(right) || 0);
+    set('height', maxH > 0 ? String(maxH) : '14');
+  };
+
   const costData = buildings[activeBuildingIdx]?.costData || { steelWeightLbs: 0, supplierCostPerLb: 0, totalSupplierCost: 0, accessories: [] };
   const parsedFiles = buildings[activeBuildingIdx]?.files || [];
 
@@ -809,11 +818,11 @@ export default function InternalQuoteBuilder() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label className="text-xs">Left Eave Height (ft)</Label>
-                  <Input className="input-blue mt-1" value={leftEaveHeight} onChange={e => { setLeftEaveHeight(e.target.value); set('height', String(Math.max(parseFloat(e.target.value) || 0, parseFloat(rightEaveHeight) || 0))); }} />
+                  <Input className="input-blue mt-1" value={leftEaveHeight} onChange={e => handleEaveHeightChange('left', e.target.value)} />
                 </div>
                 <div>
                   <Label className="text-xs">Right Eave Height (ft)</Label>
-                  <Input className="input-blue mt-1" value={rightEaveHeight} onChange={e => { setRightEaveHeight(e.target.value); set('height', String(Math.max(parseFloat(leftEaveHeight) || 0, parseFloat(e.target.value) || 0))); }} />
+                  <Input className="input-blue mt-1" value={rightEaveHeight} onChange={e => handleEaveHeightChange('right', e.target.value)} />
                 </div>
               </div>
             )}
