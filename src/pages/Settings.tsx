@@ -13,6 +13,7 @@ import { toast } from 'sonner';
 import { Download, Upload, Plus, Trash2 } from 'lucide-react';
 import { UserManagement } from '@/components/UserManagement';
 import CRMSettings from '@/components/CRMSettings';
+import QBOSettings from '@/components/QBOSettings';
 
 export default function Settings() {
   const { settings, updateSettings } = useSettings();
@@ -93,6 +94,7 @@ export default function Settings() {
           <TabsTrigger value="personnel">Personnel</TabsTrigger>
            {isAdmin && <TabsTrigger value="users">Users & Access</TabsTrigger>}
            {isAdmin && <TabsTrigger value="crm">CRM</TabsTrigger>}
+           {isAdmin && <TabsTrigger value="quickbooks">QuickBooks</TabsTrigger>}
            <TabsTrigger value="data">Data</TabsTrigger>
         </TabsList>
 
@@ -266,6 +268,12 @@ export default function Settings() {
         {isAdmin && (
           <TabsContent value="crm" className="space-y-4">
             <CRMSettings />
+          </TabsContent>
+        )}
+
+        {isAdmin && (
+          <TabsContent value="quickbooks" className="space-y-4">
+            <QBOSettings />
           </TabsContent>
         )}
 
