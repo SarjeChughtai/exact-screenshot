@@ -23,6 +23,7 @@ import { toast } from 'sonner';
 import type { Quote } from '@/types';
 import { PersonnelSelect } from '@/components/PersonnelSelect';
 import { ClientSelect } from '@/components/ClientSelect';
+import { SimilarJobs } from '@/components/SimilarJobs';
 
 interface SavedEstimate {
   id: string;
@@ -609,6 +610,15 @@ export default function QuickEstimator() {
           </div>
         )}
       </div>
+
+      {/* Similar Jobs Comparison - always visible once dimensions are entered */}
+      {(parseFloat(width) > 0 && parseFloat(length) > 0) && (
+        <SimilarJobs
+          width={parseFloat(width) || 0}
+          length={parseFloat(length) || 0}
+          height={parseFloat(height) || 14}
+        />
+      )}
     </div>
   );
 }
