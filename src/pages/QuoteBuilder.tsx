@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { JobIdSelect } from '@/components/JobIdSelect';
 import { useAppContext } from '@/context/AppContext';
 import {
   calcTax, calcMarkup, calcEngineeringFromFactor, lookupFoundation, calcFreight,
@@ -15,7 +16,7 @@ import { MapPin } from 'lucide-react';
 import { PersonnelSelect } from '@/components/PersonnelSelect';
 
 export default function QuoteBuilder() {
-  const { addQuote } = useAppContext();
+  const { addQuote, deals } = useAppContext();
 
   const [form, setForm] = useState({
     jobId: '', jobName: '', clientName: '', clientId: '',
@@ -141,7 +142,7 @@ export default function QuoteBuilder() {
         <div className="space-y-5 bg-card border rounded-lg p-5">
           <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Project Info</h3>
           <div className="grid grid-cols-2 gap-3">
-            <div><Label className="text-xs">Job ID</Label><Input className="input-blue mt-1" value={form.jobId} onChange={e => set('jobId', e.target.value)} placeholder="Auto-generated" /></div>
+            <div><Label className="text-xs">Job ID</Label><JobIdSelect value={form.jobId} onValueChange={v => set('jobId', v)} deals={deals} placeholder="Auto-generated" /></div>
             <div><Label className="text-xs">Job Name</Label><Input className="input-blue mt-1" value={form.jobName} onChange={e => set('jobName', e.target.value)} /></div>
             <div><Label className="text-xs">Client Name</Label><Input className="input-blue mt-1" value={form.clientName} onChange={e => set('clientName', e.target.value)} /></div>
             <div><Label className="text-xs">Client ID</Label><Input className="input-blue mt-1" value={form.clientId} onChange={e => set('clientId', e.target.value)} /></div>

@@ -16,6 +16,7 @@ import { Upload, FileText, CheckCircle2, AlertTriangle, Download, Mail, ChevronD
 import { supabase } from '@/integrations/supabase/client';
 import { PersonnelSelect } from '@/components/PersonnelSelect';
 import { ClientSelect } from '@/components/ClientSelect';
+import { JobIdSelect } from '@/components/JobIdSelect';
 
 interface CostFileData {
   steelWeightLbs: number;
@@ -709,7 +710,7 @@ export default function InternalQuoteBuilder() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label className="text-xs">Job ID</Label>
-                <Input className="input-blue mt-1" value={form.jobId} onChange={e => handleJobIdChange(e.target.value)} placeholder="Auto / type to search" />
+                <JobIdSelect value={form.jobId} onValueChange={handleJobIdChange} deals={deals} placeholder="Auto / type to search" />
               </div>
               <div>
                 <Label className="text-xs">Job Name</Label>

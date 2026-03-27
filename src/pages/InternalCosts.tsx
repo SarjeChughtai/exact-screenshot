@@ -4,6 +4,7 @@ import { formatCurrency } from '@/lib/calculations';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { JobIdSelect } from '@/components/JobIdSelect';
 import type { InternalCost } from '@/types';
 import { toast } from 'sonner';
 
@@ -52,12 +53,7 @@ export default function InternalCosts() {
           <h2 className="text-2xl font-bold text-foreground">Internal Costs</h2>
           <p className="text-sm text-muted-foreground mt-1">True vs. Rep-visible costs per deal — all fields editable inline</p>
         </div>
-        {dealsWithoutCosts.length > 0 && (
-          <Select onValueChange={initCost}>
-            <SelectTrigger className="w-56"><SelectValue placeholder="+ Initialize costs for..." /></SelectTrigger>
-            <SelectContent>{dealsWithoutCosts.map(d => <SelectItem key={d.jobId} value={d.jobId}>{d.jobId} — {d.clientName}</SelectItem>)}</SelectContent>
-          </Select>
-        )}
+        <JobIdSelect onValueChange={initCost} deals={dealsWithoutCosts} placeholder="+ Initialize costs for..." triggerClassName="w-56" />
       </div>
 
       <div className="bg-card border rounded-lg overflow-x-auto">

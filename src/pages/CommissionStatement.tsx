@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useAppContext } from '@/context/AppContext';
 import { formatCurrency } from '@/lib/calculations';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { JobIdSelect } from '@/components/JobIdSelect';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
@@ -80,10 +81,7 @@ export default function CommissionStatement() {
         <div className="grid grid-cols-2 gap-4">
           <div>
             <Label className="text-xs">Select Deal</Label>
-            <Select value={selectedJob} onValueChange={setSelectedJob}>
-              <SelectTrigger className="mt-1"><SelectValue placeholder="Choose deal..." /></SelectTrigger>
-              <SelectContent>{deals.map(d => <SelectItem key={d.jobId} value={d.jobId}>{d.jobId} — {d.clientName}</SelectItem>)}</SelectContent>
-            </Select>
+            <JobIdSelect value={selectedJob} onValueChange={setSelectedJob} deals={deals} placeholder="Choose deal..." triggerClassName="mt-1" />
           </div>
           <div>
             <Label className="text-xs">Pay Through Stage</Label>

@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { JobIdSelect } from '@/components/JobIdSelect';
 import { Switch } from '@/components/ui/switch';
 import { useAppContext } from '@/context/AppContext';
 import { useSettings } from '@/context/SettingsContext';
@@ -251,7 +252,7 @@ export default function QuoteRFQ() {
               </div>
               <div>
                 <Label className="text-xs">Job ID <span className="text-muted-foreground">(auto-gen if empty)</span></Label>
-                <Input className="input-blue mt-1" value={form.jobId} onChange={e => set('jobId', e.target.value)} placeholder="Auto-generated" />
+                <JobIdSelect value={form.jobId} onValueChange={v => set('jobId', v)} deals={deals} placeholder="Auto-generated" />
               </div>
               <div>
                 <Label className="text-xs">Job Name</Label>

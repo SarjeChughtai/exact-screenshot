@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { JobIdSelect } from '@/components/JobIdSelect';
 import { Checkbox } from '@/components/ui/checkbox';
 import { formatCurrency, getProvinceTax } from '@/lib/calculations';
 import { supabase } from '@/integrations/supabase/client';
@@ -146,10 +147,7 @@ export default function PaymentLedger() {
             <div><Label className="text-xs">Date</Label><Input className="input-blue mt-1" type="date" value={form.date} onChange={e => set('date', e.target.value)} /></div>
             <div>
               <Label className="text-xs">Job ID</Label>
-              <Select value={form.jobId} onValueChange={v => set('jobId', v)}>
-                <SelectTrigger className="input-blue mt-1"><SelectValue placeholder="Select..." /></SelectTrigger>
-                <SelectContent>{deals.map(d => <SelectItem key={d.jobId} value={d.jobId}>{d.jobId}</SelectItem>)}</SelectContent>
-              </Select>
+              <JobIdSelect value={form.jobId} onValueChange={v => set('jobId', v)} deals={deals} />
             </div>
             <div><Label className="text-xs">Client/Vendor Name</Label><Input className="input-blue mt-1" value={form.clientVendorName} onChange={e => set('clientVendorName', e.target.value)} /></div>
             <div>

@@ -7,6 +7,7 @@ import { PageActions } from '@/components/PageActions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { JobIdSelect } from '@/components/JobIdSelect';
 import { Textarea } from '@/components/ui/textarea';
 import type { RFQ, RFQStatus } from '@/types';
 import { toast } from 'sonner';
@@ -178,14 +179,7 @@ export default function RFQWorkflow() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
               <label className="text-xs font-medium mb-1 block">Job ID</label>
-              <Select value={form.jobId} onValueChange={handleJobSelect}>
-                <SelectTrigger className="input-blue h-9"><SelectValue placeholder="Select Deal" /></SelectTrigger>
-                <SelectContent>
-                  {activeDeals.map(d => (
-                    <SelectItem key={d.jobId} value={d.jobId}>{d.jobId} — {d.clientName}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <JobIdSelect value={form.jobId} onValueChange={handleJobSelect} deals={activeDeals} placeholder="Select Deal" triggerClassName="input-blue h-9" />
             </div>
             <div>
               <label className="text-xs font-medium mb-1 block">Building Size</label>
