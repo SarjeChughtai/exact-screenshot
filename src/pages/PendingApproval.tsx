@@ -28,7 +28,16 @@ interface AccessRequest {
 export default function PendingApproval() {
   const { session, user, userRoles, rolesLoading, signOut } = useAuth();
   const [accessRequest, setAccessRequest] = useState<AccessRequest | null | undefined>(undefined);
-  const [requestedRole, setRequestedRole] = useState('sales_rep');
+  const [requestedRole, setRequestedRole] = useState(() => {
+    // Restore the role the user selected before the Google OAuth redirect, if any.
+    const saved = localStorage.getItem('oauth_requested_role');
+    localStorage.removeItem('oauth_requested_role');
+    const allowedValues = REQUESTABLE_ROLES.map(r => r.value);
+    if (saved && allowedValues.includes(saved)) {
+      return saved;
+    }
+    return 'sales_rep';
+  });
   const [submitting, setSubmitting] = useState(false);
   const [checking, setChecking] = useState(true);
 
