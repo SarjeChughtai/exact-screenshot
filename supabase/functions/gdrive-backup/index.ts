@@ -82,7 +82,7 @@ serve(async (req) => {
 
     // Build a descriptive filename for Google Drive
     const typeLabel = fileType === "mbs" ? "Steel-Cost" : fileType === "insulation" ? "Insulation" : "Quote-File";
-    const driveFileName = `${jobId || "no-job"}_${clientName || "unknown"}_${typeLabel}_${fileName}`;
+    const driveFileName = `${jobId || "unassigned"}_${clientName || "unassigned-client"}_${typeLabel}_${fileName}`;
 
     // Upload to Google Drive using multipart upload
     const gdriveFileId = await uploadToGoogleDrive(accessToken, folderId, driveFileName, fileData);

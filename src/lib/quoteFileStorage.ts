@@ -38,7 +38,7 @@ export async function uploadQuoteFile({
     // Build a unique storage path: {userId}/{jobId}/{fileType}/{timestamp}-{filename}
     const timestamp = Date.now();
     const sanitizedName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-    const storagePath = `${user.id}/${jobId || 'no-job'}/${fileType}/${timestamp}-${sanitizedName}`;
+    const storagePath = `${user.id}/${jobId || 'unassigned'}/${fileType}/${timestamp}-${sanitizedName}`;
 
     // Upload to Supabase Storage
     const { error: uploadError } = await supabase.storage
