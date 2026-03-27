@@ -14,7 +14,7 @@ import type { Quote } from '@/types';
 import { toast } from 'sonner';
 import { Upload, FileText, CheckCircle2, AlertTriangle, Download, Mail, ChevronDown, X, Sparkles, Loader2, MapPin, Lightbulb, Trash2, Plus } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { uploadQuoteFile } from '@/lib/quoteFileStorage';
+import { uploadQuoteFile, saveSteelCostEntry } from '@/lib/quoteFileStorage';
 import { PersonnelSelect } from '@/components/PersonnelSelect';
 import { ClientSelect } from '@/components/ClientSelect';
 import { JobIdSelect } from '@/components/JobIdSelect';
@@ -324,16 +324,23 @@ export default function InternalQuoteBuilder() {
 
         const aiResult = await extractWithAI(fullText, file.name);
 
+        // Track extraction source and resolved document type for upload
+        let extractionSource: 'ai' | 'regex' | 'unknown' = 'unknown';
+        let resolvedDocType: 'mbs' | 'insulation' | 'unknown' = 'unknown';
+
         if (aiResult) {
+          extractionSource = 'ai';
           const docType = aiResult.document_type || 'unknown';
 
           if (docType === 'insulation') {
+            resolvedDocType = 'insulation';
             const total = aiResult.insulation_total || 0;
             set('insulationCost', String(total));
             if (aiResult.insulation_grade) set('insulationGrade', aiResult.insulation_grade);
             newParsedFiles.push({ name: file.name, type: 'insulation', status: 'success', data: aiResult, buildingIndex: activeBuildingIdx });
             toast.success(`🤖 AI extracted insulation: ${formatCurrency(total)}`);
           } else if (docType === 'mbs') {
+            resolvedDocType = 'mbs';
             applyAIData(aiResult);
             const weight = aiResult.weight || 0;
             const costPerLb = aiResult.cost_per_lb || (aiResult.total_cost && weight ? aiResult.total_cost / weight : 0);
@@ -347,6 +354,7 @@ export default function InternalQuoteBuilder() {
           } else {
             applyAIData(aiResult);
             if (aiResult.weight && aiResult.total_cost) {
+              resolvedDocType = 'mbs';
               setCostData({
                 steelWeightLbs: aiResult.weight,
                 supplierCostPerLb: aiResult.cost_per_lb || aiResult.total_cost / aiResult.weight,
@@ -356,6 +364,7 @@ export default function InternalQuoteBuilder() {
               newParsedFiles.push({ name: file.name, type: 'mbs', status: 'success', data: aiResult, buildingIndex: activeBuildingIdx });
               toast.success(`🤖 AI extracted data from ${file.name}`);
             } else if (aiResult.insulation_total) {
+              resolvedDocType = 'insulation';
               set('insulationCost', String(aiResult.insulation_total));
               newParsedFiles.push({ name: file.name, type: 'insulation', status: 'success', data: aiResult, buildingIndex: activeBuildingIdx });
               toast.success(`🤖 AI extracted insulation: ${formatCurrency(aiResult.insulation_total)}`);
@@ -371,6 +380,8 @@ export default function InternalQuoteBuilder() {
         } else {
           const pages = fullText.split('\n');
           if (detectInsulationPdf(fullText)) {
+            extractionSource = 'regex';
+            resolvedDocType = 'insulation';
             const insulationTotal = parseInsulationPdf(fullText);
             set('insulationCost', String(insulationTotal));
             newParsedFiles.push({ name: file.name, type: 'insulation', status: 'success', data: { total: insulationTotal }, buildingIndex: activeBuildingIdx });
@@ -378,6 +389,8 @@ export default function InternalQuoteBuilder() {
           } else {
             const parsed = parseMbsPdf(pages);
             if (parsed.weight > 0) {
+              extractionSource = 'regex';
+              resolvedDocType = 'mbs';
               if (parsed.pWidth) set('width', String(parsed.pWidth));
               if (parsed.pLength) set('length', String(parsed.pLength));
               if (parsed.pHeight) set('height', String(parsed.pHeight));
@@ -401,24 +414,59 @@ export default function InternalQuoteBuilder() {
           }
         }
 
-        // Upload original file to Supabase Storage for future reference + Google Drive backup
+        // Always upload dropped file to Supabase Storage (regardless of parse success)
         const lastParsed = newParsedFiles[newParsedFiles.length - 1];
-        if (lastParsed && lastParsed.status === 'success') {
-          uploadQuoteFile({
-            file,
-            fileType: lastParsed.type,
-            jobId: form.jobId || '',
-            clientName: form.clientName || '',
-            clientId: form.clientId || '',
-            buildingLabel: buildings[activeBuildingIdx]?.label || 'Building 1',
-          }).then(result => {
-            if (result) {
-              toast.success(`📁 ${file.name} stored & backup queued`);
+        uploadQuoteFile({
+          file,
+          fileType: lastParsed?.type || 'unknown',
+          jobId: form.jobId || '',
+          clientName: form.clientName || '',
+          clientId: form.clientId || '',
+          buildingLabel: buildings[activeBuildingIdx]?.label || 'Building 1',
+          aiOutput: aiResult || null,
+          extractionSource,
+        }).then(result => {
+          if (result) {
+            toast.success(`📁 ${file.name} stored & backup queued`);
+
+            // Save extracted data to the steel cost database
+            if (lastParsed?.status === 'success') {
+              const extractedData = lastParsed.data || {};
+              saveSteelCostEntry({
+                quoteFileId: result.id || undefined,
+                jobId: form.jobId || '',
+                clientName: form.clientName || '',
+                clientId: form.clientId || '',
+                buildingLabel: buildings[activeBuildingIdx]?.label || 'Building 1',
+                documentType: resolvedDocType,
+                fileName: file.name,
+                weightLbs: extractedData.weight || extractedData.steelWeightLbs || 0,
+                costPerLb: extractedData.cost_per_lb || extractedData.costPerLb || extractedData.supplierCostPerLb || 0,
+                totalCost: extractedData.total_cost || extractedData.totalCost || extractedData.totalSupplierCost || 0,
+                width: extractedData.width || (form.width ? parseFloat(form.width) : undefined),
+                length: extractedData.length || (form.length ? parseFloat(form.length) : undefined),
+                height: extractedData.height || (form.height ? parseFloat(form.height) : undefined),
+                roofPitch: extractedData.roof_pitch || extractedData.pPitch || undefined,
+                province: extractedData.province || form.province || undefined,
+                city: extractedData.city || form.city || undefined,
+                components: extractedData.components || extractedData.accessories || [],
+                insulationTotal: extractedData.insulation_total || extractedData.total || 0,
+                insulationGrade: extractedData.insulation_grade || undefined,
+                extractionSource: extractionSource === 'unknown' ? 'ai' : extractionSource,
+                aiRawOutput: aiResult || null,
+              }).then(entryId => {
+                if (entryId) {
+                  console.log('Steel cost entry saved:', entryId);
+                }
+              }).catch(err => {
+                console.error('Steel cost entry save failed:', err);
+              });
             }
-          }).catch(() => {
-            // Non-blocking: storage failure doesn't affect quote flow
-          });
-        }
+          }
+        }).catch(err => {
+          console.error('Quote file upload failed:', err);
+          toast.error(`Failed to save ${file.name} — check connection and try again`);
+        });
 
         // Auto freight from postal code
         if (form.postalCode) {
