@@ -14,6 +14,117 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_provider_settings: {
+        Row: {
+          id: string
+          user_id: string
+          provider: string
+          api_key: string
+          base_url: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          provider?: string
+          api_key?: string
+          base_url?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          provider?: string
+          api_key?: string
+          base_url?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      cost_data: {
+        Row: {
+          id: string
+          project_id: string | null
+          description: string
+          category: string
+          quantity: number
+          unit_price: number
+          total: number
+          vendor: string
+          date: string | null
+          source_document: string
+          imported_at: string
+          imported_by: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          project_id?: string | null
+          description?: string
+          category?: string
+          quantity?: number
+          unit_price?: number
+          total?: number
+          vendor?: string
+          date?: string | null
+          source_document?: string
+          imported_at?: string
+          imported_by?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          project_id?: string | null
+          description?: string
+          category?: string
+          quantity?: number
+          unit_price?: number
+          total?: number
+          vendor?: string
+          date?: string | null
+          source_document?: string
+          imported_at?: string
+          imported_by?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
+      import_history: {
+        Row: {
+          id: string
+          user_id: string
+          filename: string
+          provider_used: string
+          items_imported: number
+          total_amount: number
+          status: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          filename?: string
+          provider_used?: string
+          items_imported?: number
+          total_amount?: number
+          status?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          filename?: string
+          provider_used?: string
+          items_imported?: number
+          total_amount?: number
+          status?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
       access_requests: {
         Row: {
           created_at: string

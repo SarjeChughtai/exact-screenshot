@@ -14,6 +14,7 @@ import { Download, Upload, Plus, Trash2 } from 'lucide-react';
 import { UserManagement } from '@/components/UserManagement';
 import CRMSettings from '@/components/CRMSettings';
 import QBOSettings from '@/components/QBOSettings';
+import DataImportSettings from '@/components/DataImportSettings';
 
 export default function Settings() {
   const { settings, updateSettings } = useSettings();
@@ -278,14 +279,15 @@ export default function Settings() {
         )}
 
         <TabsContent value="data" className="space-y-4">
+          <DataImportSettings />
           <div className="bg-card border rounded-lg p-5 space-y-4">
-            <h3 className="text-sm font-semibold text-card-foreground">Data Management</h3>
+            <h3 className="text-sm font-semibold text-card-foreground">Backup & Restore</h3>
             <div className="flex gap-3">
               <Button variant="outline" onClick={exportAllData}>
                 <Download className="h-4 w-4 mr-2" />Export All Data
               </Button>
               <Button variant="outline" onClick={importData}>
-                <Upload className="h-4 w-4 mr-2" />Import Data
+                <Upload className="h-4 w-4 mr-2" />Import Backup
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">Export downloads all deals, quotes, payments, costs, and settings as JSON. Import restores from a backup file.</p>
