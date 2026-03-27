@@ -7,6 +7,7 @@ interface AuthContextType {
   user: User | null;
   userRoles: string[];
   loading: boolean;
+  rolesLoading: boolean;
   signUp: (email: string, password: string) => Promise<{ error: any }>;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signInWithGoogle: () => Promise<{ error: any }>;
@@ -22,15 +23,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [userRoles, setUserRoles] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [rolesLoading, setRolesLoading] = useState(true);
 
   const fetchRoles = async (userId: string) => {
+    setRolesLoading(true);
     const { data, error } = await supabase
       .from('user_roles')
       .select('role')
       .eq('user_id', userId);
     if (!error && data) {
       setUserRoles(data.map((r: any) => r.role));
+    } else {
+      setUserRoles([]);
     }
+    setRolesLoading(false);
   };
 
   useEffect(() => {
@@ -43,6 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setTimeout(() => fetchRoles(session.user.id), 0);
         } else {
           setUserRoles([]);
+          setRolesLoading(false);
         }
         setLoading(false);
       }
@@ -54,10 +61,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(session?.user ?? null);
       if (session?.user) {
         fetchRoles(session.user.id);
+      } else {
+        setRolesLoading(false);
       }
       setLoading(false);
     }).catch(() => {
       setLoading(false);
+      setRolesLoading(false);
     });
 
     return () => {
@@ -90,6 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = async () => {
     await supabase.auth.signOut();
     setUserRoles([]);
+    setRolesLoading(false);
   };
 
   const hasRole = (role: string) => userRoles.includes(role);
@@ -97,7 +108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider value={{
-      session, user, userRoles, loading,
+      session, user, userRoles, loading, rolesLoading,
       signUp, signIn, signInWithGoogle, signOut, hasRole, hasAnyRole,
     }}>
       {children}

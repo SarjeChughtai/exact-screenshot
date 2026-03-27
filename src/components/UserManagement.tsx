@@ -14,14 +14,16 @@ const ROLE_LABELS: Record<string, string> = {
   operations: 'Operations',
   sales_rep: 'Sales Rep',
   freight: 'Freight',
+  dealer: 'Dealer',
 };
 
-const ASSIGNABLE_ROLES = ['accounting', 'operations', 'sales_rep', 'freight'];
+const ASSIGNABLE_ROLES = ['accounting', 'operations', 'sales_rep', 'freight', 'dealer'];
 
 interface AccessRequest {
   id: string;
   user_id: string;
   email: string;
+  name: string;
   requested_role: string;
   status: string;
   created_at: string;
@@ -36,6 +38,7 @@ interface UserRole {
 interface UserWithRoles {
   userId: string;
   email: string;
+  name: string;
   roles: UserRole[];
 }
 
@@ -72,19 +75,27 @@ export function UserManagement() {
         grouped[r.user_id].push(r);
       });
 
-      // Build user list — we get emails from access_requests + current user
+      // Build user list — we get emails and names from access_requests
       const allEmails: Record<string, string> = {};
-      reqData?.forEach((r: any) => { allEmails[r.user_id] = r.email; });
+      const allNames: Record<string, string> = {};
+      reqData?.forEach((r: any) => {
+        allEmails[r.user_id] = r.email;
+        if (r.name) allNames[r.user_id] = r.name;
+      });
 
-      // Also fetch past requests for emails
+      // Also fetch past requests for emails and names
       const { data: allReqs } = await supabase
         .from('access_requests')
-        .select('user_id, email');
-      allReqs?.forEach((r: any) => { allEmails[r.user_id] = r.email; });
+        .select('user_id, email, name');
+      allReqs?.forEach((r: any) => {
+        allEmails[r.user_id] = r.email;
+        if (r.name) allNames[r.user_id] = r.name;
+      });
 
       const userList: UserWithRoles[] = Object.entries(grouped).map(([userId, roles]) => ({
         userId,
         email: allEmails[userId] || userId.substring(0, 8) + '...',
+        name: allNames[userId] || '',
         roles,
       }));
       setUsers(userList);
@@ -113,7 +124,16 @@ export function UserManagement() {
       .update({ status: 'approved', reviewed_by: user?.id, reviewed_at: new Date().toISOString() } as any)
       .eq('id', req.id);
 
-    toast.success(`Approved ${req.email} as ${ROLE_LABELS[req.requested_role] || req.requested_role}`);
+    // Notify the requesting user
+    await supabase.from('notifications').insert({
+      user_id: req.user_id,
+      title: 'Access Approved',
+      message: `Your request for ${ROLE_LABELS[req.requested_role] || req.requested_role} access has been approved. You can now sign in.`,
+      type: 'success',
+      link: '/',
+    });
+
+    toast.success(`Approved ${req.name || req.email} as ${ROLE_LABELS[req.requested_role] || req.requested_role}`);
     fetchData();
   };
 
@@ -123,7 +143,16 @@ export function UserManagement() {
       .update({ status: 'denied', reviewed_by: user?.id, reviewed_at: new Date().toISOString() } as any)
       .eq('id', req.id);
 
-    toast.success(`Denied request from ${req.email}`);
+    // Notify the requesting user
+    await supabase.from('notifications').insert({
+      user_id: req.user_id,
+      title: 'Access Request Denied',
+      message: `Your request for ${ROLE_LABELS[req.requested_role] || req.requested_role} access was not approved. You may re-submit with a different role.`,
+      type: 'error',
+      link: '/pending',
+    });
+
+    toast.success(`Denied request from ${req.name || req.email}`);
     fetchData();
   };
 
@@ -199,7 +228,14 @@ export function UserManagement() {
             {requests.map(req => (
               <div key={req.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-md">
                 <div>
-                  <p className="text-sm font-medium">{req.email}</p>
+                  {req.name && req.name !== req.email ? (
+                    <>
+                      <p className="text-sm font-medium">{req.name}</p>
+                      <p className="text-xs text-muted-foreground">{req.email}</p>
+                    </>
+                  ) : (
+                    <p className="text-sm font-medium">{req.email}</p>
+                  )}
                   <p className="text-xs text-muted-foreground">
                     Requesting: <Badge variant="outline" className="ml-1">{ROLE_LABELS[req.requested_role] || req.requested_role}</Badge>
                   </p>
@@ -231,7 +267,16 @@ export function UserManagement() {
             {users.map(u => (
               <div key={u.userId} className="p-3 bg-muted/50 rounded-md space-y-2">
                 <div className="flex items-center justify-between">
-                  <p className="text-sm font-medium">{u.email}</p>
+                  <div>
+                    {u.name && u.name !== u.email ? (
+                      <>
+                        <p className="text-sm font-medium">{u.name}</p>
+                        <p className="text-xs text-muted-foreground">{u.email}</p>
+                      </>
+                    ) : (
+                      <p className="text-sm font-medium">{u.email}</p>
+                    )}
+                  </div>
                   <p className="text-[10px] text-muted-foreground font-mono">{u.userId.substring(0, 8)}...</p>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
