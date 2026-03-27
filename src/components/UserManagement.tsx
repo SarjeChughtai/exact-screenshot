@@ -180,7 +180,7 @@ export function UserManagement() {
 
   const availableRoles = isOwner
     ? ['admin', 'owner', ...ASSIGNABLE_ROLES]
-    : ASSIGNABLE_ROLES;
+    : ASSIGNABLE_ROLES; // admins can only assign non-admin, non-owner roles
 
   return (
     <div className="space-y-6">
