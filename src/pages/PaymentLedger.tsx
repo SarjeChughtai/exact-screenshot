@@ -1,15 +1,17 @@
 import { useState } from 'react';
 import { useAppContext } from '@/context/AppContext';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { JobIdSelect } from '@/components/JobIdSelect';
 import { Checkbox } from '@/components/ui/checkbox';
 import { formatCurrency, getProvinceTax } from '@/lib/calculations';
 import { supabase } from '@/integrations/supabase/client';
 import type { PaymentEntry, PaymentDirection, PaymentType } from '@/types';
 import { toast } from 'sonner';
+import { Trash2 } from 'lucide-react';
 
 const DIRECTIONS: PaymentDirection[] = ['Client Payment IN', 'Vendor Payment OUT', 'Refund IN', 'Refund OUT'];
 const TYPES: PaymentType[] = ['Deposit', 'Progress Payment', 'Final Payment', 'Freight', 'Insulation', 'Drawings', 'Other'];
@@ -19,6 +21,7 @@ export default function PaymentLedger() {
   const [showForm, setShowForm] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncSummary, setSyncSummary] = useState('');
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [form, setForm] = useState({
     date: new Date().toISOString().split('T')[0],
     jobId: '', clientVendorName: '', direction: 'Client Payment IN' as PaymentDirection,
@@ -27,6 +30,13 @@ export default function PaymentLedger() {
   });
 
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
+
+  const confirmDelete = () => {
+    if (!pendingDeleteId) return;
+    deletePayment(pendingDeleteId);
+    setPendingDeleteId(null);
+    toast.success('Payment deleted');
+  };
 
   const save = () => {
     const amount = parseFloat(form.amountExclTax) || 0;
@@ -176,14 +186,14 @@ export default function PaymentLedger() {
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-primary text-primary-foreground text-xs">
-              {['Date','Job ID','Name','Direction','Type','Amount','Tax','Total','Method','Ref #'].map(h => (
+              {['Date','Job ID','Name','Direction','Type','Amount','Tax','Total','Method','Ref #',''].map(h => (
                 <th key={h} className="px-3 py-2 text-left font-medium whitespace-nowrap">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {payments.length === 0 ? (
-              <tr><td colSpan={10} className="px-3 py-8 text-center text-muted-foreground">No payments recorded</td></tr>
+              <tr><td colSpan={11} className="px-3 py-8 text-center text-muted-foreground">No payments recorded</td></tr>
             ) : payments.map(p => (
               <tr key={p.id} className="border-b hover:bg-muted/50">
                 <td className="px-3 py-2 text-xs">{p.date}</td>
@@ -196,6 +206,11 @@ export default function PaymentLedger() {
                 <td className="px-3 py-2 font-mono font-semibold">{formatCurrency(p.totalInclTax)}</td>
                 <td className="px-3 py-2 text-xs">{p.paymentMethod}</td>
                 <td className="px-3 py-2 text-xs">{p.referenceNumber}</td>
+                <td className="px-3 py-2">
+                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive hover:text-destructive" onClick={() => setPendingDeleteId(p.id)}>
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -207,6 +222,23 @@ export default function PaymentLedger() {
           {syncSummary}
         </div>
       )}
+
+      <AlertDialog open={!!pendingDeleteId} onOpenChange={open => { if (!open) setPendingDeleteId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Payment</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this payment? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction className={buttonVariants({ variant: 'destructive' })} onClick={confirmDelete}>
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
