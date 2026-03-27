@@ -1,86 +1,102 @@
 
 
-## Plan: Pull Contacts & Opportunities from GoHighLevel CRM
+## Plan: QuickBooks Online API Integration
 
 ### Overview
-Create an edge function that pulls contacts and opportunities from GoHighLevel's v2 API using the private integration token, and a Settings UI to trigger syncs and view imported data. Also back up all current Supabase data to downloadable JSON.
+Build a proper QuickBooks Online integration using their OAuth 2.0 API to pull payment/transaction data into the Payment Ledger, replacing the placeholder `VITE_LOVABLE_QBO_SYNC_URL` approach.
 
-### 1. Store the GHL API Token
-- Add secret `GHL_API_KEY` with value `pit-01197edb-2669-4639-bbc8-651146fbb2d5` using the secrets tool
+### How QuickBooks API Works
 
-### 2. Create Edge Function: `ghl-sync`
-**File**: `supabase/functions/ghl-sync/index.ts`
+QuickBooks Online uses **OAuth 2.0** for authentication. The flow is:
 
-Operations:
-- `pull-contacts`: GET from `https://services.leadconnectorhq.com/contacts/` with Bearer token + `Version: 2021-07-28` header. Returns paginated contacts (name, email, phone, company, tags).
-- `pull-opportunities`: GET from `https://services.leadconnectorhq.com/opportunities/search` to pull pipeline deals.
-- `get-location`: GET `/locations/search` to discover the GHL location ID (required for all other calls).
+1. You register an app at [developer.intuit.com](https://developer.intuit.com)
+2. Users authorize via OAuth, granting your app access to their QBO company
+3. You receive an access token (1 hour) and refresh token (100 days)
+4. You call the QBO REST API to query transactions
 
-Auth: Validates JWT in code, checks admin/owner role. CORS headers included.
+### What Needs to Happen
 
-### 3. Database: `ghl_contacts` Table
-Store pulled CRM data locally for reference/lookup:
+#### Step 1: Register a QuickBooks App
+- Go to [developer.intuit.com/app/developer/dashboard](https://developer.intuit.com/app/developer/dashboard)
+- Create an app with **Accounting** scope
+- Note your **Client ID** and **Client Secret**
+- Set the redirect URI to your Supabase edge function callback URL:
+  `https://jvdvxmziggodjvchyvcy.supabase.co/functions/v1/qbo-callback`
 
-```text
-ghl_contacts (
-  id uuid PK,
-  ghl_id text UNIQUE NOT NULL,
-  name text,
-  email text,
-  phone text,
-  company text,
-  tags text[],
-  raw_data jsonb,
-  synced_at timestamptz default now()
-)
-```
+#### Step 2: Store Secrets
+Add two new secrets to the project:
+- `QBO_CLIENT_ID` — from Intuit developer dashboard
+- `QBO_CLIENT_SECRET` — from Intuit developer dashboard
 
-RLS: admin/owner can read, insert, update, delete.
+#### Step 3: Create Database Table for QBO Tokens
+A `qbo_tokens` table to persist OAuth tokens (encrypted at rest in Supabase):
+- `id`, `realm_id` (QBO company ID), `access_token`, `refresh_token`, `expires_at`, `created_at`
+- RLS: owner/admin only
 
-### 4. Database: `ghl_opportunities` Table
+#### Step 4: Create Edge Functions
 
-```text
-ghl_opportunities (
-  id uuid PK,
-  ghl_id text UNIQUE NOT NULL,
-  name text,
-  pipeline_name text,
-  stage_name text,
-  status text,
-  monetary_value numeric default 0,
-  contact_ghl_id text,
-  raw_data jsonb,
-  synced_at timestamptz default now()
-)
-```
+**`qbo-auth`** — Initiates OAuth flow
+- Generates the Intuit authorization URL with proper scopes (`com.intuit.quickbooks.accounting`)
+- Returns the URL for the frontend to redirect the user
 
-Same RLS as contacts.
+**`qbo-callback`** — Handles OAuth redirect
+- Exchanges the authorization code for access/refresh tokens
+- Stores tokens in `qbo_tokens` table
+- Redirects user back to Settings page
 
-### 5. Settings UI: CRM Tab
-Add a "CRM" tab in Settings (admin/owner only):
-- "Pull Contacts from CRM" button — calls edge function, upserts into `ghl_contacts`
-- "Pull Opportunities from CRM" button — same for opportunities
-- Display last sync timestamp
-- Table showing pulled contacts count and opportunities count
+**`qbo-sync`** — Pulls transactions
+- Reads stored tokens, refreshes if expired
+- Queries QBO API endpoints:
+  - `GET /v3/company/{realmId}/query?query=SELECT * FROM Payment` (client payments)
+  - `GET /v3/company/{realmId}/query?query=SELECT * FROM BillPayment` (vendor payments)
+  - `GET /v3/company/{realmId}/query?query=SELECT * FROM Invoice` (for reference matching)
+- Maps QBO transactions to `PaymentEntry` format using the existing mapping prompt logic
+- Deduplicates against existing payments
+- Inserts new entries into `payments` table
 
-### 6. Data Backup
-Back up all Supabase tables (deals, quotes, payments, internal_costs, production, freight, user_roles, ghl_contacts, ghl_opportunities) as timestamped JSON files to `/mnt/documents/backup/`.
+#### Step 5: Settings UI — QBO Tab
+- "Connect QuickBooks" button that initiates OAuth
+- Connection status indicator (connected/disconnected, company name)
+- "Pull Transactions" button to trigger sync
+- Date range filter for selective pulls
+- Sync log showing last sync time and results
 
-### 7. Tracking Script (from previous plan)
-Add the msgsndr.com tracking script to `index.html`.
-
----
+#### Step 6: Update Payment Ledger
+- Replace the `VITE_LOVABLE_QBO_SYNC_URL` fetch with a call to `supabase.functions.invoke('qbo-sync')`
+- Remove the env var dependency
 
 ### Technical Details
 
 **Files to create**:
-- `supabase/functions/ghl-sync/index.ts`
+- `supabase/functions/qbo-auth/index.ts` — OAuth initiation
+- `supabase/functions/qbo-callback/index.ts` — OAuth callback handler
+- `supabase/functions/qbo-sync/index.ts` — Transaction pull logic
+- `src/components/QBOSettings.tsx` — QuickBooks settings panel
 
 **Files to modify**:
-- `index.html` — tracking script
-- `src/pages/Settings.tsx` — add CRM tab with pull buttons and sync status
+- `src/pages/Settings.tsx` — add QBO settings tab
+- `src/pages/PaymentLedger.tsx` — update sync button to use edge function
 
-**Database migration**: Create `ghl_contacts` and `ghl_opportunities` tables with RLS
+**Database migration**: `qbo_tokens` table with RLS (owner/admin only)
 
-**Secret to add**: `GHL_API_KEY`
+**Secrets to add**: `QBO_CLIENT_ID`, `QBO_CLIENT_SECRET`
+
+**QBO API base URL**: `https://quickbooks.api.intuit.com` (production) or `https://sandbox-quickbooks.api.intuit.com` (sandbox)
+
+### Data Flow
+
+```text
+User clicks "Connect QuickBooks"
+  → qbo-auth returns Intuit OAuth URL
+  → User authorizes in Intuit
+  → Intuit redirects to qbo-callback
+  → Tokens stored in qbo_tokens
+
+User clicks "Sync" in Payment Ledger
+  → qbo-sync reads tokens, refreshes if needed
+  → Queries QBO Payment + BillPayment endpoints
+  → Maps to PaymentEntry format
+  → Dedupes against existing payments
+  → Inserts new records into payments table
+```
 
