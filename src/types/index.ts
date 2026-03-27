@@ -121,6 +121,15 @@ export interface PaymentEntry {
   notes: string;
 }
 
+export interface PaymentChangeLog {
+  id: string;
+  paymentId: string;
+  changedBy: string;
+  action: 'CREATE' | 'UPDATE' | 'DELETE';
+  summary: string;
+  changedAt: string;
+}
+
 export interface ProductionRecord {
   jobId: string;
   submitted: boolean;

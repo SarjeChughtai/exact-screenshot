@@ -1,4 +1,4 @@
-import type { Quote, Deal, InternalCost, PaymentEntry, ProductionRecord, FreightRecord } from '@/types';
+import type { Quote, Deal, InternalCost, PaymentEntry, ProductionRecord, FreightRecord, PaymentChangeLog } from '@/types';
 
 // --- Deal ---
 export function dealFromRow(r: any): Deal {
@@ -256,4 +256,27 @@ export function freightToRow(fr: Partial<FreightRecord>): Record<string, any> {
     if (map[k]) row[map[k]] = v;
   }
   return row;
+}
+
+// --- PaymentChangeLog ---
+export function paymentChangeLogFromRow(r: any): PaymentChangeLog {
+  return {
+    id: r.id ?? '',
+    paymentId: r.payment_id ?? '',
+    changedBy: r.changed_by ?? '',
+    action: r.action ?? 'UPDATE',
+    summary: r.summary ?? '',
+    changedAt: r.changed_at ?? '',
+  };
+}
+
+export function paymentChangeLogToRow(cl: PaymentChangeLog): Record<string, any> {
+  return {
+    id: cl.id,
+    payment_id: cl.paymentId,
+    changed_by: cl.changedBy,
+    action: cl.action,
+    summary: cl.summary,
+    changed_at: cl.changedAt,
+  };
 }

@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
-import { Quote, Deal, InternalCost, PaymentEntry, ProductionRecord, FreightRecord, RFQ } from '@/types';
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode } from 'react';
+import { Quote, Deal, InternalCost, PaymentEntry, ProductionRecord, FreightRecord, RFQ, PaymentChangeLog } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
 import { useRoles } from '@/context/RoleContext';
 import { logAudit } from '@/lib/auditLog';
@@ -10,6 +10,7 @@ import {
   paymentFromRow, paymentToRow,
   productionFromRow, productionToRow,
   freightFromRow, freightToRow,
+  paymentChangeLogFromRow, paymentChangeLogToRow,
 } from '@/lib/supabaseMappers';
 import { SEED_DEALS } from '@/data/seedDeals';
 import { toast } from 'sonner';
@@ -19,6 +20,7 @@ interface AppState {
   deals: Deal[];
   internalCosts: InternalCost[];
   payments: PaymentEntry[];
+  paymentChangeLogs: PaymentChangeLog[];
   production: ProductionRecord[];
   freight: FreightRecord[];
   rfqs: RFQ[];
@@ -51,18 +53,21 @@ const AppContext = createContext<AppContextType | null>(null);
 export function AppProvider({ children }: { children: ReactNode }) {
   const { currentUser } = useRoles();
   const [state, setState] = useState<AppState>({
-    quotes: [], deals: [], internalCosts: [], payments: [], production: [], freight: [], rfqs: [], loading: true,
+    quotes: [], deals: [], internalCosts: [], payments: [], paymentChangeLogs: [], production: [], freight: [], rfqs: [], loading: true,
   });
+  const stateRef = useRef(state);
+  stateRef.current = state;
 
   const fetchAll = useCallback(async () => {
     try {
-      const [quotesRes, dealsRes, costsRes, paymentsRes, prodRes, freightRes] = await Promise.all([
+      const [quotesRes, dealsRes, costsRes, paymentsRes, prodRes, freightRes, changeLogRes] = await Promise.all([
         supabase.from('quotes').select('*'),
         supabase.from('deals').select('*'),
         supabase.from('internal_costs').select('*'),
         supabase.from('payments').select('*'),
         supabase.from('production').select('*'),
         supabase.from('freight').select('*'),
+        supabase.from('payment_change_log').select('*').order('changed_at', { ascending: false }).limit(500),
       ]);
 
       // Log fetch results for debugging
