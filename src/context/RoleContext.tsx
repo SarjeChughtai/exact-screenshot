@@ -16,6 +16,10 @@ interface RoleContextType {
   hasRole: (role: UserRole) => boolean;
   hasAnyRole: (...roles: UserRole[]) => boolean;
   canAccess: (module: string) => boolean;
+  viewAsRole: UserRole | null;
+  setViewAsRole: (role: UserRole | null) => void;
+  isImpersonating: boolean;
+  actualRoles: UserRole[];
 }
 
 const MODULE_ACCESS: Record<string, UserRole[]> = {
@@ -46,12 +50,18 @@ const RoleContext = createContext<RoleContextType | null>(null);
 
 export function RoleProvider({ children }: { children: ReactNode }) {
   const { user, userRoles } = useAuth();
+  const [viewAsRole, setViewAsRole] = useState<UserRole | null>(null);
+
+  const actualRoles = (userRoles as UserRole[]) || [];
+  const isOwnerOrAdmin = actualRoles.includes('admin') || actualRoles.includes('owner');
+
+  const effectiveRoles = viewAsRole && isOwnerOrAdmin ? [viewAsRole] : actualRoles;
 
   const [currentUser, setCurrentUserState] = useState<UserProfile>({
     id: user?.id || '',
     name: user?.user_metadata?.name || user?.email || '',
     email: user?.email || '',
-    roles: (userRoles as UserRole[]) || [],
+    roles: effectiveRoles,
   });
 
   useEffect(() => {
@@ -59,9 +69,9 @@ export function RoleProvider({ children }: { children: ReactNode }) {
       id: user?.id || '',
       name: user?.user_metadata?.name || user?.email || '',
       email: user?.email || '',
-      roles: (userRoles as UserRole[]) || [],
+      roles: effectiveRoles,
     });
-  }, [user, userRoles]);
+  }, [user, userRoles, viewAsRole]);
 
   const setCurrentUser = useCallback((u: UserProfile) => {
     setCurrentUserState(u);
@@ -75,8 +85,10 @@ export function RoleProvider({ children }: { children: ReactNode }) {
     return currentUser.roles.some(r => allowed.includes(r));
   }, [currentUser]);
 
+  const isImpersonating = viewAsRole !== null && isOwnerOrAdmin;
+
   return (
-    <RoleContext.Provider value={{ currentUser, setCurrentUser, hasRole, hasAnyRole, canAccess }}>
+    <RoleContext.Provider value={{ currentUser, setCurrentUser, hasRole, hasAnyRole, canAccess, viewAsRole, setViewAsRole, isImpersonating, actualRoles }}>
       {children}
     </RoleContext.Provider>
   );

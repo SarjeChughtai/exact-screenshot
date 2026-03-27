@@ -2,12 +2,15 @@ import {
   Calculator, FileText, ClipboardList, Briefcase, DollarSign,
   BarChart3, CreditCard, Users, Truck, Factory, Award, FileSpreadsheet,
   Receipt, TrendingUp, Building2, ChevronDown, FileInput,
-  Shield, User, Settings as SettingsIcon, Send, LogOut, List, Store
+  Shield, User, Settings as SettingsIcon, Send, LogOut, List, Store, Eye, EyeOff
 } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import { useLocation } from 'react-router-dom';
-import { useRoles, ROLE_LABELS, type UserRole } from '@/context/RoleContext';
+import { useRoles, ROLE_LABELS, ALL_ROLES, type UserRole } from '@/context/RoleContext';
 import { useAuth } from '@/context/AuthContext';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent,
   SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem,
@@ -97,8 +100,9 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === 'collapsed';
   const location = useLocation();
-  const { canAccess } = useRoles();
+  const { canAccess, viewAsRole, setViewAsRole, isImpersonating, actualRoles } = useRoles();
   const { user, userRoles, signOut } = useAuth();
+  const canImpersonate = actualRoles.includes('admin') || actualRoles.includes('owner');
 
   const filteredGroups = menuGroups
     .map(g => ({ ...g, items: g.items.filter(item => canAccess(item.module)) }))
@@ -155,6 +159,34 @@ export function AppSidebar() {
       <SidebarFooter className="border-t border-sidebar-border p-3">
         {!collapsed ? (
           <div className="space-y-2">
+            {canImpersonate && (
+              <div className="space-y-1">
+                <div className="flex items-center gap-1.5 text-[9px] font-medium text-sidebar-foreground/50 uppercase tracking-wider">
+                  <Eye className="h-3 w-3" />
+                  View As
+                </div>
+                <Select
+                  value={viewAsRole || '_none'}
+                  onValueChange={(v) => setViewAsRole(v === '_none' ? null : v as UserRole)}
+                >
+                  <SelectTrigger className="h-7 text-xs bg-sidebar-accent/30 border-sidebar-border">
+                    <SelectValue placeholder="Your roles" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_none">My View (Owner)</SelectItem>
+                    {ALL_ROLES.filter(r => r !== 'owner' && r !== 'admin').map(role => (
+                      <SelectItem key={role} value={role}>{ROLE_LABELS[role]}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {isImpersonating && (
+                  <p className="text-[9px] text-amber-400 flex items-center gap-1">
+                    <EyeOff className="h-2.5 w-2.5" />
+                    Viewing as {ROLE_LABELS[viewAsRole!]}
+                  </p>
+                )}
+              </div>
+            )}
             <div className="flex items-center gap-2 text-xs text-sidebar-foreground/70">
               <User className="h-3.5 w-3.5" />
               <span className="truncate">{user?.email || 'Unknown'}</span>
@@ -179,7 +211,12 @@ export function AppSidebar() {
             </Button>
           </div>
         ) : (
-          <div className="flex justify-center">
+          <div className="flex flex-col items-center gap-2">
+            {canImpersonate && (
+              <button onClick={() => setViewAsRole(viewAsRole ? null : 'sales_rep')} title="Toggle View As">
+                <Eye className={cn("h-4 w-4", isImpersonating ? "text-amber-400" : "text-sidebar-muted hover:text-sidebar-foreground")} />
+              </button>
+            )}
             <button onClick={() => signOut()} title="Sign Out">
               <LogOut className="h-4 w-4 text-sidebar-muted hover:text-sidebar-foreground" />
             </button>
