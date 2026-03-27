@@ -23,6 +23,7 @@ export default function QuoteBuilder() {
     salesRep: '', estimator: '', province: 'ON',
     city: '', address: '', postalCode: '',
     width: '', length: '', height: '14',
+    pitch: '1',
     baseSteelCost: '', totalWeight: '',
     gutters: '0', liners: '0', otherAccessories: '0',
     insulationCost: '0', insulationGrade: '',
@@ -176,6 +177,9 @@ export default function QuoteBuilder() {
             <div><Label className="text-xs">Length (ft)</Label><Input className="input-blue mt-1" value={form.length} onChange={e => set('length', e.target.value)} /></div>
             <div><Label className="text-xs">Height (ft)</Label><Input className="input-blue mt-1" value={form.height} onChange={e => set('height', e.target.value)} /></div>
           </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div><Label className="text-xs">Roof Pitch (:12)</Label><Input className="input-blue mt-1" value={form.pitch} onChange={e => set('pitch', e.target.value)} placeholder="1" /></div>
+          </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div><Label className="text-xs">Base Steel Cost (MBS)</Label><Input className="input-blue mt-1" value={form.baseSteelCost} onChange={e => set('baseSteelCost', e.target.value)} placeholder="$" /></div>
@@ -234,7 +238,7 @@ export default function QuoteBuilder() {
               <p className="text-xs text-muted-foreground">Client ID: {quote.clientId}    Job ID: {quote.jobId}</p>
               <p className="text-xs text-muted-foreground">Job Name: {quote.jobName}</p>
               <p className="text-xs text-muted-foreground">Location: {quote.city}, {quote.province} {quote.postalCode}</p>
-              <p className="text-xs text-muted-foreground">Building: {quote.width}&apos; × {quote.length}&apos; × {quote.height}&apos; | {formatNumber(quote.sqft)} sqft | {formatNumber(quote.weight)} lbs</p>
+              <p className="text-xs text-muted-foreground">Building: {quote.width}&apos; × {quote.length}&apos; × {quote.height}&apos; | Pitch: {form.pitch}:12 | {formatNumber(quote.sqft)} sqft | {formatNumber(quote.weight)} lbs</p>
               <br />
               <Row2 label="Base Steel Cost" value={quote.adjustedSteel} />
               <Row2 label="Engineering Fee" value={quote.engineering} />

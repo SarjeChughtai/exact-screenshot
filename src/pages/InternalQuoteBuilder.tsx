@@ -41,6 +41,7 @@ interface BuildingTab {
   width: string;
   length: string;
   height: string;
+  pitch: string;
 }
 
 function generateCostSavingTips(form: any, costData: CostFileData, quote: Quote | null): string[] {
@@ -48,7 +49,9 @@ function generateCostSavingTips(form: any, costData: CostFileData, quote: Quote 
   const w = parseFloat(form.width) || 0;
   const l = parseFloat(form.length) || 0;
   const h = parseFloat(form.height) || 14;
+  const pitch = parseFloat(form.pitch) || 1;
 
+  if (pitch > 2) tips.push(`📐 Reducing roof pitch from ${pitch}:12 to 1:12 could save on steel costs.`);
   if (h > 16) tips.push(`📏 Eave height of ${h}ft — consider ${Math.min(h, 16)}ft if clearance allows.`);
   if (w > 80) tips.push(`🏗️ Buildings over 80ft wide require multi-span framing — significantly more costly. If possible, keep width ≤ 80ft.`);
   if (form.foundationType === 'frost_wall') tips.push(`🧱 Frost wall foundations cost ~65% more than slab. Verify if slab-on-grade is feasible for this site.`);
@@ -68,6 +71,7 @@ export default function InternalQuoteBuilder() {
     salesRep: '', estimator: '', province: 'ON',
     city: '', address: '', postalCode: '',
     width: '', length: '', height: '14',
+    pitch: '1',
     distance: '200', remoteLevel: 'none',
     foundationType: 'slab' as 'slab' | 'frost_wall',
     insulationCost: '0', insulationGrade: '',
@@ -81,7 +85,7 @@ export default function InternalQuoteBuilder() {
   const [showInternalMarkup, setShowInternalMarkup] = useState(true);
   const [bundleSupplierIntoSteel, setBundleSupplierIntoSteel] = useState(true);
   const [buildings, setBuildings] = useState<BuildingTab[]>([
-    { label: 'Building 1', costData: { steelWeightLbs: 0, supplierCostPerLb: 0, totalSupplierCost: 0, accessories: [] }, files: [], width: '', length: '', height: '14' },
+    { label: 'Building 1', costData: { steelWeightLbs: 0, supplierCostPerLb: 0, totalSupplierCost: 0, accessories: [] }, files: [], width: '', length: '', height: '14', pitch: '1' },
   ]);
   const [activeBuildingIdx, setActiveBuildingIdx] = useState(0);
   const [quote, setQuote] = useState<Quote | null>(null);
@@ -267,6 +271,7 @@ export default function InternalQuoteBuilder() {
     if (aiData.width) set('width', String(aiData.width));
     if (aiData.length) set('length', String(aiData.length));
     if (aiData.height) set('height', String(aiData.height));
+    if (aiData.roof_pitch) set('pitch', String(aiData.roof_pitch));
     if (aiData.client_name) set('clientName', aiData.client_name);
     if (aiData.client_id) set('clientId', aiData.client_id);
     if (aiData.job_id) set('jobId', aiData.job_id);
@@ -379,6 +384,7 @@ export default function InternalQuoteBuilder() {
               if (parsed.pLeftHeight) setLeftEaveHeight(String(parsed.pLeftHeight));
               if (parsed.pRightHeight) setRightEaveHeight(String(parsed.pRightHeight));
               if (parsed.pIsSingleSlope) setSingleSlope(true);
+              if (parsed.pPitch) set('pitch', String(parsed.pPitch));
               if (parsed.clientName) set('clientName', parsed.clientName);
               if (parsed.clientId) set('clientId', parsed.clientId);
               if (parsed.jobId) set('jobId', parsed.jobId);
@@ -438,7 +444,7 @@ export default function InternalQuoteBuilder() {
       label: `Building ${prev.length + 1}`,
       costData: { steelWeightLbs: 0, supplierCostPerLb: 0, totalSupplierCost: 0, accessories: [] },
       files: [],
-      width: '', length: '', height: '14',
+      width: '', length: '', height: '14', pitch: '1',
     }]);
     setActiveBuildingIdx(buildings.length);
   };
@@ -467,6 +473,7 @@ export default function InternalQuoteBuilder() {
     const w = parseFloat(form.width) || 0;
     const l = parseFloat(form.length) || 0;
     const h = parseFloat(form.height) || 14;
+    const pitch = parseFloat(form.pitch) || 1;
     const sqft = w * l;
     if (!sqft || !costData.steelWeightLbs || !costData.totalSupplierCost) {
       toast.error('Enter dimensions and steel cost data');
@@ -546,7 +553,7 @@ export default function InternalQuoteBuilder() {
         jobName: form.jobName,
         clientName: form.clientName,
         salesRep: form.salesRep,
-        buildings: buildings.map(b => ({ label: b.label, width: b.width || form.width, length: b.length || form.length, height: b.height || form.height })),
+        buildings: buildings.map(b => ({ label: b.label, width: b.width || form.width, length: b.length || form.length, height: b.height || form.height, pitch: b.pitch || form.pitch })),
         totalSupplierCost: costData.totalSupplierCost,
         grandTotal: totalPlusCont,
         province: form.province,
@@ -825,7 +832,7 @@ export default function InternalQuoteBuilder() {
             </div>
             <div className="flex items-center gap-3">
               <Switch checked={singleSlope} onCheckedChange={v => { setSingleSlope(v); if (!v) { setLeftEaveHeight('14'); setRightEaveHeight('14'); } }} />
-              <Label className="text-xs">Sloped</Label>
+              <Label className="text-xs">Different Eave Heights</Label>
             </div>
             {singleSlope && (
               <div className="grid grid-cols-2 gap-3">
@@ -839,7 +846,8 @@ export default function InternalQuoteBuilder() {
                 </div>
               </div>
             )}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
+              <div><Label className="text-xs">Roof Pitch (:12)</Label><Input className="input-blue mt-1" value={form.pitch} onChange={e => set('pitch', e.target.value)} placeholder="1" /></div>
               <div>
                 <Label className="text-xs">Remote</Label>
                 <Select value={form.remoteLevel} onValueChange={v => set('remoteLevel', v)}>
@@ -905,7 +913,7 @@ export default function InternalQuoteBuilder() {
                 <p className="text-sm text-muted-foreground">Client: <strong>{quote.clientName}</strong> (ID: {quote.clientId})</p>
                 <p className="text-sm text-muted-foreground">Job Name: <strong>{quote.jobName}</strong></p>
                 <p className="text-sm text-muted-foreground">Sales Rep: {quote.salesRep} | Estimator: {quote.estimator}</p>
-                <p className="text-sm text-muted-foreground">Building: <strong>{quote.width}′ × {quote.length}′ × {quote.height}′</strong> | {formatNumber(quote.sqft)} sqft | {formatNumber(quote.weight)} lbs{singleSlope && ` | Sloped: ${leftEaveHeight}′ / ${rightEaveHeight}′`}</p>
+                <p className="text-sm text-muted-foreground">Building: <strong>{quote.width}′ × {quote.length}′ × {quote.height}′</strong> | {formatNumber(quote.sqft)} sqft | {formatNumber(quote.weight)} lbs | Pitch: {form.pitch}:12{singleSlope && ` | Eaves: ${leftEaveHeight}′ / ${rightEaveHeight}′`}</p>
                 <p className="text-sm text-muted-foreground">Location: {quote.city}, {quote.province} {quote.postalCode}</p>
                 <div className="h-3" />
                 <div className="border-b pb-1 mb-2 text-sm font-bold text-foreground">Cost Breakdown</div>
