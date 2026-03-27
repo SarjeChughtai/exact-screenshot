@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { toast } from 'sonner';
 import { Download, Upload, Plus, Trash2 } from 'lucide-react';
 import { UserManagement } from '@/components/UserManagement';
+import CRMSettings from '@/components/CRMSettings';
 
 export default function Settings() {
   const { settings, updateSettings } = useSettings();
