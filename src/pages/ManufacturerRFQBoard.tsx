@@ -15,6 +15,10 @@ import { Factory, Plus, ChevronDown, ChevronUp, Award, X } from 'lucide-react';
 
 const STATUSES: ManufacturerRFQStatus[] = ['Open', 'Closed', 'Awarded', 'Cancelled'];
 
+function formatWeight(weight: number): string {
+  return weight > 0 ? `${weight.toLocaleString()} lbs` : 'Weight TBD';
+}
+
 const statusColors: Record<ManufacturerRFQStatus, string> = {
   Open: 'bg-green-100 text-green-800',
   Closed: 'bg-gray-100 text-gray-800',
@@ -217,7 +221,7 @@ export default function ManufacturerRFQBoard() {
                   <div className="min-w-0">
                     <div className="font-medium text-sm truncate">{rfq.title}</div>
                     <div className="text-xs text-muted-foreground">
-                      {rfq.buildingSpec} • {rfq.weight > 0 ? `${rfq.weight.toLocaleString()} lbs` : 'Weight TBD'} • {rfq.city}, {rfq.province}
+                      {rfq.buildingSpec} • {formatWeight(rfq.weight)} • {rfq.city}, {rfq.province}
                     </div>
                   </div>
                 </div>

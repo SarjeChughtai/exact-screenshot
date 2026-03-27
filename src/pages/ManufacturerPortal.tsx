@@ -12,6 +12,10 @@ import type { ManufacturerRFQ, ManufacturerBid, ManufacturerBidStatus } from '@/
 import { toast } from 'sonner';
 import { Factory, Send, ChevronDown, ChevronUp, Clock, DollarSign } from 'lucide-react';
 
+function formatWeight(weight: number): string {
+  return weight > 0 ? `${weight.toLocaleString()} lbs` : 'Weight TBD';
+}
+
 const statusColors: Record<string, string> = {
   Open: 'bg-green-100 text-green-800',
   Closed: 'bg-gray-100 text-gray-800',
@@ -43,7 +47,7 @@ export default function ManufacturerPortal() {
   });
 
   const manufacturerId = user?.id || '';
-  const manufacturerName = currentUser?.name || user?.email || 'Unknown';
+  const manufacturerName = currentUser?.name || user?.email || '';
 
   // Only show Open RFQs to manufacturers
   const openRFQs = useMemo(() =>
@@ -71,6 +75,7 @@ export default function ManufacturerPortal() {
   const submitBid = (rfqId: string) => {
     if (!bidForm.totalPrice) { toast.error('Total price is required'); return; }
     if (!bidForm.leadTimeDays) { toast.error('Lead time is required'); return; }
+    if (!manufacturerName) { toast.error('Manufacturer name is not available'); return; }
 
     const rfq = manufacturerRFQs.find(r => r.id === rfqId);
     if (!rfq || rfq.status !== 'Open') {
@@ -155,7 +160,7 @@ export default function ManufacturerPortal() {
                   <div className="min-w-0">
                     <div className="font-medium text-sm">{rfq.title}</div>
                     <div className="text-xs text-muted-foreground">
-                      {rfq.buildingSpec} • {rfq.weight > 0 ? `${rfq.weight.toLocaleString()} lbs` : 'Weight TBD'}
+                      {rfq.buildingSpec} • {formatWeight(rfq.weight)}
                     </div>
                   </div>
                   <div className="flex items-center gap-3 shrink-0">
@@ -173,7 +178,7 @@ export default function ManufacturerPortal() {
                   <div className="border-t px-4 py-4 space-y-4">
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-xs">
                       <div><span className="text-muted-foreground">Dimensions:</span> {rfq.width}'W × {rfq.length}'L × {rfq.height}'H</div>
-                      <div><span className="text-muted-foreground">Weight:</span> {rfq.weight > 0 ? `${rfq.weight.toLocaleString()} lbs` : 'TBD'}</div>
+                      <div><span className="text-muted-foreground">Weight:</span> {formatWeight(rfq.weight)}</div>
                       <div><span className="text-muted-foreground">Location:</span> {rfq.city}, {rfq.province}</div>
                       <div><span className="text-muted-foreground">Delivery:</span> {rfq.deliveryAddress || '—'}</div>
                       <div><span className="text-muted-foreground">Required By:</span> {rfq.requiredByDate || '—'}</div>

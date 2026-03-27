@@ -87,7 +87,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       });
 
       // Check if any core query had an error (e.g. RLS blocking unauthenticated)
-      // Manufacturer tables may not exist yet so we treat their errors gracefully
       const anyError = [quotesRes, dealsRes, costsRes, paymentsRes, prodRes, freightRes].some(r => r.error);
 
       if (anyError) {
@@ -102,8 +101,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const payments = (paymentsRes.data || []).map(paymentFromRow);
       const production = (prodRes.data || []).map(productionFromRow);
       const freight = (freightRes.data || []).map(freightFromRow);
-      const manufacturerRFQs = (mfgRfqRes.data || []).map(manufacturerRFQFromRow);
-      const manufacturerBids = (mfgBidRes.data || []).map(manufacturerBidFromRow);
+      // Manufacturer tables may not exist yet — handle gracefully
+      const manufacturerRFQs = mfgRfqRes.error ? [] : (mfgRfqRes.data || []).map(manufacturerRFQFromRow);
+      const manufacturerBids = mfgBidRes.error ? [] : (mfgBidRes.data || []).map(manufacturerBidFromRow);
 
       // If all Supabase tables are empty, try migrating from localStorage
       const allEmpty = quotes.length === 0 && deals.length === 0 && payments.length === 0;
