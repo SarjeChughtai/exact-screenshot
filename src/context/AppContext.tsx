@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
-import { Quote, Deal, InternalCost, PaymentEntry, ProductionRecord, FreightRecord, RFQ } from '@/types';
+import { Quote, Deal, InternalCost, PaymentEntry, ProductionRecord, FreightRecord, RFQ, ManufacturerRFQ, ManufacturerBid } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
 import { useRoles } from '@/context/RoleContext';
 import { logAudit } from '@/lib/auditLog';
@@ -10,6 +10,8 @@ import {
   paymentFromRow, paymentToRow,
   productionFromRow, productionToRow,
   freightFromRow, freightToRow,
+  manufacturerRFQFromRow, manufacturerRFQToRow,
+  manufacturerBidFromRow, manufacturerBidToRow,
 } from '@/lib/supabaseMappers';
 import { SEED_DEALS } from '@/data/seedDeals';
 import { toast } from 'sonner';
@@ -22,6 +24,8 @@ interface AppState {
   production: ProductionRecord[];
   freight: FreightRecord[];
   rfqs: RFQ[];
+  manufacturerRFQs: ManufacturerRFQ[];
+  manufacturerBids: ManufacturerBid[];
   loading: boolean;
 }
 
@@ -43,6 +47,11 @@ interface AppContextType extends AppState {
   addRFQ: (rfq: RFQ) => void;
   updateRFQ: (id: string, updates: Partial<RFQ>) => void;
   deleteRFQ: (id: string) => void;
+  addManufacturerRFQ: (rfq: ManufacturerRFQ) => void;
+  updateManufacturerRFQ: (id: string, updates: Partial<ManufacturerRFQ>) => void;
+  deleteManufacturerRFQ: (id: string) => void;
+  addManufacturerBid: (bid: ManufacturerBid) => void;
+  updateManufacturerBid: (id: string, updates: Partial<ManufacturerBid>) => void;
   refreshData: () => Promise<void>;
 }
 
@@ -51,18 +60,20 @@ const AppContext = createContext<AppContextType | null>(null);
 export function AppProvider({ children }: { children: ReactNode }) {
   const { currentUser } = useRoles();
   const [state, setState] = useState<AppState>({
-    quotes: [], deals: [], internalCosts: [], payments: [], production: [], freight: [], rfqs: [], loading: true,
+    quotes: [], deals: [], internalCosts: [], payments: [], production: [], freight: [], rfqs: [], manufacturerRFQs: [], manufacturerBids: [], loading: true,
   });
 
   const fetchAll = useCallback(async () => {
     try {
-      const [quotesRes, dealsRes, costsRes, paymentsRes, prodRes, freightRes] = await Promise.all([
+      const [quotesRes, dealsRes, costsRes, paymentsRes, prodRes, freightRes, mfgRfqRes, mfgBidRes] = await Promise.all([
         supabase.from('quotes').select('*'),
         supabase.from('deals').select('*'),
         supabase.from('internal_costs').select('*'),
         supabase.from('payments').select('*'),
         supabase.from('production').select('*'),
         supabase.from('freight').select('*'),
+        supabase.from('manufacturer_rfqs').select('*'),
+        supabase.from('manufacturer_bids').select('*'),
       ]);
 
       // Log fetch results for debugging
@@ -75,7 +86,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         freight: freightRes.data?.length, freightErr: freightRes.error,
       });
 
-      // Check if any query had an error (e.g. RLS blocking unauthenticated)
+      // Check if any core query had an error (e.g. RLS blocking unauthenticated)
       const anyError = [quotesRes, dealsRes, costsRes, paymentsRes, prodRes, freightRes].some(r => r.error);
 
       if (anyError) {
@@ -90,6 +101,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const payments = (paymentsRes.data || []).map(paymentFromRow);
       const production = (prodRes.data || []).map(productionFromRow);
       const freight = (freightRes.data || []).map(freightFromRow);
+      // Manufacturer tables may not exist yet — handle gracefully
+      const manufacturerRFQs = mfgRfqRes.error ? [] : (mfgRfqRes.data || []).map(manufacturerRFQFromRow);
+      const manufacturerBids = mfgBidRes.error ? [] : (mfgBidRes.data || []).map(manufacturerBidFromRow);
 
       // If all Supabase tables are empty, try migrating from localStorage
       const allEmpty = quotes.length === 0 && deals.length === 0 && payments.length === 0;
@@ -105,7 +119,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      setState({ quotes, deals, internalCosts, payments, production, freight, rfqs: state.rfqs, loading: false });
+      setState({ quotes, deals, internalCosts, payments, production, freight, rfqs: state.rfqs, manufacturerRFQs, manufacturerBids, loading: false });
     } catch (err) {
       console.error('Supabase fetch error, falling back to localStorage', err);
       loadFromLocalStorage();
@@ -125,6 +139,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
           production: data.production || [],
           freight: data.freight || [],
           rfqs: data.rfqs || [],
+          manufacturerRFQs: data.manufacturerRFQs || [],
+          manufacturerBids: data.manufacturerBids || [],
           loading: false,
         });
       } else {
@@ -193,6 +209,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         production: (prR.data || []).map(productionFromRow),
         freight: (fR.data || []).map(freightFromRow),
         rfqs: [],
+        manufacturerRFQs: [],
+        manufacturerBids: [],
         loading: false,
       });
       return true;
@@ -215,12 +233,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         console.warn('[Data] Supabase insert returned 0 rows — using SEED_DEALS in-memory');
         setState(prev => ({ ...prev, deals: SEED_DEALS, loading: false }));
         // Also save to localStorage so it persists
-        const currentState = { quotes: [], deals: SEED_DEALS, internalCosts: [], payments: [], production: [], freight: [], rfqs: [] };
+        const currentState = { quotes: [], deals: SEED_DEALS, internalCosts: [], payments: [], production: [], freight: [], rfqs: [], manufacturerRFQs: [], manufacturerBids: [] };
         localStorage.setItem('canada_steel_state', JSON.stringify(currentState));
       }
     } catch {
       setState(prev => ({ ...prev, deals: SEED_DEALS, loading: false }));
-      const currentState = { quotes: [], deals: SEED_DEALS, internalCosts: [], payments: [], production: [], freight: [], rfqs: [] };
+      const currentState = { quotes: [], deals: SEED_DEALS, internalCosts: [], payments: [], production: [], freight: [], rfqs: [], manufacturerRFQs: [], manufacturerBids: [] };
       localStorage.setItem('canada_steel_state', JSON.stringify(currentState));
     }
   }, []);
@@ -431,12 +449,75 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
   }, [currentUser]);
 
+  // --- Manufacturer RFQs ---
+  const addManufacturerRFQ = useCallback(async (rfq: ManufacturerRFQ) => {
+    setState(prev => ({ ...prev, manufacturerRFQs: [...prev.manufacturerRFQs, rfq] }));
+    logAudit(currentUser?.name || 'System', 'CREATE', 'ManufacturerRFQ', rfq.id, rfq);
+    try {
+      const row = manufacturerRFQToRow(rfq);
+      await supabase.from('manufacturer_rfqs').insert(row as any).select().single();
+    } catch {}
+  }, [currentUser]);
+
+  const updateManufacturerRFQ = useCallback(async (id: string, updates: Partial<ManufacturerRFQ>) => {
+    setState(prev => {
+      const existing = prev.manufacturerRFQs.find(r => r.id === id);
+      if (existing) logAudit(currentUser?.name || 'System', 'UPDATE', 'ManufacturerRFQ', id, updates, existing);
+      return {
+        ...prev,
+        manufacturerRFQs: prev.manufacturerRFQs.map(r => r.id === id ? { ...r, ...updates } : r),
+      };
+    });
+    try {
+      const row = manufacturerRFQToRow(updates);
+      await supabase.from('manufacturer_rfqs').update(row as any).eq('id', id);
+    } catch {}
+  }, [currentUser]);
+
+  const deleteManufacturerRFQ = useCallback(async (id: string) => {
+    setState(prev => {
+      const existing = prev.manufacturerRFQs.find(r => r.id === id);
+      if (existing) logAudit(currentUser?.name || 'System', 'DELETE', 'ManufacturerRFQ', id, { id }, existing);
+      return { ...prev, manufacturerRFQs: prev.manufacturerRFQs.filter(r => r.id !== id) };
+    });
+    try {
+      await supabase.from('manufacturer_rfqs').delete().eq('id', id);
+    } catch {}
+  }, [currentUser]);
+
+  // --- Manufacturer Bids ---
+  const addManufacturerBid = useCallback(async (bid: ManufacturerBid) => {
+    setState(prev => ({ ...prev, manufacturerBids: [...prev.manufacturerBids, bid] }));
+    logAudit(currentUser?.name || 'System', 'CREATE', 'ManufacturerBid', bid.id, bid);
+    try {
+      const row = manufacturerBidToRow(bid);
+      await supabase.from('manufacturer_bids').insert(row as any).select().single();
+    } catch {}
+  }, [currentUser]);
+
+  const updateManufacturerBid = useCallback(async (id: string, updates: Partial<ManufacturerBid>) => {
+    setState(prev => {
+      const existing = prev.manufacturerBids.find(b => b.id === id);
+      if (existing) logAudit(currentUser?.name || 'System', 'UPDATE', 'ManufacturerBid', id, updates, existing);
+      return {
+        ...prev,
+        manufacturerBids: prev.manufacturerBids.map(b => b.id === id ? { ...b, ...updates } : b),
+      };
+    });
+    try {
+      const row = manufacturerBidToRow(updates);
+      await supabase.from('manufacturer_bids').update(row as any).eq('id', id);
+    } catch {}
+  }, [currentUser]);
+
   return (
     <AppContext.Provider value={{
       ...state, addQuote, updateQuote, addDeal, updateDeal, deleteDeal,
       addInternalCost, updateInternalCost, addPayment, updatePayment, deletePayment,
       addProduction, updateProduction, addFreight, updateFreight,
       addRFQ, updateRFQ, deleteRFQ,
+      addManufacturerRFQ, updateManufacturerRFQ, deleteManufacturerRFQ,
+      addManufacturerBid, updateManufacturerBid,
       refreshData: fetchAll,
     }}>
       {children}

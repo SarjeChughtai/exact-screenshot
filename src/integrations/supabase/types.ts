@@ -800,6 +800,116 @@ export type Database = {
         }
         Relationships: []
       }
+      manufacturer_rfqs: {
+        Row: {
+          id: string
+          job_id: string | null
+          title: string
+          building_spec: string | null
+          width: number | null
+          length: number | null
+          height: number | null
+          weight: number | null
+          province: string | null
+          city: string | null
+          delivery_address: string | null
+          required_by_date: string | null
+          notes: string | null
+          status: string | null
+          created_by: string | null
+          created_at: string
+          closing_date: string | null
+          awarded_bid_id: string | null
+        }
+        Insert: {
+          id?: string
+          job_id?: string | null
+          title: string
+          building_spec?: string | null
+          width?: number | null
+          length?: number | null
+          height?: number | null
+          weight?: number | null
+          province?: string | null
+          city?: string | null
+          delivery_address?: string | null
+          required_by_date?: string | null
+          notes?: string | null
+          status?: string | null
+          created_by?: string | null
+          created_at?: string
+          closing_date?: string | null
+          awarded_bid_id?: string | null
+        }
+        Update: {
+          id?: string
+          job_id?: string | null
+          title?: string
+          building_spec?: string | null
+          width?: number | null
+          length?: number | null
+          height?: number | null
+          weight?: number | null
+          province?: string | null
+          city?: string | null
+          delivery_address?: string | null
+          required_by_date?: string | null
+          notes?: string | null
+          status?: string | null
+          created_by?: string | null
+          created_at?: string
+          closing_date?: string | null
+          awarded_bid_id?: string | null
+        }
+        Relationships: []
+      }
+      manufacturer_bids: {
+        Row: {
+          id: string
+          rfq_id: string
+          manufacturer_id: string
+          manufacturer_name: string | null
+          price_per_lb: number | null
+          total_price: number | null
+          lead_time_days: number | null
+          notes: string | null
+          status: string | null
+          submitted_at: string
+        }
+        Insert: {
+          id?: string
+          rfq_id: string
+          manufacturer_id: string
+          manufacturer_name?: string | null
+          price_per_lb?: number | null
+          total_price?: number | null
+          lead_time_days?: number | null
+          notes?: string | null
+          status?: string | null
+          submitted_at?: string
+        }
+        Update: {
+          id?: string
+          rfq_id?: string
+          manufacturer_id?: string
+          manufacturer_name?: string | null
+          price_per_lb?: number | null
+          total_price?: number | null
+          lead_time_days?: number | null
+          notes?: string | null
+          status?: string | null
+          submitted_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "manufacturer_bids_rfq_id_fkey"
+            columns: ["rfq_id"]
+            isOneToOne: false
+            referencedRelation: "manufacturer_rfqs"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       user_roles: {
         Row: {
           id: string
@@ -857,6 +967,7 @@ export type Database = {
         | "sales_rep"
         | "freight"
         | "dealer"
+        | "manufacturer"
       deal_status:
         | "Lead"
         | "Quoted"

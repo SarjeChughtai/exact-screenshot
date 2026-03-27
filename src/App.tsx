@@ -39,6 +39,8 @@ import DealerRFQ from "@/pages/DealerRFQ";
 import DealerLog from "@/pages/DealerLog";
 import DraftLog from "@/pages/DraftLog";
 import MasterData from "@/pages/MasterData";
+import ManufacturerRFQBoard from "@/pages/ManufacturerRFQBoard";
+import ManufacturerPortal from "@/pages/ManufacturerPortal";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -88,6 +90,8 @@ const App = () => (
                           <Route path="/dealer-log" element={<DealerLog />} />
                           <Route path="/draft-log" element={<DraftLog />} />
                           <Route path="/master-data" element={<MasterData />} />
+                          <Route path="/manufacturer-rfq-board" element={<ManufacturerRFQBoard />} />
+                          <Route path="/manufacturer-portal" element={<ManufacturerPortal />} />
                           <Route path="*" element={<NotFound />} />
                         </Routes>
                       </Layout>
