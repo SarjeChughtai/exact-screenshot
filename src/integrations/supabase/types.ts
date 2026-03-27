@@ -205,6 +205,81 @@ export type Database = {
           },
         ]
       }
+      ghl_contacts: {
+        Row: {
+          company: string | null
+          email: string | null
+          ghl_id: string
+          id: string
+          name: string | null
+          phone: string | null
+          raw_data: Json | null
+          synced_at: string | null
+          tags: string[] | null
+        }
+        Insert: {
+          company?: string | null
+          email?: string | null
+          ghl_id: string
+          id?: string
+          name?: string | null
+          phone?: string | null
+          raw_data?: Json | null
+          synced_at?: string | null
+          tags?: string[] | null
+        }
+        Update: {
+          company?: string | null
+          email?: string | null
+          ghl_id?: string
+          id?: string
+          name?: string | null
+          phone?: string | null
+          raw_data?: Json | null
+          synced_at?: string | null
+          tags?: string[] | null
+        }
+        Relationships: []
+      }
+      ghl_opportunities: {
+        Row: {
+          contact_ghl_id: string | null
+          ghl_id: string
+          id: string
+          monetary_value: number | null
+          name: string | null
+          pipeline_name: string | null
+          raw_data: Json | null
+          stage_name: string | null
+          status: string | null
+          synced_at: string | null
+        }
+        Insert: {
+          contact_ghl_id?: string | null
+          ghl_id: string
+          id?: string
+          monetary_value?: number | null
+          name?: string | null
+          pipeline_name?: string | null
+          raw_data?: Json | null
+          stage_name?: string | null
+          status?: string | null
+          synced_at?: string | null
+        }
+        Update: {
+          contact_ghl_id?: string | null
+          ghl_id?: string
+          id?: string
+          monetary_value?: number | null
+          name?: string | null
+          pipeline_name?: string | null
+          raw_data?: Json | null
+          stage_name?: string | null
+          status?: string | null
+          synced_at?: string | null
+        }
+        Relationships: []
+      }
       internal_costs: {
         Row: {
           created_at: string
