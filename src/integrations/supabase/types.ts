@@ -125,6 +125,54 @@ export type Database = {
         }
         Relationships: []
       }
+      quote_files: {
+        Row: {
+          id: string
+          job_id: string
+          client_name: string
+          client_id: string
+          file_type: string
+          file_name: string
+          file_size: number
+          storage_path: string
+          gdrive_file_id: string | null
+          gdrive_status: string
+          uploaded_by: string | null
+          building_label: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          job_id?: string
+          client_name?: string
+          client_id?: string
+          file_type?: string
+          file_name?: string
+          file_size?: number
+          storage_path?: string
+          gdrive_file_id?: string | null
+          gdrive_status?: string
+          uploaded_by?: string | null
+          building_label?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          job_id?: string
+          client_name?: string
+          client_id?: string
+          file_type?: string
+          file_name?: string
+          file_size?: number
+          storage_path?: string
+          gdrive_file_id?: string | null
+          gdrive_status?: string
+          uploaded_by?: string | null
+          building_label?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
       access_requests: {
         Row: {
           created_at: string

@@ -14,6 +14,7 @@ import type { Quote } from '@/types';
 import { toast } from 'sonner';
 import { Upload, FileText, CheckCircle2, AlertTriangle, Download, Mail, ChevronDown, X, Sparkles, Loader2, MapPin, Lightbulb, Trash2, Plus } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { uploadQuoteFile } from '@/lib/quoteFileStorage';
 import { PersonnelSelect } from '@/components/PersonnelSelect';
 import { ClientSelect } from '@/components/ClientSelect';
 import { JobIdSelect } from '@/components/JobIdSelect';
@@ -398,6 +399,25 @@ export default function InternalQuoteBuilder() {
               toast.error(`Could not parse: ${file.name}`);
             }
           }
+        }
+
+        // Upload original file to Supabase Storage for future reference + Google Drive backup
+        const lastParsed = newParsedFiles[newParsedFiles.length - 1];
+        if (lastParsed && lastParsed.status === 'success') {
+          uploadQuoteFile({
+            file,
+            fileType: lastParsed.type,
+            jobId: form.jobId || '',
+            clientName: form.clientName || '',
+            clientId: form.clientId || '',
+            buildingLabel: buildings[activeBuildingIdx]?.label || 'Building 1',
+          }).then(result => {
+            if (result) {
+              toast.success(`📁 ${file.name} stored & backup queued`);
+            }
+          }).catch(() => {
+            // Non-blocking: storage failure doesn't affect quote flow
+          });
         }
 
         // Auto freight from postal code
