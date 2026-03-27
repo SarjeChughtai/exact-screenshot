@@ -139,6 +139,8 @@ export type Database = {
           gdrive_status: string
           uploaded_by: string | null
           building_label: string
+          ai_output: Record<string, unknown> | null
+          extraction_source: string
           created_at: string
         }
         Insert: {
@@ -154,6 +156,8 @@ export type Database = {
           gdrive_status?: string
           uploaded_by?: string | null
           building_label?: string
+          ai_output?: Record<string, unknown> | null
+          extraction_source?: string
           created_at?: string
         }
         Update: {
@@ -169,6 +173,89 @@ export type Database = {
           gdrive_status?: string
           uploaded_by?: string | null
           building_label?: string
+          ai_output?: Record<string, unknown> | null
+          extraction_source?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
+      steel_cost_entries: {
+        Row: {
+          id: string
+          quote_file_id: string | null
+          job_id: string
+          client_name: string
+          client_id: string
+          building_label: string
+          document_type: string
+          file_name: string
+          weight_lbs: number
+          cost_per_lb: number
+          total_cost: number
+          width: number | null
+          length: number | null
+          height: number | null
+          roof_pitch: number | null
+          province: string | null
+          city: string | null
+          components: Record<string, unknown>[] | null
+          insulation_total: number
+          insulation_grade: string | null
+          extraction_source: string
+          ai_raw_output: Record<string, unknown> | null
+          uploaded_by: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          quote_file_id?: string | null
+          job_id?: string
+          client_name?: string
+          client_id?: string
+          building_label?: string
+          document_type?: string
+          file_name?: string
+          weight_lbs?: number
+          cost_per_lb?: number
+          total_cost?: number
+          width?: number | null
+          length?: number | null
+          height?: number | null
+          roof_pitch?: number | null
+          province?: string | null
+          city?: string | null
+          components?: Record<string, unknown>[] | null
+          insulation_total?: number
+          insulation_grade?: string | null
+          extraction_source?: string
+          ai_raw_output?: Record<string, unknown> | null
+          uploaded_by?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          quote_file_id?: string | null
+          job_id?: string
+          client_name?: string
+          client_id?: string
+          building_label?: string
+          document_type?: string
+          file_name?: string
+          weight_lbs?: number
+          cost_per_lb?: number
+          total_cost?: number
+          width?: number | null
+          length?: number | null
+          height?: number | null
+          roof_pitch?: number | null
+          province?: string | null
+          city?: string | null
+          components?: Record<string, unknown>[] | null
+          insulation_total?: number
+          insulation_grade?: string | null
+          extraction_source?: string
+          ai_raw_output?: Record<string, unknown> | null
+          uploaded_by?: string | null
           created_at?: string
         }
         Relationships: []

@@ -7,12 +7,38 @@ interface UploadQuoteFileParams {
   clientName: string;
   clientId: string;
   buildingLabel: string;
+  aiOutput?: Record<string, unknown> | null;
+  extractionSource?: 'ai' | 'regex' | 'unknown';
 }
 
 interface QuoteFileRecord {
   id: string;
   storagePath: string;
   gdriveStatus: string;
+}
+
+interface SteelCostEntryParams {
+  quoteFileId?: string;
+  jobId: string;
+  clientName: string;
+  clientId: string;
+  buildingLabel: string;
+  documentType: string;
+  fileName: string;
+  weightLbs: number;
+  costPerLb: number;
+  totalCost: number;
+  width?: number;
+  length?: number;
+  height?: number;
+  roofPitch?: number;
+  province?: string;
+  city?: string;
+  components?: { name: string; weight?: number; cost: number }[];
+  insulationTotal?: number;
+  insulationGrade?: string;
+  extractionSource: 'ai' | 'regex';
+  aiRawOutput?: Record<string, unknown> | null;
 }
 
 /**
@@ -27,6 +53,8 @@ export async function uploadQuoteFile({
   clientName,
   clientId,
   buildingLabel,
+  aiOutput,
+  extractionSource = 'unknown',
 }: UploadQuoteFileParams): Promise<QuoteFileRecord | null> {
   try {
     const { data: { user } } = await supabase.auth.getUser();
@@ -67,6 +95,8 @@ export async function uploadQuoteFile({
         uploaded_by: user.id,
         building_label: buildingLabel,
         gdrive_status: 'pending',
+        ai_output: aiOutput || null,
+        extraction_source: extractionSource,
       } as any)
       .select()
       .single();
@@ -160,4 +190,57 @@ export async function getQuoteFileUrl(storagePath: string): Promise<string | nul
     return null;
   }
   return data?.signedUrl || null;
+}
+
+/**
+ * Saves extracted steel cost / insulation data to the steel_cost_entries table.
+ * This builds a historical database of supplier pricing over time.
+ */
+export async function saveSteelCostEntry(params: SteelCostEntryParams): Promise<string | null> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      console.warn('Cannot save steel cost entry: user not authenticated');
+      return null;
+    }
+
+    const { data, error } = await supabase
+      .from('steel_cost_entries')
+      .insert({
+        quote_file_id: params.quoteFileId || null,
+        job_id: params.jobId || '',
+        client_name: params.clientName || '',
+        client_id: params.clientId || '',
+        building_label: params.buildingLabel || 'Building 1',
+        document_type: params.documentType || 'unknown',
+        file_name: params.fileName || '',
+        weight_lbs: params.weightLbs || 0,
+        cost_per_lb: params.costPerLb || 0,
+        total_cost: params.totalCost || 0,
+        width: params.width ?? null,
+        length: params.length ?? null,
+        height: params.height ?? null,
+        roof_pitch: params.roofPitch ?? null,
+        province: params.province ?? null,
+        city: params.city ?? null,
+        components: params.components || [],
+        insulation_total: params.insulationTotal || 0,
+        insulation_grade: params.insulationGrade ?? null,
+        extraction_source: params.extractionSource,
+        ai_raw_output: params.aiRawOutput || null,
+        uploaded_by: user.id,
+      } as any)
+      .select('id')
+      .single();
+
+    if (error) {
+      console.error('Steel cost entry insert error:', error);
+      return null;
+    }
+
+    return data?.id || null;
+  } catch (err) {
+    console.error('saveSteelCostEntry error:', err);
+    return null;
+  }
 }
