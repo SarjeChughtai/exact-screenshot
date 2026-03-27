@@ -19,7 +19,7 @@ interface DraftQuote {
 
 function getDrafts(): DraftQuote[] {
   try { return JSON.parse(localStorage.getItem('csb_draft_quotes') || '[]'); }
-  catch { return []; }
+  catch (e) { console.error('Failed to parse draft quotes from localStorage', e); return []; }
 }
 
 function saveDrafts(drafts: DraftQuote[]) {
