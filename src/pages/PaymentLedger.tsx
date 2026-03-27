@@ -32,6 +32,9 @@ export default function PaymentLedger() {
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [form, setForm] = useState(BLANK_FORM);
 
+  // View state
+  const [viewingPayment, setViewingPayment] = useState<PaymentEntry | null>(null);
+
   // Edit state
   const [editingPayment, setEditingPayment] = useState<PaymentEntry | null>(null);
   const [editForm, setEditForm] = useState(BLANK_FORM);
@@ -245,7 +248,7 @@ export default function PaymentLedger() {
             {payments.length === 0 ? (
               <tr><td colSpan={11} className="px-3 py-8 text-center text-muted-foreground">No payments recorded</td></tr>
             ) : payments.map(p => (
-              <tr key={p.id} className="border-b hover:bg-muted/50">
+              <tr key={p.id} className="border-b hover:bg-muted/50 cursor-pointer" onClick={() => setViewingPayment(p)}>
                 <td className="px-3 py-2 text-xs">{p.date}</td>
                 <td className="px-3 py-2 font-mono text-xs">{p.jobId}</td>
                 <td className="px-3 py-2">{p.clientVendorName}</td>
@@ -256,7 +259,7 @@ export default function PaymentLedger() {
                 <td className="px-3 py-2 font-mono font-semibold">{formatCurrency(p.totalInclTax)}</td>
                 <td className="px-3 py-2 text-xs">{p.paymentMethod}</td>
                 <td className="px-3 py-2 text-xs">{p.referenceNumber}</td>
-                <td className="px-3 py-2">
+                <td className="px-3 py-2" onClick={e => e.stopPropagation()}>
                   <div className="flex items-center gap-1">
                     <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground" onClick={() => openEdit(p)}>
                       <Pencil className="h-3 w-3" />
@@ -295,20 +298,40 @@ export default function PaymentLedger() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Edit Payment Dialog */}
-      <Dialog open={!!editingPayment} onOpenChange={open => { if (!open) setEditingPayment(null); }}>
+      {/* View Payment Dialog */}
+      <Dialog open={!!viewingPayment} onOpenChange={open => { if (!open) setViewingPayment(null); }}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Edit Payment</DialogTitle>
+            <DialogTitle>Payment Details</DialogTitle>
           </DialogHeader>
 
-          {editingPayment && (() => {
-            const deal = deals.find(d => d.jobId === editForm.jobId);
-            const jobPayments = payments.filter(p => p.jobId === editForm.jobId);
+          {viewingPayment && (() => {
+            const deal = deals.find(d => d.jobId === viewingPayment.jobId);
+            const jobPayments = payments.filter(p => p.jobId === viewingPayment.jobId);
             const totalIn = jobPayments.filter(p => p.direction === 'Client Payment IN' || p.direction === 'Refund IN').reduce((s, p) => s + p.totalInclTax, 0);
             const totalOut = jobPayments.filter(p => p.direction === 'Vendor Payment OUT' || p.direction === 'Refund OUT').reduce((s, p) => s + p.totalInclTax, 0);
             return (
               <div className="space-y-5">
+                {/* Payment info */}
+                <div className="bg-muted/50 rounded-lg p-4 space-y-3">
+                  <h3 className="font-semibold text-sm">Payment Information</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-1 text-xs">
+                    <div><span className="text-muted-foreground">Date:</span> <span className="font-medium">{viewingPayment.date}</span></div>
+                    <div><span className="text-muted-foreground">Job ID:</span> <span className="font-mono font-medium">{viewingPayment.jobId}</span></div>
+                    <div><span className="text-muted-foreground">Client/Vendor:</span> <span className="font-medium">{viewingPayment.clientVendorName}</span></div>
+                    <div><span className="text-muted-foreground">Direction:</span> <span className="font-medium">{viewingPayment.direction}</span></div>
+                    <div><span className="text-muted-foreground">Type:</span> <span className="font-medium">{viewingPayment.type}</span></div>
+                    <div><span className="text-muted-foreground">Method:</span> <span className="font-medium">{viewingPayment.paymentMethod || '—'}</span></div>
+                    <div><span className="text-muted-foreground">Reference #:</span> <span className="font-medium">{viewingPayment.referenceNumber || '—'}</span></div>
+                    <div><span className="text-muted-foreground">Amount (excl. tax):</span> <span className="font-mono font-medium">{formatCurrency(viewingPayment.amountExclTax)}</span></div>
+                    <div><span className="text-muted-foreground">Tax:</span> <span className="font-mono font-medium">{formatCurrency(viewingPayment.taxAmount)}</span></div>
+                    <div><span className="text-muted-foreground">Total (incl. tax):</span> <span className="font-mono font-semibold">{formatCurrency(viewingPayment.totalInclTax)}</span></div>
+                    {viewingPayment.notes && (
+                      <div className="col-span-2 md:col-span-3"><span className="text-muted-foreground">Notes:</span> <span className="font-medium">{viewingPayment.notes}</span></div>
+                    )}
+                  </div>
+                </div>
+
                 {/* Job Info */}
                 {deal && (
                   <div className="bg-muted/50 rounded-lg p-4 space-y-3">
@@ -338,7 +361,7 @@ export default function PaymentLedger() {
                 {/* All payments for this job */}
                 {jobPayments.length > 0 && (
                   <div>
-                    <h3 className="font-semibold text-sm mb-2">All Payments for Job {editForm.jobId}</h3>
+                    <h3 className="font-semibold text-sm mb-2">All Payments for Job {viewingPayment.jobId}</h3>
                     <div className="bg-card border rounded-md overflow-x-auto">
                       <table className="w-full text-xs">
                         <thead>
@@ -350,7 +373,7 @@ export default function PaymentLedger() {
                         </thead>
                         <tbody>
                           {jobPayments.map(jp => (
-                            <tr key={jp.id} className={`border-b ${jp.id === editingPayment.id ? 'bg-primary/10 font-medium' : 'hover:bg-muted/40'}`}>
+                            <tr key={jp.id} className={`border-b ${jp.id === viewingPayment.id ? 'bg-primary/10 font-medium' : 'hover:bg-muted/40'}`}>
                               <td className="px-2 py-1.5">{jp.date}</td>
                               <td className="px-2 py-1.5">{jp.direction}</td>
                               <td className="px-2 py-1.5">{jp.type}</td>
@@ -367,9 +390,28 @@ export default function PaymentLedger() {
                   </div>
                 )}
 
+                <div className="flex gap-2">
+                  <Button onClick={() => { const p = viewingPayment; setViewingPayment(null); openEdit(p); }}>Edit Payment</Button>
+                  <Button variant="outline" onClick={() => setViewingPayment(null)}>Close</Button>
+                </div>
+              </div>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Payment Dialog */}
+      <Dialog open={!!editingPayment} onOpenChange={open => { if (!open) setEditingPayment(null); }}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Payment</DialogTitle>
+          </DialogHeader>
+
+          {editingPayment && (() => {
+            return (
+              <div className="space-y-5">
                 {/* Edit form */}
                 <div>
-                  <h3 className="font-semibold text-sm mb-2">Edit Payment</h3>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                     <div><Label className="text-xs">Date</Label><Input className="input-blue mt-1" type="date" value={editForm.date} onChange={e => setEdit('date', e.target.value)} /></div>
                     <div>
