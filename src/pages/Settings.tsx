@@ -91,8 +91,9 @@ export default function Settings() {
           {isAdmin && <TabsTrigger value="estimator">Estimator</TabsTrigger>}
           <TabsTrigger value="statuses">Status Options</TabsTrigger>
           <TabsTrigger value="personnel">Personnel</TabsTrigger>
-          {isAdmin && <TabsTrigger value="users">Users & Access</TabsTrigger>}
-          <TabsTrigger value="data">Data</TabsTrigger>
+           {isAdmin && <TabsTrigger value="users">Users & Access</TabsTrigger>}
+           {isAdmin && <TabsTrigger value="crm">CRM</TabsTrigger>}
+           <TabsTrigger value="data">Data</TabsTrigger>
         </TabsList>
 
         {isAdmin && (
@@ -259,6 +260,12 @@ export default function Settings() {
         {isAdmin && (
           <TabsContent value="users" className="space-y-4">
             <UserManagement />
+          </TabsContent>
+        )}
+
+        {isAdmin && (
+          <TabsContent value="crm" className="space-y-4">
+            <CRMSettings />
           </TabsContent>
         )}
 
