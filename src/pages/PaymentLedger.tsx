@@ -5,31 +5,81 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { JobIdSelect } from '@/components/JobIdSelect';
 import { Checkbox } from '@/components/ui/checkbox';
 import { formatCurrency, getProvinceTax } from '@/lib/calculations';
 import { supabase } from '@/integrations/supabase/client';
 import type { PaymentEntry, PaymentDirection, PaymentType } from '@/types';
 import { toast } from 'sonner';
-import { Trash2 } from 'lucide-react';
+import { Pencil, Trash2 } from 'lucide-react';
 
 const DIRECTIONS: PaymentDirection[] = ['Client Payment IN', 'Vendor Payment OUT', 'Refund IN', 'Refund OUT'];
 const TYPES: PaymentType[] = ['Deposit', 'Progress Payment', 'Final Payment', 'Freight', 'Insulation', 'Drawings', 'Other'];
 
+const BLANK_FORM = {
+  date: new Date().toISOString().split('T')[0],
+  jobId: '', clientVendorName: '', direction: 'Client Payment IN' as PaymentDirection,
+  type: 'Deposit' as PaymentType, amountExclTax: '',
+  paymentMethod: '', referenceNumber: '', notes: '',
+};
+
 export default function PaymentLedger() {
-  const { payments, deals, addPayment, refreshData, deletePayment } = useAppContext();
+  const { payments, deals, addPayment, updatePayment, refreshData, deletePayment } = useAppContext();
   const [showForm, setShowForm] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncSummary, setSyncSummary] = useState('');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
-  const [form, setForm] = useState({
-    date: new Date().toISOString().split('T')[0],
-    jobId: '', clientVendorName: '', direction: 'Client Payment IN' as PaymentDirection,
-    type: 'Deposit' as PaymentType, amountExclTax: '',
-    paymentMethod: '', referenceNumber: '', notes: '',
-  });
+  const [form, setForm] = useState(BLANK_FORM);
+
+  // Edit state
+  const [editingPayment, setEditingPayment] = useState<PaymentEntry | null>(null);
+  const [editForm, setEditForm] = useState(BLANK_FORM);
 
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
+  const setEdit = (k: string, v: string) => setEditForm(f => ({ ...f, [k]: v }));
+
+  const openEdit = (p: PaymentEntry) => {
+    setEditingPayment(p);
+    setEditForm({
+      date: p.date,
+      jobId: p.jobId,
+      clientVendorName: p.clientVendorName,
+      direction: p.direction,
+      type: p.type,
+      amountExclTax: String(p.amountExclTax),
+      paymentMethod: p.paymentMethod,
+      referenceNumber: p.referenceNumber,
+      notes: p.notes,
+    });
+  };
+
+  const saveEdit = () => {
+    if (!editingPayment) return;
+    const amount = parseFloat(editForm.amountExclTax) || 0;
+    if (!editForm.jobId || !amount) { toast.error('Job ID and amount required'); return; }
+    const deal = deals.find(d => d.jobId === editForm.jobId);
+    const province = deal?.province || 'ON';
+    const prov = getProvinceTax(province);
+    const taxAmount = amount * prov.order_rate;
+    updatePayment(editingPayment.id, {
+      date: editForm.date,
+      jobId: editForm.jobId,
+      clientVendorName: editForm.clientVendorName,
+      direction: editForm.direction,
+      type: editForm.type,
+      amountExclTax: amount,
+      province,
+      taxRate: prov.order_rate,
+      taxAmount,
+      totalInclTax: amount + taxAmount,
+      paymentMethod: editForm.paymentMethod,
+      referenceNumber: editForm.referenceNumber,
+      notes: editForm.notes,
+    });
+    setEditingPayment(null);
+    toast.success('Payment updated');
+  };
 
   const confirmDelete = () => {
     if (!pendingDeleteId) return;
@@ -207,9 +257,14 @@ export default function PaymentLedger() {
                 <td className="px-3 py-2 text-xs">{p.paymentMethod}</td>
                 <td className="px-3 py-2 text-xs">{p.referenceNumber}</td>
                 <td className="px-3 py-2">
-                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive hover:text-destructive" onClick={() => setPendingDeleteId(p.id)}>
-                    <Trash2 className="h-3 w-3" />
-                  </Button>
+                  <div className="flex items-center gap-1">
+                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground" onClick={() => openEdit(p)}>
+                      <Pencil className="h-3 w-3" />
+                    </Button>
+                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive hover:text-destructive" onClick={() => setPendingDeleteId(p.id)}>
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -239,6 +294,118 @@ export default function PaymentLedger() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Edit Payment Dialog */}
+      <Dialog open={!!editingPayment} onOpenChange={open => { if (!open) setEditingPayment(null); }}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Payment</DialogTitle>
+          </DialogHeader>
+
+          {editingPayment && (() => {
+            const deal = deals.find(d => d.jobId === editForm.jobId);
+            const jobPayments = payments.filter(p => p.jobId === editForm.jobId);
+            const totalIn = jobPayments.filter(p => p.direction === 'Client Payment IN' || p.direction === 'Refund IN').reduce((s, p) => s + p.totalInclTax, 0);
+            const totalOut = jobPayments.filter(p => p.direction === 'Vendor Payment OUT' || p.direction === 'Refund OUT').reduce((s, p) => s + p.totalInclTax, 0);
+            return (
+              <div className="space-y-5">
+                {/* Job Info */}
+                {deal && (
+                  <div className="bg-muted/50 rounded-lg p-4 space-y-3">
+                    <h3 className="font-semibold text-sm">Job Information — {deal.jobId}</h3>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-1 text-xs">
+                      <div><span className="text-muted-foreground">Client:</span> <span className="font-medium">{deal.clientName}</span></div>
+                      <div><span className="text-muted-foreground">Job Name:</span> <span className="font-medium">{deal.jobName}</span></div>
+                      <div><span className="text-muted-foreground">Sales Rep:</span> <span className="font-medium">{deal.salesRep}</span></div>
+                      <div><span className="text-muted-foreground">Province:</span> <span className="font-medium">{deal.province}</span></div>
+                      <div><span className="text-muted-foreground">City:</span> <span className="font-medium">{deal.city}</span></div>
+                      <div><span className="text-muted-foreground">Deal Status:</span> <span className="font-medium">{deal.dealStatus}</span></div>
+                      <div><span className="text-muted-foreground">Payment Status:</span> <span className="font-medium">{deal.paymentStatus}</span></div>
+                      <div><span className="text-muted-foreground">Production:</span> <span className="font-medium">{deal.productionStatus}</span></div>
+                      <div><span className="text-muted-foreground">Date Signed:</span> <span className="font-medium">{deal.dateSigned}</span></div>
+                      <div><span className="text-muted-foreground">Delivery:</span> <span className="font-medium">{deal.deliveryDate || '—'}</span></div>
+                      <div><span className="text-muted-foreground">Size:</span> <span className="font-medium">{deal.width}×{deal.length}×{deal.height} ft</span></div>
+                      <div><span className="text-muted-foreground">Sq ft:</span> <span className="font-medium">{deal.sqft?.toLocaleString()}</span></div>
+                    </div>
+                    <div className="flex gap-6 pt-1 text-xs font-medium">
+                      <span className="text-green-600">Total IN: {formatCurrency(totalIn)}</span>
+                      <span className="text-red-500">Total OUT: {formatCurrency(totalOut)}</span>
+                      <span className="text-muted-foreground">Net: {formatCurrency(totalIn - totalOut)}</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* All payments for this job */}
+                {jobPayments.length > 0 && (
+                  <div>
+                    <h3 className="font-semibold text-sm mb-2">All Payments for Job {editForm.jobId}</h3>
+                    <div className="bg-card border rounded-md overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="bg-muted text-muted-foreground">
+                            {['Date','Direction','Type','Amount','Tax','Total','Method','Ref #'].map(h => (
+                              <th key={h} className="px-2 py-1.5 text-left font-medium whitespace-nowrap">{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {jobPayments.map(jp => (
+                            <tr key={jp.id} className={`border-b ${jp.id === editingPayment.id ? 'bg-primary/10 font-medium' : 'hover:bg-muted/40'}`}>
+                              <td className="px-2 py-1.5">{jp.date}</td>
+                              <td className="px-2 py-1.5">{jp.direction}</td>
+                              <td className="px-2 py-1.5">{jp.type}</td>
+                              <td className="px-2 py-1.5 font-mono">{formatCurrency(jp.amountExclTax)}</td>
+                              <td className="px-2 py-1.5 font-mono">{formatCurrency(jp.taxAmount)}</td>
+                              <td className="px-2 py-1.5 font-mono">{formatCurrency(jp.totalInclTax)}</td>
+                              <td className="px-2 py-1.5">{jp.paymentMethod}</td>
+                              <td className="px-2 py-1.5">{jp.referenceNumber}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Edit form */}
+                <div>
+                  <h3 className="font-semibold text-sm mb-2">Edit Payment</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    <div><Label className="text-xs">Date</Label><Input className="input-blue mt-1" type="date" value={editForm.date} onChange={e => setEdit('date', e.target.value)} /></div>
+                    <div>
+                      <Label className="text-xs">Job ID</Label>
+                      <JobIdSelect value={editForm.jobId} onValueChange={v => setEdit('jobId', v)} deals={deals} />
+                    </div>
+                    <div><Label className="text-xs">Client/Vendor Name</Label><Input className="input-blue mt-1" value={editForm.clientVendorName} onChange={e => setEdit('clientVendorName', e.target.value)} /></div>
+                    <div>
+                      <Label className="text-xs">Direction</Label>
+                      <Select value={editForm.direction} onValueChange={v => setEdit('direction', v)}>
+                        <SelectTrigger className="input-blue mt-1"><SelectValue /></SelectTrigger>
+                        <SelectContent>{DIRECTIONS.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label className="text-xs">Type</Label>
+                      <Select value={editForm.type} onValueChange={v => setEdit('type', v)}>
+                        <SelectTrigger className="input-blue mt-1"><SelectValue /></SelectTrigger>
+                        <SelectContent>{TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </div>
+                    <div><Label className="text-xs">Amount (excl. tax)</Label><Input className="input-blue mt-1" value={editForm.amountExclTax} onChange={e => setEdit('amountExclTax', e.target.value)} /></div>
+                    <div><Label className="text-xs">Method</Label><Input className="input-blue mt-1" value={editForm.paymentMethod} onChange={e => setEdit('paymentMethod', e.target.value)} /></div>
+                    <div><Label className="text-xs">Reference #</Label><Input className="input-blue mt-1" value={editForm.referenceNumber} onChange={e => setEdit('referenceNumber', e.target.value)} /></div>
+                    <div className="col-span-2 md:col-span-3"><Label className="text-xs">Notes</Label><Input className="input-blue mt-1" value={editForm.notes} onChange={e => setEdit('notes', e.target.value)} /></div>
+                  </div>
+                  <div className="flex gap-2 mt-4">
+                    <Button onClick={saveEdit}>Save Changes</Button>
+                    <Button variant="outline" onClick={() => setEditingPayment(null)}>Cancel</Button>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
