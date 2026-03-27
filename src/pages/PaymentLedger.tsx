@@ -6,9 +6,9 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { formatCurrency, getProvinceTax } from '@/lib/calculations';
+import { supabase } from '@/integrations/supabase/client';
 import type { PaymentEntry, PaymentDirection, PaymentType } from '@/types';
 import { toast } from 'sonner';
-import { qbDedupePrompt, qbTransactionMappingPrompt } from '@/lib/qboSyncPrompts';
 
 const DIRECTIONS: PaymentDirection[] = ['Client Payment IN', 'Vendor Payment OUT', 'Refund IN', 'Refund OUT'];
 const TYPES: PaymentType[] = ['Deposit', 'Progress Payment', 'Final Payment', 'Freight', 'Insulation', 'Drawings', 'Other'];
@@ -50,12 +50,6 @@ export default function PaymentLedger() {
   };
 
   const syncQuickBooks = async () => {
-    const url = import.meta.env.VITE_LOVABLE_QBO_SYNC_URL as string | undefined;
-    if (!url) {
-      toast.error('QuickBooks sync is not configured (missing VITE_LOVABLE_QBO_SYNC_URL).');
-      return;
-    }
-
     setSyncing(true);
     setSyncSummary('');
     try {
@@ -63,46 +57,27 @@ export default function PaymentLedger() {
         payments.map(p => `${p.jobId}|${p.date}|${p.direction}|${p.type}|${p.amountExclTax}|${p.referenceNumber}`)
       );
 
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jobs: deals.map(d => ({
-            jobId: d.jobId,
-            clientName: d.clientName,
-            clientId: d.clientId,
-            province: d.province,
-          })),
-          prompts: {
-            mapping: qbTransactionMappingPrompt,
-            dedupe: qbDedupePrompt,
-          },
-        }),
+      const { data, error } = await supabase.functions.invoke('qbo-sync', {
+        body: { action: 'sync' },
       });
 
-      if (!res.ok) {
-        const text = await res.text().catch(() => '');
-        throw new Error(`Sync failed (${res.status}): ${text || res.statusText}`);
-      }
+      if (error) throw new Error(error.message);
 
-      const data = await res.json();
-
-      // Option A: backend returns proposed payments to insert.
       const incoming = Array.isArray(data?.payments) ? data.payments : [];
       if (incoming.length > 0) {
         let inserted = 0;
         let skipped = 0;
 
         for (const item of incoming) {
-          const jobId = item.jobId ?? item.job_id ?? null;
+          const jobId = item.jobId ?? item.job_id ?? '';
           const direction = item.direction;
           const type = item.type;
           const date = item.date ?? new Date().toISOString().split('T')[0];
           const referenceNumber = (item.referenceNumber ?? item.reference_number ?? '') as string;
           const clientVendorName = (item.clientVendorName ?? item.client_vendor_name ?? '') as string;
 
-          const amountExclTax = Number(item.amountExclTax ?? item.amount_excl_tax ?? null);
-          if (!jobId || !direction || !type || !Number.isFinite(amountExclTax) || amountExclTax <= 0) {
+          const amountExclTax = Number(item.amountExclTax ?? item.amount_excl_tax ?? 0);
+          if (!direction || !type || !Number.isFinite(amountExclTax) || amountExclTax <= 0) {
             skipped++;
             continue;
           }
@@ -111,14 +86,8 @@ export default function PaymentLedger() {
           const province = (item.province ?? deal?.province ?? 'ON') as string;
           const prov = getProvinceTax(province);
 
-          const taxAmount =
-            typeof item.taxAmount === 'number'
-              ? item.taxAmount
-              : amountExclTax * prov.order_rate;
-          const totalInclTax =
-            typeof item.totalInclTax === 'number'
-              ? item.totalInclTax
-              : amountExclTax + taxAmount;
+          const taxAmount = typeof item.taxAmount === 'number' ? item.taxAmount : amountExclTax * prov.order_rate;
+          const totalInclTax = typeof item.totalInclTax === 'number' ? item.totalInclTax : amountExclTax + taxAmount;
 
           const key = `${jobId}|${date}|${direction}|${type}|${amountExclTax}|${referenceNumber}`;
           if (existingKeys.has(key)) {
@@ -127,20 +96,10 @@ export default function PaymentLedger() {
           }
 
           const entry: PaymentEntry = {
-            id: crypto.randomUUID(),
-            date,
-            jobId,
-            clientVendorName,
-            direction,
-            type,
-            amountExclTax,
-            province,
-            taxRate: prov.order_rate,
-            taxAmount,
-            totalInclTax,
+            id: crypto.randomUUID(), date, jobId, clientVendorName, direction, type,
+            amountExclTax, province, taxRate: prov.order_rate, taxAmount, totalInclTax,
             paymentMethod: (item.paymentMethod ?? item.payment_method ?? '') as string,
-            referenceNumber,
-            qbSynced: true,
+            referenceNumber, qbSynced: true,
             notes: (item.notes ?? '') as string,
           };
 
@@ -149,14 +108,13 @@ export default function PaymentLedger() {
           inserted++;
         }
 
-        setSyncSummary(`Inserted ${inserted}. Skipped ${skipped}.`);
+        setSyncSummary(`Inserted ${inserted}. Skipped ${skipped}. (${data.summary?.paymentsIn ?? 0} payments in, ${data.summary?.paymentsOut ?? 0} payments out from QBO)`);
         toast.success('QuickBooks sync complete');
         return;
       }
 
-      // Option B: backend already updated Supabase; refresh local state.
       await refreshData();
-      setSyncSummary('Sync complete (ledger refreshed).');
+      setSyncSummary('Sync complete — no new transactions found.');
       toast.success('QuickBooks sync complete');
     } catch (e) {
       const message = e instanceof Error ? e.message : 'QuickBooks sync failed';
