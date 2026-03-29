@@ -14,6 +14,7 @@ import type { Quote } from '@/types';
 import { toast } from 'sonner';
 import { MapPin } from 'lucide-react';
 import { PersonnelSelect } from '@/components/PersonnelSelect';
+import { Switch } from '@/components/ui/switch';
 
 export default function QuoteBuilder() {
   const { addQuote, deals } = useAppContext();
@@ -35,6 +36,18 @@ export default function QuoteBuilder() {
 
   const [quote, setQuote] = useState<Quote | null>(null);
   const [freightSource, setFreightSource] = useState('');
+  const [singleSlope, setSingleSlope] = useState(false);
+  const [leftEaveHeight, setLeftEaveHeight] = useState('14');
+  const [rightEaveHeight, setRightEaveHeight] = useState('14');
+
+  const handleEaveHeightChange = (side: 'left' | 'right', value: string) => {
+    const left = side === 'left' ? value : leftEaveHeight;
+    const right = side === 'right' ? value : rightEaveHeight;
+    if (side === 'left') setLeftEaveHeight(value);
+    else setRightEaveHeight(value);
+    const maxH = Math.max(parseFloat(left) || 0, parseFloat(right) || 0);
+    set('height', maxH > 0 ? String(maxH) : '14');
+  };
 
   const set = (key: string, val: string) => setForm(f => ({ ...f, [key]: val }));
 
@@ -105,6 +118,8 @@ export default function QuoteBuilder() {
       address: form.address,
       postalCode: form.postalCode,
       width: w, length: l, height: h,
+      ...(singleSlope ? { leftEaveHeight: parseFloat(leftEaveHeight) || h, rightEaveHeight: parseFloat(rightEaveHeight) || h, isSingleSlope: true } : {}),
+      pitch: parseFloat(form.pitch) || 1,
       sqft, weight,
       baseSteelCost, steelAfter12, markup, adjustedSteel,
       engineering, foundation,
@@ -175,8 +190,28 @@ export default function QuoteBuilder() {
           <div className="grid grid-cols-3 gap-3">
             <div><Label className="text-xs">Width (ft)</Label><Input className="input-blue mt-1" value={form.width} onChange={e => set('width', e.target.value)} /></div>
             <div><Label className="text-xs">Length (ft)</Label><Input className="input-blue mt-1" value={form.length} onChange={e => set('length', e.target.value)} /></div>
-            <div><Label className="text-xs">Height (ft)</Label><Input className="input-blue mt-1" value={form.height} onChange={e => set('height', e.target.value)} /></div>
+            {!singleSlope ? (
+              <div><Label className="text-xs">Height (ft)</Label><Input className="input-blue mt-1" value={form.height} onChange={e => set('height', e.target.value)} /></div>
+            ) : (
+              <div><Label className="text-xs">Max Height (auto)</Label><Input className="input-blue mt-1 opacity-60" value={form.height} readOnly /></div>
+            )}
           </div>
+          <div className="flex items-center gap-3">
+            <Switch checked={singleSlope} onCheckedChange={v => { setSingleSlope(v); if (!v) { setLeftEaveHeight('14'); setRightEaveHeight('14'); } }} />
+            <Label className="text-xs">Different Eave Heights</Label>
+          </div>
+          {singleSlope && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs">Left Eave Height (ft)</Label>
+                <Input className="input-blue mt-1" value={leftEaveHeight} onChange={e => handleEaveHeightChange('left', e.target.value)} />
+              </div>
+              <div>
+                <Label className="text-xs">Right Eave Height (ft)</Label>
+                <Input className="input-blue mt-1" value={rightEaveHeight} onChange={e => handleEaveHeightChange('right', e.target.value)} />
+              </div>
+            </div>
+          )}
           <div className="grid grid-cols-3 gap-3">
             <div><Label className="text-xs">Roof Pitch (:12)</Label><Input className="input-blue mt-1" value={form.pitch} onChange={e => set('pitch', e.target.value)} placeholder="1" /></div>
           </div>
@@ -238,7 +273,7 @@ export default function QuoteBuilder() {
               <p className="text-xs text-muted-foreground">Client ID: {quote.clientId}    Job ID: {quote.jobId}</p>
               <p className="text-xs text-muted-foreground">Job Name: {quote.jobName}</p>
               <p className="text-xs text-muted-foreground">Location: {quote.city}, {quote.province} {quote.postalCode}</p>
-              <p className="text-xs text-muted-foreground">Building: {quote.width}&apos; × {quote.length}&apos; × {quote.height}&apos; | Pitch: {form.pitch}:12 | {formatNumber(quote.sqft)} sqft | {formatNumber(quote.weight)} lbs</p>
+              <p className="text-xs text-muted-foreground">Building: {quote.width}&apos; × {quote.length}&apos; × {quote.height}&apos; | Pitch: {form.pitch}:12 | {formatNumber(quote.sqft)} sqft | {formatNumber(quote.weight)} lbs{singleSlope && ` | Eaves: ${leftEaveHeight}′ / ${rightEaveHeight}′`}</p>
               <br />
               <Row2 label="Base Steel Cost" value={quote.adjustedSteel} />
               <Row2 label="Engineering Fee" value={quote.engineering} />

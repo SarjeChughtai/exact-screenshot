@@ -258,6 +258,7 @@ export default function QuickEstimator() {
       clientId: clientId || '',
       salesRep: rep,
       width: w, length: l, height: h, pitch: p,
+      ...(singleSlope ? { leftEaveHeight: parseFloat(leftEaveHeight) || h, rightEaveHeight: parseFloat(rightEaveHeight) || h } : {}),
       province,
       grandTotal: result.grandTotal,
       sqft: result.sqft,
@@ -322,6 +323,8 @@ export default function QuickEstimator() {
       address: '',
       postalCode,
       width: w, length: l, height: h,
+      ...(singleSlope ? { leftEaveHeight: parseFloat(leftEaveHeight) || h, rightEaveHeight: parseFloat(rightEaveHeight) || h, isSingleSlope: true } : {}),
+      pitch: parseFloat(pitch) || 1,
       sqft: result.sqft, weight: result.weight,
       baseSteelCost,
       steelAfter12,
@@ -362,6 +365,7 @@ export default function QuickEstimator() {
       province,
       city,
       postalCode,
+      ...(singleSlope ? { leftEaveHeight, rightEaveHeight } : {}),
     });
     navigate(`/quote-rfq?${params.toString()}`);
   };

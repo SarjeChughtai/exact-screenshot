@@ -49,6 +49,8 @@ export default function QuoteRFQ() {
     width: '',
     length: '',
     height: '',
+    leftEaveHeight: '',
+    rightEaveHeight: '',
     roofPitch: '',
     salesRep: '',
     estimator: '',
@@ -76,6 +78,8 @@ export default function QuoteRFQ() {
         width: searchParams.get('width') || f.width,
         length: searchParams.get('length') || f.length,
         height: searchParams.get('height') || f.height,
+        leftEaveHeight: searchParams.get('leftEaveHeight') || f.leftEaveHeight,
+        rightEaveHeight: searchParams.get('rightEaveHeight') || f.rightEaveHeight,
         roofPitch: searchParams.get('pitch') ? `${searchParams.get('pitch')}:12` : f.roofPitch,
         province: searchParams.get('province') || f.province,
         city: searchParams.get('city') || f.city,
@@ -193,7 +197,7 @@ export default function QuoteRFQ() {
     win.document.write(`<div class="section"><h3>Building Dimensions</h3>
       <div class="row"><span class="label">Width:</span><span>${form.width} ft</span></div>
       <div class="row"><span class="label">Length:</span><span>${form.length} ft</span></div>
-      <div class="row"><span class="label">Height:</span><span>${form.height} ft</span></div>
+      <div class="row"><span class="label">Eave Height:</span><span>${form.leftEaveHeight && form.rightEaveHeight && form.leftEaveHeight !== form.rightEaveHeight ? `${form.leftEaveHeight} ft (L) / ${form.rightEaveHeight} ft (R)` : `${form.height} ft`}</span></div>
       <div class="row"><span class="label">Roof Pitch:</span><span>${form.roofPitch}</span></div>
     </div>`);
 
@@ -295,9 +299,15 @@ export default function QuoteRFQ() {
             <div className="grid grid-cols-4 gap-3">
               <div><Label className="text-xs">Width (ft)</Label><Input className="input-blue mt-1" type="number" value={form.width} onChange={e => set('width', e.target.value)} /></div>
               <div><Label className="text-xs">Length (ft)</Label><Input className="input-blue mt-1" type="number" value={form.length} onChange={e => set('length', e.target.value)} /></div>
-              <div><Label className="text-xs">Height (ft)</Label><Input className="input-blue mt-1" type="number" value={form.height} onChange={e => set('height', e.target.value)} /></div>
+              <div><Label className="text-xs">Eave Height (ft)</Label><Input className="input-blue mt-1" type="number" value={form.height} onChange={e => set('height', e.target.value)} /></div>
               <div><Label className="text-xs">Roof Pitch</Label><Input className="input-blue mt-1" value={form.roofPitch} onChange={e => set('roofPitch', e.target.value)} placeholder="e.g. 1:12" /></div>
             </div>
+            {form.leftEaveHeight && form.rightEaveHeight && form.leftEaveHeight !== form.rightEaveHeight && (
+              <div className="grid grid-cols-2 gap-3">
+                <div><Label className="text-xs">Left Eave Height (ft)</Label><Input className="input-blue mt-1" type="number" value={form.leftEaveHeight} onChange={e => set('leftEaveHeight', e.target.value)} /></div>
+                <div><Label className="text-xs">Right Eave Height (ft)</Label><Input className="input-blue mt-1" type="number" value={form.rightEaveHeight} onChange={e => set('rightEaveHeight', e.target.value)} /></div>
+              </div>
+            )}
           </div>
 
           {/* Openings */}

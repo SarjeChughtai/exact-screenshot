@@ -19,6 +19,8 @@ interface SavedEstimate {
   width: number;
   length: number;
   height: number;
+  leftEaveHeight?: number;
+  rightEaveHeight?: number;
   pitch: number;
   province: string;
   grandTotal: number;
@@ -76,6 +78,8 @@ export default function EstimatesLog() {
       width: est.width,
       length: est.length,
       height: est.height,
+      ...(est.leftEaveHeight != null && est.rightEaveHeight != null ? { leftEaveHeight: est.leftEaveHeight, rightEaveHeight: est.rightEaveHeight, isSingleSlope: true } : {}),
+      pitch: est.pitch,
       sqft: est.sqft,
       weight: r.weight || 0,
       baseSteelCost: r.steelCost || 0,
@@ -134,7 +138,7 @@ export default function EstimatesLog() {
                   <td className="px-3 py-2 text-xs">{est.date}</td>
                   <td className="px-3 py-2">{est.clientName}</td>
                   <td className="px-3 py-2 text-xs">{est.salesRep}</td>
-                  <td className="px-3 py-2 text-xs">{est.width}×{est.length}×{est.height}</td>
+                  <td className="px-3 py-2 text-xs">{est.width}×{est.length}×{est.height}{est.leftEaveHeight && est.rightEaveHeight && est.leftEaveHeight !== est.rightEaveHeight ? ` (${est.leftEaveHeight}′/${est.rightEaveHeight}′)` : ''}</td>
                   <td className="px-3 py-2 font-mono">{formatNumber(est.sqft)}</td>
                   <td className="px-3 py-2 font-mono">{formatCurrency(est.estimatedTotal)}</td>
                   <td className="px-3 py-2 font-mono font-semibold">{formatCurrency(est.grandTotal)}</td>
