@@ -90,10 +90,9 @@ const menuGroups: MenuGroup[] = [
     ],
   },
   {
-    label: 'Manufacturer',
+    label: 'Vendor Portal',
     items: [
-      { path: '/manufacturer-rfq-board', label: 'RFQ Board', icon: Factory, module: 'manufacturer-rfq-board' },
-      { path: '/manufacturer-portal', label: 'Bid Portal', icon: Store, module: 'manufacturer-portal' },
+      { path: '/vendor-board', label: 'Quote Board', icon: Factory, module: 'vendor-board' },
     ],
   },
   {

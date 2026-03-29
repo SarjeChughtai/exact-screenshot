@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, ReactNode, useCallback, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 
-export type UserRole = 'admin' | 'owner' | 'accounting' | 'operations' | 'sales_rep' | 'freight' | 'dealer' | 'manufacturer';
+export type UserRole = 'admin' | 'owner' | 'accounting' | 'operations' | 'sales_rep' | 'freight' | 'dealer' | 'manufacturer' | 'construction';
 
 export interface UserProfile {
   id: string;
@@ -46,8 +46,7 @@ const MODULE_ACCESS: Record<string, UserRole[]> = {
   'dealer-log': ['admin', 'owner', 'dealer'],
   'draft-log': ['admin', 'owner'],
   'master-data': ['owner'],
-  'manufacturer-rfq-board': ['admin', 'owner', 'operations'],
-  'manufacturer-portal': ['admin', 'owner', 'manufacturer'],
+  'vendor-board': ['admin', 'owner', 'operations', 'freight', 'manufacturer', 'construction'],
 };
 
 const RoleContext = createContext<RoleContextType | null>(null);
@@ -110,9 +109,10 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   accounting: 'Accounting',
   operations: 'Operations',
   sales_rep: 'Sales Rep',
-  freight: 'Freight',
+  freight: 'Freight Carrier',
   dealer: 'Dealer',
-  manufacturer: 'Manufacturer',
+  manufacturer: 'Steel Manufacturer',
+  construction: 'Construction',
 };
 
-export const ALL_ROLES: UserRole[] = ['admin', 'owner', 'accounting', 'operations', 'sales_rep', 'freight', 'dealer', 'manufacturer'];
+export const ALL_ROLES: UserRole[] = ['admin', 'owner', 'accounting', 'operations', 'sales_rep', 'freight', 'dealer', 'manufacturer', 'construction'];

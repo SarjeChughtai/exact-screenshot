@@ -41,6 +41,7 @@ import DraftLog from "@/pages/DraftLog";
 import MasterData from "@/pages/MasterData";
 import Clients from "@/pages/Clients";
 import Vendors from "@/pages/Vendors";
+import VendorQuoteBoard from "@/pages/VendorQuoteBoard";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -92,6 +93,7 @@ const App = () => (
                           <Route path="/master-data" element={<MasterData />} />
                           <Route path="/clients" element={<Clients />} />
                           <Route path="/vendors" element={<Vendors />} />
+                          <Route path="/vendor-board" element={<VendorQuoteBoard />} />
                           <Route path="*" element={<NotFound />} />
                         </Routes>
                       </Layout>

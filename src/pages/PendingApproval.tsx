@@ -10,11 +10,16 @@ import { toast } from 'sonner';
 import { Building2, Clock, CheckCircle2, XCircle, RefreshCw, LogOut } from 'lucide-react';
 
 const REQUESTABLE_ROLES = [
-  { value: 'accounting', label: 'Accounting' },
-  { value: 'operations', label: 'Operations' },
-  { value: 'sales_rep', label: 'Sales Rep' },
-  { value: 'freight', label: 'Freight' },
-  { value: 'dealer', label: 'Dealer' },
+  // Internal Staff
+  { value: 'accounting', label: 'Internal: Accounting' },
+  { value: 'operations', label: 'Internal: Operations' },
+  { value: 'sales_rep', label: 'Internal: Sales Rep' },
+  // Dealers
+  { value: 'dealer', label: 'Dealer Portal' },
+  // Vendors
+  { value: 'freight', label: 'Vendor: Freight Carrier' },
+  { value: 'manufacturer', label: 'Vendor: Steel Manufacturer' },
+  { value: 'construction', label: 'Vendor: Construction' },
 ];
 
 interface AccessRequest {
@@ -56,47 +61,7 @@ export default function PendingApproval() {
     setChecking(false);
   }, [user?.id]);
 
-  // Auto-submit an access request as soon as we know there isn't one yet.
-  // This removes the need for the user to fill in a form — they see a
-  // "we got your request" screen immediately after signing in with Google.
-  useEffect(() => {
-    if (!user || checking || accessRequest !== null) return;
-    // accessRequest is null (confirmed no existing request) — auto-submit.
-    const autoSubmit = async () => {
-      setSubmitting(true);
-      setAutoSubmitError(false);
-      const displayName =
-        user.user_metadata?.full_name ||
-        user.user_metadata?.name ||
-        user.email ||
-        '';
-
-      // `requestedRole` is captured once at mount from localStorage; we
-      // intentionally omit it from the dep array so this effect only fires
-      // once when the check resolves to null, not on every role dropdown change.
-      const roleToRequest = requestedRole;
-
-      const { error } = await supabase.from('access_requests').insert({
-        user_id: user.id,
-        email: user.email || '',
-        name: displayName,
-        requested_role: roleToRequest as any,
-        status: 'pending',
-      });
-
-      setSubmitting(false);
-
-      if (error) {
-        setAutoSubmitError(true);
-        toast.error('Failed to submit access request. Please try again.');
-      } else {
-        checkAccessRequest();
-      }
-    };
-
-    autoSubmit();
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally run once when check resolves to null; requestedRole is stable (set from localStorage at mount)
-  }, [user, checking, accessRequest]);
+  // No auto-submit. The user must actively choose their role via the form.
 
   useEffect(() => {
     checkAccessRequest();
@@ -175,25 +140,31 @@ export default function PendingApproval() {
         </CardHeader>
         <CardContent className="space-y-4">
 
-          {/* No request yet — auto-submitting, show a brief spinner or error */}
+          {/* No request yet — show selection form */}
           {!accessRequest && (
-            <div className="flex flex-col items-center gap-3 rounded-lg border bg-muted/40 p-5 text-center">
-              {autoSubmitError ? (
-                <>
-                  <XCircle className="h-8 w-8 text-red-500" />
-                  <p className="text-sm text-muted-foreground">
-                    Could not submit your access request. Please try again.
-                  </p>
-                  <Button size="sm" onClick={() => { setAutoSubmitError(false); checkAccessRequest(); }} disabled={submitting}>
-                    Retry
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-                  <p className="text-sm text-muted-foreground">Submitting your access request…</p>
-                </>
-              )}
+            <div className="space-y-4 pt-2">
+              <div className="text-center mb-6">
+                <p className="font-medium text-lg">Welcome!</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Please select the portal you need access to. An administrator will review your request.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="role-select">Requested Portal</Label>
+                <Select value={requestedRole} onValueChange={setRequestedRole}>
+                  <SelectTrigger id="role-select"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {REQUESTABLE_ROLES.map(r => (
+                      <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <Button className="w-full mt-4" onClick={handleSubmitRequest} disabled={submitting}>
+                {submitting ? 'Submitting...' : 'Send Access Request'}
+              </Button>
             </div>
           )}
 

@@ -2,6 +2,7 @@ import { useAppContext } from '@/context/AppContext';
 import { useRoles } from '@/context/RoleContext';
 import { formatCurrency } from '@/lib/calculations';
 import { BarChart3, Briefcase, DollarSign, TrendingUp, Clock, CheckCircle2, AlertCircle, CreditCard } from 'lucide-react';
+import { Navigate } from 'react-router-dom';
 
 const PIPELINE_STAGES = ['Lead', 'Quoted', 'Pending Payment', 'In Progress', 'In Production', 'Shipped', 'Delivered', 'Complete'] as const;
 const PIPELINE_STAGE_LABELS: Record<string, string> = {
@@ -21,6 +22,14 @@ const STAGE_COLORS: Record<string, string> = {
 export default function Dashboard() {
   const { quotes, deals, payments, freight, internalCosts } = useAppContext();
   const { currentUser, hasAnyRole } = useRoles();
+
+  if (hasAnyRole('freight', 'manufacturer', 'construction')) {
+     return <Navigate to="/vendor-board" replace />;
+  }
+
+  if (hasAnyRole('dealer')) {
+     return <Navigate to="/dealer-rfq" replace />;
+  }
 
   const isSalesRep = !hasAnyRole('admin', 'owner', 'accounting', 'operations', 'freight');
 

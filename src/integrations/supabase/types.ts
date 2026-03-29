@@ -14,252 +14,6 @@ export type Database = {
   }
   public: {
     Tables: {
-      ai_provider_settings: {
-        Row: {
-          id: string
-          user_id: string
-          provider: string
-          api_key: string
-          base_url: string | null
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          provider?: string
-          api_key?: string
-          base_url?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          provider?: string
-          api_key?: string
-          base_url?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Relationships: []
-      }
-      cost_data: {
-        Row: {
-          id: string
-          project_id: string | null
-          description: string
-          category: string
-          quantity: number
-          unit_price: number
-          total: number
-          vendor: string
-          date: string | null
-          source_document: string
-          imported_at: string
-          imported_by: string | null
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          project_id?: string | null
-          description?: string
-          category?: string
-          quantity?: number
-          unit_price?: number
-          total?: number
-          vendor?: string
-          date?: string | null
-          source_document?: string
-          imported_at?: string
-          imported_by?: string | null
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          project_id?: string | null
-          description?: string
-          category?: string
-          quantity?: number
-          unit_price?: number
-          total?: number
-          vendor?: string
-          date?: string | null
-          source_document?: string
-          imported_at?: string
-          imported_by?: string | null
-          created_at?: string
-        }
-        Relationships: []
-      }
-      import_history: {
-        Row: {
-          id: string
-          user_id: string
-          filename: string
-          provider_used: string
-          items_imported: number
-          total_amount: number
-          status: string
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          filename?: string
-          provider_used?: string
-          items_imported?: number
-          total_amount?: number
-          status?: string
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          filename?: string
-          provider_used?: string
-          items_imported?: number
-          total_amount?: number
-          status?: string
-          created_at?: string
-        }
-        Relationships: []
-      }
-      quote_files: {
-        Row: {
-          id: string
-          job_id: string
-          client_name: string
-          client_id: string
-          file_type: string
-          file_name: string
-          file_size: number
-          storage_path: string
-          gdrive_file_id: string | null
-          gdrive_status: string
-          uploaded_by: string | null
-          building_label: string
-          ai_output: Record<string, unknown> | null
-          extraction_source: string
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          job_id?: string
-          client_name?: string
-          client_id?: string
-          file_type?: string
-          file_name?: string
-          file_size?: number
-          storage_path?: string
-          gdrive_file_id?: string | null
-          gdrive_status?: string
-          uploaded_by?: string | null
-          building_label?: string
-          ai_output?: Record<string, unknown> | null
-          extraction_source?: string
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          job_id?: string
-          client_name?: string
-          client_id?: string
-          file_type?: string
-          file_name?: string
-          file_size?: number
-          storage_path?: string
-          gdrive_file_id?: string | null
-          gdrive_status?: string
-          uploaded_by?: string | null
-          building_label?: string
-          ai_output?: Record<string, unknown> | null
-          extraction_source?: string
-          created_at?: string
-        }
-        Relationships: []
-      }
-      steel_cost_entries: {
-        Row: {
-          id: string
-          quote_file_id: string | null
-          job_id: string
-          client_name: string
-          client_id: string
-          building_label: string
-          document_type: string
-          file_name: string
-          weight_lbs: number
-          cost_per_lb: number
-          total_cost: number
-          width: number | null
-          length: number | null
-          height: number | null
-          roof_pitch: number | null
-          province: string | null
-          city: string | null
-          components: Record<string, unknown>[] | null
-          insulation_total: number
-          insulation_grade: string | null
-          extraction_source: string
-          ai_raw_output: Record<string, unknown> | null
-          uploaded_by: string | null
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          quote_file_id?: string | null
-          job_id?: string
-          client_name?: string
-          client_id?: string
-          building_label?: string
-          document_type?: string
-          file_name?: string
-          weight_lbs?: number
-          cost_per_lb?: number
-          total_cost?: number
-          width?: number | null
-          length?: number | null
-          height?: number | null
-          roof_pitch?: number | null
-          province?: string | null
-          city?: string | null
-          components?: Record<string, unknown>[] | null
-          insulation_total?: number
-          insulation_grade?: string | null
-          extraction_source?: string
-          ai_raw_output?: Record<string, unknown> | null
-          uploaded_by?: string | null
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          quote_file_id?: string | null
-          job_id?: string
-          client_name?: string
-          client_id?: string
-          building_label?: string
-          document_type?: string
-          file_name?: string
-          weight_lbs?: number
-          cost_per_lb?: number
-          total_cost?: number
-          width?: number | null
-          length?: number | null
-          height?: number | null
-          roof_pitch?: number | null
-          province?: string | null
-          city?: string | null
-          components?: Record<string, unknown>[] | null
-          insulation_total?: number
-          insulation_grade?: string | null
-          extraction_source?: string
-          ai_raw_output?: Record<string, unknown> | null
-          uploaded_by?: string | null
-          created_at?: string
-        }
-        Relationships: []
-      }
       access_requests: {
         Row: {
           created_at: string
@@ -296,36 +50,117 @@ export type Database = {
         }
         Relationships: []
       }
-      notifications: {
+      ai_provider_settings: {
         Row: {
+          api_key: string
+          base_url: string | null
           created_at: string
           id: string
-          link: string | null
-          message: string
-          read: boolean
-          title: string
-          type: string
+          provider: string
+          updated_at: string
           user_id: string
         }
         Insert: {
+          api_key?: string
+          base_url?: string | null
           created_at?: string
           id?: string
-          link?: string | null
-          message?: string
-          read?: boolean
-          title: string
-          type?: string
+          provider?: string
+          updated_at?: string
           user_id: string
         }
         Update: {
+          api_key?: string
+          base_url?: string | null
           created_at?: string
           id?: string
-          link?: string | null
-          message?: string
-          read?: boolean
-          title?: string
-          type?: string
+          provider?: string
+          updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      clients: {
+        Row: {
+          client_id: string | null
+          client_name: string
+          contact_email: string
+          contact_phone: string
+          created_at: string
+          id: string
+          job_ids: string[]
+          name: string
+          notes: string
+        }
+        Insert: {
+          client_id?: string | null
+          client_name?: string
+          contact_email?: string
+          contact_phone?: string
+          created_at?: string
+          id?: string
+          job_ids?: string[]
+          name?: string
+          notes?: string
+        }
+        Update: {
+          client_id?: string | null
+          client_name?: string
+          contact_email?: string
+          contact_phone?: string
+          created_at?: string
+          id?: string
+          job_ids?: string[]
+          name?: string
+          notes?: string
+        }
+        Relationships: []
+      }
+      cost_data: {
+        Row: {
+          category: string
+          created_at: string
+          date: string | null
+          description: string
+          id: string
+          imported_at: string
+          imported_by: string | null
+          project_id: string | null
+          quantity: number
+          source_document: string
+          total: number
+          unit_price: number
+          vendor: string
+        }
+        Insert: {
+          category?: string
+          created_at?: string
+          date?: string | null
+          description?: string
+          id?: string
+          imported_at?: string
+          imported_by?: string | null
+          project_id?: string | null
+          quantity?: number
+          source_document?: string
+          total?: number
+          unit_price?: number
+          vendor?: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          date?: string | null
+          description?: string
+          id?: string
+          imported_at?: string
+          imported_by?: string | null
+          project_id?: string | null
+          quantity?: number
+          source_document?: string
+          total?: number
+          unit_price?: number
+          vendor?: string
         }
         Relationships: []
       }
@@ -562,6 +397,135 @@ export type Database = {
         }
         Relationships: []
       }
+      import_history: {
+        Row: {
+          created_at: string
+          filename: string
+          id: string
+          items_imported: number
+          provider_used: string
+          status: string
+          total_amount: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          filename?: string
+          id?: string
+          items_imported?: number
+          provider_used?: string
+          status?: string
+          total_amount?: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          filename?: string
+          id?: string
+          items_imported?: number
+          provider_used?: string
+          status?: string
+          total_amount?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
+      insulation_cost_data: {
+        Row: {
+          added_by: string | null
+          data_source: string | null
+          date_added: string | null
+          eave_height_ft: number | null
+          floor_area_sqft: number | null
+          freight_cost: number | null
+          fuel_surcharge: number | null
+          grade: string | null
+          id: string
+          length_ft: number | null
+          location: string | null
+          material_cost: number | null
+          material_per_sqft: number | null
+          project_id: string | null
+          quote_date: string | null
+          quote_number: string | null
+          roof_area_sqft: number | null
+          roof_r_value: string | null
+          ship_branch: string | null
+          source_file_name: string | null
+          source_file_path: string | null
+          total_cost: number | null
+          total_delivery: number | null
+          total_insulated_sqft: number | null
+          total_per_sqft: number | null
+          wall_area_sqft: number | null
+          wall_r_value: string | null
+          weight_lb: number | null
+          width_ft: number | null
+        }
+        Insert: {
+          added_by?: string | null
+          data_source?: string | null
+          date_added?: string | null
+          eave_height_ft?: number | null
+          floor_area_sqft?: number | null
+          freight_cost?: number | null
+          fuel_surcharge?: number | null
+          grade?: string | null
+          id?: string
+          length_ft?: number | null
+          location?: string | null
+          material_cost?: number | null
+          material_per_sqft?: number | null
+          project_id?: string | null
+          quote_date?: string | null
+          quote_number?: string | null
+          roof_area_sqft?: number | null
+          roof_r_value?: string | null
+          ship_branch?: string | null
+          source_file_name?: string | null
+          source_file_path?: string | null
+          total_cost?: number | null
+          total_delivery?: number | null
+          total_insulated_sqft?: number | null
+          total_per_sqft?: number | null
+          wall_area_sqft?: number | null
+          wall_r_value?: string | null
+          weight_lb?: number | null
+          width_ft?: number | null
+        }
+        Update: {
+          added_by?: string | null
+          data_source?: string | null
+          date_added?: string | null
+          eave_height_ft?: number | null
+          floor_area_sqft?: number | null
+          freight_cost?: number | null
+          fuel_surcharge?: number | null
+          grade?: string | null
+          id?: string
+          length_ft?: number | null
+          location?: string | null
+          material_cost?: number | null
+          material_per_sqft?: number | null
+          project_id?: string | null
+          quote_date?: string | null
+          quote_number?: string | null
+          roof_area_sqft?: number | null
+          roof_r_value?: string | null
+          ship_branch?: string | null
+          source_file_name?: string | null
+          source_file_path?: string | null
+          total_cost?: number | null
+          total_delivery?: number | null
+          total_insulated_sqft?: number | null
+          total_per_sqft?: number | null
+          wall_area_sqft?: number | null
+          wall_r_value?: string | null
+          weight_lb?: number | null
+          width_ft?: number | null
+        }
+        Relationships: []
+      }
       internal_costs: {
         Row: {
           created_at: string
@@ -624,9 +588,43 @@ export type Database = {
           },
         ]
       }
+      notifications: {
+        Row: {
+          created_at: string
+          id: string
+          link: string | null
+          message: string
+          read: boolean
+          title: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          link?: string | null
+          message?: string
+          read?: boolean
+          title: string
+          type?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          link?: string | null
+          message?: string
+          read?: boolean
+          title?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       payments: {
         Row: {
           amount_excl_tax: number
+          client_id: string | null
           client_vendor_name: string
           created_at: string
           date: string
@@ -639,12 +637,17 @@ export type Database = {
           qb_synced: boolean
           reference_number: string
           tax_amount: number
+          tax_override: boolean
+          tax_override_rate: number | null
           tax_rate: number
           total_incl_tax: number
           type: Database["public"]["Enums"]["payment_type"]
+          vendor_id: string | null
+          vendor_province_override: string | null
         }
         Insert: {
           amount_excl_tax?: number
+          client_id?: string | null
           client_vendor_name?: string
           created_at?: string
           date?: string
@@ -657,12 +660,17 @@ export type Database = {
           qb_synced?: boolean
           reference_number?: string
           tax_amount?: number
+          tax_override?: boolean
+          tax_override_rate?: number | null
           tax_rate?: number
           total_incl_tax?: number
           type?: Database["public"]["Enums"]["payment_type"]
+          vendor_id?: string | null
+          vendor_province_override?: string | null
         }
         Update: {
           amount_excl_tax?: number
+          client_id?: string | null
           client_vendor_name?: string
           created_at?: string
           date?: string
@@ -675,11 +683,30 @@ export type Database = {
           qb_synced?: boolean
           reference_number?: string
           tax_amount?: number
+          tax_override?: boolean
+          tax_override_rate?: number | null
           tax_rate?: number
           total_incl_tax?: number
           type?: Database["public"]["Enums"]["payment_type"]
+          vendor_id?: string | null
+          vendor_province_override?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "payments_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       production: {
         Row: {
@@ -758,6 +785,60 @@ export type Database = {
           id?: string
           realm_id?: string
           refresh_token?: string
+        }
+        Relationships: []
+      }
+      quote_files: {
+        Row: {
+          ai_output: Json | null
+          building_label: string
+          client_id: string
+          client_name: string
+          created_at: string
+          extraction_source: string
+          file_name: string
+          file_size: number
+          file_type: string
+          gdrive_file_id: string | null
+          gdrive_status: string
+          id: string
+          job_id: string
+          storage_path: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          ai_output?: Json | null
+          building_label?: string
+          client_id?: string
+          client_name?: string
+          created_at?: string
+          extraction_source?: string
+          file_name?: string
+          file_size?: number
+          file_type?: string
+          gdrive_file_id?: string | null
+          gdrive_status?: string
+          id?: string
+          job_id?: string
+          storage_path?: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          ai_output?: Json | null
+          building_label?: string
+          client_id?: string
+          client_name?: string
+          created_at?: string
+          extraction_source?: string
+          file_name?: string
+          file_size?: number
+          file_type?: string
+          gdrive_file_id?: string | null
+          gdrive_status?: string
+          id?: string
+          job_id?: string
+          storage_path?: string
+          uploaded_by?: string | null
         }
         Relationships: []
       }
@@ -887,115 +968,211 @@ export type Database = {
         }
         Relationships: []
       }
-      manufacturer_rfqs: {
+      steel_cost_data: {
         Row: {
+          added_by: string | null
+          cost_per_sqft: number | null
+          data_source: string | null
+          date_added: string | null
+          eave_height_ft: number | null
+          floor_area_sqft: number | null
           id: string
-          job_id: string | null
-          title: string
-          building_spec: string | null
-          width: number | null
-          length: number | null
-          height: number | null
-          weight: number | null
+          length_ft: number | null
+          price_per_lb: number | null
+          project_id: string | null
           province: string | null
-          city: string | null
-          delivery_address: string | null
-          required_by_date: string | null
-          notes: string | null
-          status: string | null
-          created_by: string | null
-          created_at: string
-          closing_date: string | null
-          awarded_bid_id: string | null
+          roof_slope: number | null
+          seismic_cat: string | null
+          snow_load_psf: number | null
+          source_file_name: string | null
+          source_file_path: string | null
+          total_cost: number | null
+          total_weight_lb: number | null
+          weight_per_sqft: number | null
+          width_ft: number | null
+          wind_code: string | null
+          wind_load_psf: number | null
         }
         Insert: {
+          added_by?: string | null
+          cost_per_sqft?: number | null
+          data_source?: string | null
+          date_added?: string | null
+          eave_height_ft?: number | null
+          floor_area_sqft?: number | null
           id?: string
-          job_id?: string | null
-          title: string
-          building_spec?: string | null
-          width?: number | null
-          length?: number | null
-          height?: number | null
-          weight?: number | null
+          length_ft?: number | null
+          price_per_lb?: number | null
+          project_id?: string | null
           province?: string | null
-          city?: string | null
-          delivery_address?: string | null
-          required_by_date?: string | null
-          notes?: string | null
-          status?: string | null
-          created_by?: string | null
-          created_at?: string
-          closing_date?: string | null
-          awarded_bid_id?: string | null
+          roof_slope?: number | null
+          seismic_cat?: string | null
+          snow_load_psf?: number | null
+          source_file_name?: string | null
+          source_file_path?: string | null
+          total_cost?: number | null
+          total_weight_lb?: number | null
+          weight_per_sqft?: number | null
+          width_ft?: number | null
+          wind_code?: string | null
+          wind_load_psf?: number | null
         }
         Update: {
+          added_by?: string | null
+          cost_per_sqft?: number | null
+          data_source?: string | null
+          date_added?: string | null
+          eave_height_ft?: number | null
+          floor_area_sqft?: number | null
           id?: string
-          job_id?: string | null
-          title?: string
-          building_spec?: string | null
-          width?: number | null
-          length?: number | null
-          height?: number | null
-          weight?: number | null
+          length_ft?: number | null
+          price_per_lb?: number | null
+          project_id?: string | null
           province?: string | null
-          city?: string | null
-          delivery_address?: string | null
-          required_by_date?: string | null
-          notes?: string | null
-          status?: string | null
-          created_by?: string | null
-          created_at?: string
-          closing_date?: string | null
-          awarded_bid_id?: string | null
+          roof_slope?: number | null
+          seismic_cat?: string | null
+          snow_load_psf?: number | null
+          source_file_name?: string | null
+          source_file_path?: string | null
+          total_cost?: number | null
+          total_weight_lb?: number | null
+          weight_per_sqft?: number | null
+          width_ft?: number | null
+          wind_code?: string | null
+          wind_load_psf?: number | null
         }
         Relationships: []
       }
-      manufacturer_bids: {
+      steel_cost_entries: {
         Row: {
+          ai_raw_output: Json | null
+          building_label: string
+          city: string | null
+          client_id: string
+          client_name: string
+          components: Json | null
+          cost_per_lb: number
+          created_at: string
+          document_type: string
+          extraction_source: string
+          file_name: string
+          height: number | null
           id: string
-          rfq_id: string
-          manufacturer_id: string
-          manufacturer_name: string | null
-          price_per_lb: number | null
-          total_price: number | null
-          lead_time_days: number | null
-          notes: string | null
-          status: string | null
-          submitted_at: string
+          insulation_grade: string | null
+          insulation_total: number
+          job_id: string
+          length: number | null
+          province: string | null
+          quote_file_id: string | null
+          roof_pitch: number | null
+          total_cost: number
+          uploaded_by: string | null
+          weight_lbs: number
+          width: number | null
         }
         Insert: {
+          ai_raw_output?: Json | null
+          building_label?: string
+          city?: string | null
+          client_id?: string
+          client_name?: string
+          components?: Json | null
+          cost_per_lb?: number
+          created_at?: string
+          document_type?: string
+          extraction_source?: string
+          file_name?: string
+          height?: number | null
           id?: string
-          rfq_id: string
-          manufacturer_id: string
-          manufacturer_name?: string | null
-          price_per_lb?: number | null
-          total_price?: number | null
-          lead_time_days?: number | null
-          notes?: string | null
-          status?: string | null
-          submitted_at?: string
+          insulation_grade?: string | null
+          insulation_total?: number
+          job_id?: string
+          length?: number | null
+          province?: string | null
+          quote_file_id?: string | null
+          roof_pitch?: number | null
+          total_cost?: number
+          uploaded_by?: string | null
+          weight_lbs?: number
+          width?: number | null
         }
         Update: {
+          ai_raw_output?: Json | null
+          building_label?: string
+          city?: string | null
+          client_id?: string
+          client_name?: string
+          components?: Json | null
+          cost_per_lb?: number
+          created_at?: string
+          document_type?: string
+          extraction_source?: string
+          file_name?: string
+          height?: number | null
           id?: string
-          rfq_id?: string
-          manufacturer_id?: string
-          manufacturer_name?: string | null
-          price_per_lb?: number | null
-          total_price?: number | null
-          lead_time_days?: number | null
-          notes?: string | null
-          status?: string | null
-          submitted_at?: string
+          insulation_grade?: string | null
+          insulation_total?: number
+          job_id?: string
+          length?: number | null
+          province?: string | null
+          quote_file_id?: string | null
+          roof_pitch?: number | null
+          total_cost?: number
+          uploaded_by?: string | null
+          weight_lbs?: number
+          width?: number | null
         }
         Relationships: [
           {
-            foreignKeyName: "manufacturer_bids_rfq_id_fkey"
-            columns: ["rfq_id"]
+            foreignKeyName: "steel_cost_entries_quote_file_id_fkey"
+            columns: ["quote_file_id"]
             isOneToOne: false
-            referencedRelation: "manufacturer_rfqs"
+            referencedRelation: "quote_files"
             referencedColumns: ["id"]
-          }
+          },
         ]
+      }
+      stored_documents: {
+        Row: {
+          file_name: string
+          file_size: number | null
+          file_type: string
+          id: string
+          job_id: string | null
+          parsed_data: Json | null
+          parsed_successfully: boolean | null
+          project_id: string | null
+          storage_path: string
+          uploaded_at: string | null
+          uploaded_by: string | null
+        }
+        Insert: {
+          file_name: string
+          file_size?: number | null
+          file_type: string
+          id?: string
+          job_id?: string | null
+          parsed_data?: Json | null
+          parsed_successfully?: boolean | null
+          project_id?: string | null
+          storage_path: string
+          uploaded_at?: string | null
+          uploaded_by?: string | null
+        }
+        Update: {
+          file_name?: string
+          file_size?: number | null
+          file_type?: string
+          id?: string
+          job_id?: string | null
+          parsed_data?: Json | null
+          parsed_successfully?: boolean | null
+          project_id?: string | null
+          storage_path?: string
+          uploaded_at?: string | null
+          uploaded_by?: string | null
+        }
+        Relationships: []
       }
       user_roles: {
         Row: {
@@ -1015,19 +1192,141 @@ export type Database = {
         }
         Relationships: []
       }
+      vendor_bids: {
+        Row: {
+          amount: number | null
+          details: string | null
+          id: string
+          job_id: string
+          lead_time_days: number | null
+          status: string | null
+          submitted_at: string | null
+          vendor_id: string
+        }
+        Insert: {
+          amount?: number | null
+          details?: string | null
+          id?: string
+          job_id: string
+          lead_time_days?: number | null
+          status?: string | null
+          submitted_at?: string | null
+          vendor_id: string
+        }
+        Update: {
+          amount?: number | null
+          details?: string | null
+          id?: string
+          job_id?: string
+          lead_time_days?: number | null
+          status?: string | null
+          submitted_at?: string | null
+          vendor_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vendor_bids_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "vendor_jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vendor_jobs: {
+        Row: {
+          awarded_bid_id: string | null
+          category: string
+          closing_date: string | null
+          created_at: string | null
+          created_by: string | null
+          description: string | null
+          id: string
+          job_id: string | null
+          required_by_date: string | null
+          specifications: Json | null
+          status: string | null
+          title: string
+        }
+        Insert: {
+          awarded_bid_id?: string | null
+          category: string
+          closing_date?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          job_id?: string | null
+          required_by_date?: string | null
+          specifications?: Json | null
+          status?: string | null
+          title: string
+        }
+        Update: {
+          awarded_bid_id?: string | null
+          category?: string
+          closing_date?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          job_id?: string | null
+          required_by_date?: string | null
+          specifications?: Json | null
+          status?: string | null
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fk_awarded_bid"
+            columns: ["awarded_bid_id"]
+            isOneToOne: false
+            referencedRelation: "vendor_bids"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vendors: {
+        Row: {
+          contact_email: string
+          contact_phone: string
+          created_at: string
+          id: string
+          name: string
+          notes: string
+          province: string
+        }
+        Insert: {
+          contact_email?: string
+          contact_phone?: string
+          created_at?: string
+          id?: string
+          name?: string
+          notes?: string
+          province?: string
+        }
+        Update: {
+          contact_email?: string
+          contact_phone?: string
+          created_at?: string
+          id?: string
+          name?: string
+          notes?: string
+          province?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
       get_user_display_info: {
-        Args: {
-          user_ids: string[]
-        }
+        Args: { user_ids: string[] }
         Returns: {
-          id: string
-          email: string
           display_name: string
+          email: string
+          id: string
         }[]
       }
       has_any_role: {
@@ -1044,6 +1343,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_approved: { Args: { _user_id: string }; Returns: boolean }
     }
     Enums: {
       app_role:
@@ -1055,6 +1355,7 @@ export type Database = {
         | "freight"
         | "dealer"
         | "manufacturer"
+        | "construction"
       deal_status:
         | "Lead"
         | "Quoted"
@@ -1226,6 +1527,8 @@ export const Constants = {
         "sales_rep",
         "freight",
         "dealer",
+        "manufacturer",
+        "construction",
       ],
       deal_status: [
         "Lead",
