@@ -139,6 +139,8 @@ export type Database = {
           gdrive_status: string
           uploaded_by: string | null
           building_label: string
+          ai_output: Record<string, unknown> | null
+          extraction_source: string
           created_at: string
         }
         Insert: {
@@ -154,6 +156,8 @@ export type Database = {
           gdrive_status?: string
           uploaded_by?: string | null
           building_label?: string
+          ai_output?: Record<string, unknown> | null
+          extraction_source?: string
           created_at?: string
         }
         Update: {
@@ -169,6 +173,89 @@ export type Database = {
           gdrive_status?: string
           uploaded_by?: string | null
           building_label?: string
+          ai_output?: Record<string, unknown> | null
+          extraction_source?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
+      steel_cost_entries: {
+        Row: {
+          id: string
+          quote_file_id: string | null
+          job_id: string
+          client_name: string
+          client_id: string
+          building_label: string
+          document_type: string
+          file_name: string
+          weight_lbs: number
+          cost_per_lb: number
+          total_cost: number
+          width: number | null
+          length: number | null
+          height: number | null
+          roof_pitch: number | null
+          province: string | null
+          city: string | null
+          components: Record<string, unknown>[] | null
+          insulation_total: number
+          insulation_grade: string | null
+          extraction_source: string
+          ai_raw_output: Record<string, unknown> | null
+          uploaded_by: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          quote_file_id?: string | null
+          job_id?: string
+          client_name?: string
+          client_id?: string
+          building_label?: string
+          document_type?: string
+          file_name?: string
+          weight_lbs?: number
+          cost_per_lb?: number
+          total_cost?: number
+          width?: number | null
+          length?: number | null
+          height?: number | null
+          roof_pitch?: number | null
+          province?: string | null
+          city?: string | null
+          components?: Record<string, unknown>[] | null
+          insulation_total?: number
+          insulation_grade?: string | null
+          extraction_source?: string
+          ai_raw_output?: Record<string, unknown> | null
+          uploaded_by?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          quote_file_id?: string | null
+          job_id?: string
+          client_name?: string
+          client_id?: string
+          building_label?: string
+          document_type?: string
+          file_name?: string
+          weight_lbs?: number
+          cost_per_lb?: number
+          total_cost?: number
+          width?: number | null
+          length?: number | null
+          height?: number | null
+          roof_pitch?: number | null
+          province?: string | null
+          city?: string | null
+          components?: Record<string, unknown>[] | null
+          insulation_total?: number
+          insulation_grade?: string | null
+          extraction_source?: string
+          ai_raw_output?: Record<string, unknown> | null
+          uploaded_by?: string | null
           created_at?: string
         }
         Relationships: []
@@ -800,6 +887,116 @@ export type Database = {
         }
         Relationships: []
       }
+      manufacturer_rfqs: {
+        Row: {
+          id: string
+          job_id: string | null
+          title: string
+          building_spec: string | null
+          width: number | null
+          length: number | null
+          height: number | null
+          weight: number | null
+          province: string | null
+          city: string | null
+          delivery_address: string | null
+          required_by_date: string | null
+          notes: string | null
+          status: string | null
+          created_by: string | null
+          created_at: string
+          closing_date: string | null
+          awarded_bid_id: string | null
+        }
+        Insert: {
+          id?: string
+          job_id?: string | null
+          title: string
+          building_spec?: string | null
+          width?: number | null
+          length?: number | null
+          height?: number | null
+          weight?: number | null
+          province?: string | null
+          city?: string | null
+          delivery_address?: string | null
+          required_by_date?: string | null
+          notes?: string | null
+          status?: string | null
+          created_by?: string | null
+          created_at?: string
+          closing_date?: string | null
+          awarded_bid_id?: string | null
+        }
+        Update: {
+          id?: string
+          job_id?: string | null
+          title?: string
+          building_spec?: string | null
+          width?: number | null
+          length?: number | null
+          height?: number | null
+          weight?: number | null
+          province?: string | null
+          city?: string | null
+          delivery_address?: string | null
+          required_by_date?: string | null
+          notes?: string | null
+          status?: string | null
+          created_by?: string | null
+          created_at?: string
+          closing_date?: string | null
+          awarded_bid_id?: string | null
+        }
+        Relationships: []
+      }
+      manufacturer_bids: {
+        Row: {
+          id: string
+          rfq_id: string
+          manufacturer_id: string
+          manufacturer_name: string | null
+          price_per_lb: number | null
+          total_price: number | null
+          lead_time_days: number | null
+          notes: string | null
+          status: string | null
+          submitted_at: string
+        }
+        Insert: {
+          id?: string
+          rfq_id: string
+          manufacturer_id: string
+          manufacturer_name?: string | null
+          price_per_lb?: number | null
+          total_price?: number | null
+          lead_time_days?: number | null
+          notes?: string | null
+          status?: string | null
+          submitted_at?: string
+        }
+        Update: {
+          id?: string
+          rfq_id?: string
+          manufacturer_id?: string
+          manufacturer_name?: string | null
+          price_per_lb?: number | null
+          total_price?: number | null
+          lead_time_days?: number | null
+          notes?: string | null
+          status?: string | null
+          submitted_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "manufacturer_bids_rfq_id_fkey"
+            columns: ["rfq_id"]
+            isOneToOne: false
+            referencedRelation: "manufacturer_rfqs"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       user_roles: {
         Row: {
           id: string
@@ -857,6 +1054,7 @@ export type Database = {
         | "sales_rep"
         | "freight"
         | "dealer"
+        | "manufacturer"
       deal_status:
         | "Lead"
         | "Quoted"

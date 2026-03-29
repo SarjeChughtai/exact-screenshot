@@ -111,11 +111,32 @@ export interface InternalCost {
 export type PaymentDirection = 'Client Payment IN' | 'Vendor Payment OUT' | 'Refund IN' | 'Refund OUT';
 export type PaymentType = 'Deposit' | 'Progress Payment' | 'Final Payment' | 'Freight' | 'Insulation' | 'Drawings' | 'Other';
 
+export interface Client {
+  id: string;
+  name: string;
+  contactEmail: string;
+  contactPhone: string;
+  notes: string;
+  createdAt: string;
+}
+
+export interface Vendor {
+  id: string;
+  name: string;
+  province: string;
+  contactEmail: string;
+  contactPhone: string;
+  notes: string;
+  createdAt: string;
+}
+
 export interface PaymentEntry {
   id: string;
   date: string;
   jobId: string;
   clientVendorName: string;
+  clientId?: string;
+  vendorId?: string;
   direction: PaymentDirection;
   type: PaymentType;
   amountExclTax: number;
@@ -123,6 +144,9 @@ export interface PaymentEntry {
   taxRate: number;
   taxAmount: number;
   totalInclTax: number;
+  taxOverride: boolean;
+  taxOverrideRate?: number;
+  vendorProvinceOverride?: string;
   paymentMethod: string;
   referenceNumber: string;
   qbSynced: boolean;
@@ -176,5 +200,43 @@ export interface RFQ {
   responseDate: string;
   notes: string;
   createdAt: string;
+}
+
+// --- Manufacturer RFQ / Bidding ---
+export type ManufacturerRFQStatus = 'Open' | 'Closed' | 'Awarded' | 'Cancelled';
+export type ManufacturerBidStatus = 'Submitted' | 'Under Review' | 'Accepted' | 'Rejected' | 'Withdrawn';
+
+export interface ManufacturerRFQ {
+  id: string;
+  jobId: string;
+  title: string;
+  buildingSpec: string;
+  width: number;
+  length: number;
+  height: number;
+  weight: number;
+  province: string;
+  city: string;
+  deliveryAddress: string;
+  requiredByDate: string;
+  notes: string;
+  status: ManufacturerRFQStatus;
+  createdBy: string;
+  createdAt: string;
+  closingDate: string;
+  awardedBidId: string;
+}
+
+export interface ManufacturerBid {
+  id: string;
+  rfqId: string;
+  manufacturerId: string;
+  manufacturerName: string;
+  pricePerLb: number;
+  totalPrice: number;
+  leadTimeDays: number;
+  notes: string;
+  status: ManufacturerBidStatus;
+  submittedAt: string;
 }
 

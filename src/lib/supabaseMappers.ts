@@ -1,23 +1,4 @@
-import type { Quote, Deal, InternalCost, PaymentEntry, ProductionRecord, FreightRecord, Client } from '@/types';
-
-// --- Client ---
-export function clientFromRow(r: any): Client {
-  return {
-    id: r.id ?? '',
-    clientId: r.client_id ?? '',
-    clientName: r.client_name ?? '',
-    jobIds: r.job_ids ?? [],
-    createdAt: r.created_at ?? '',
-  };
-}
-
-export function clientToRow(c: Partial<Client>): Record<string, any> {
-  const row: Record<string, any> = {};
-  if (c.clientId !== undefined) row.client_id = c.clientId;
-  if (c.clientName !== undefined) row.client_name = c.clientName;
-  if (c.jobIds !== undefined) row.job_ids = c.jobIds;
-  return row;
-}
+import type { Quote, Deal, InternalCost, PaymentEntry, ProductionRecord, FreightRecord, Client, Vendor } from '@/types';
 
 // --- Deal ---
 export function dealFromRow(r: any): Deal {
@@ -186,6 +167,8 @@ export function paymentFromRow(r: any): PaymentEntry {
     date: r.date ?? '',
     jobId: r.job_id ?? '',
     clientVendorName: r.client_vendor_name ?? '',
+    clientId: r.client_id ?? undefined,
+    vendorId: r.vendor_id ?? undefined,
     direction: r.direction ?? 'Client Payment IN',
     type: r.type ?? 'Deposit',
     amountExclTax: Number(r.amount_excl_tax) || 0,
@@ -193,6 +176,9 @@ export function paymentFromRow(r: any): PaymentEntry {
     taxRate: Number(r.tax_rate) || 0,
     taxAmount: Number(r.tax_amount) || 0,
     totalInclTax: Number(r.total_incl_tax) || 0,
+    taxOverride: r.tax_override ?? false,
+    taxOverrideRate: r.tax_override_rate != null ? Number(r.tax_override_rate) : undefined,
+    vendorProvinceOverride: r.vendor_province_override ?? undefined,
     paymentMethod: r.payment_method ?? '',
     referenceNumber: r.reference_number ?? '',
     qbSynced: r.qb_synced ?? false,
@@ -203,14 +189,66 @@ export function paymentFromRow(r: any): PaymentEntry {
 export function paymentToRow(p: Partial<PaymentEntry>): Record<string, any> {
   const map: Record<string, string> = {
     id: 'id', date: 'date', jobId: 'job_id', clientVendorName: 'client_vendor_name',
+    clientId: 'client_id', vendorId: 'vendor_id',
     direction: 'direction', type: 'type', amountExclTax: 'amount_excl_tax', province: 'province',
     taxRate: 'tax_rate', taxAmount: 'tax_amount', totalInclTax: 'total_incl_tax',
+    taxOverride: 'tax_override', taxOverrideRate: 'tax_override_rate',
+    vendorProvinceOverride: 'vendor_province_override',
     paymentMethod: 'payment_method', referenceNumber: 'reference_number',
     qbSynced: 'qb_synced', notes: 'notes',
   };
   const row: Record<string, any> = {};
   for (const [k, v] of Object.entries(p)) {
     if (map[k]) row[map[k]] = v;
+  }
+  return row;
+}
+
+// --- Client ---
+export function clientFromRow(r: any): Client {
+  return {
+    id: r.id ?? '',
+    name: r.name ?? '',
+    contactEmail: r.contact_email ?? '',
+    contactPhone: r.contact_phone ?? '',
+    notes: r.notes ?? '',
+    createdAt: r.created_at ?? '',
+  };
+}
+
+export function clientToRow(c: Partial<Client>): Record<string, any> {
+  const map: Record<string, string> = {
+    id: 'id', name: 'name', contactEmail: 'contact_email',
+    contactPhone: 'contact_phone', notes: 'notes',
+  };
+  const row: Record<string, any> = {};
+  for (const [k, v] of Object.entries(c)) {
+    if (map[k]) row[map[k]] = v;
+  }
+  return row;
+}
+
+// --- Vendor ---
+export function vendorFromRow(r: any): Vendor {
+  return {
+    id: r.id ?? '',
+    name: r.name ?? '',
+    province: r.province ?? 'ON',
+    contactEmail: r.contact_email ?? '',
+    contactPhone: r.contact_phone ?? '',
+    notes: r.notes ?? '',
+    createdAt: r.created_at ?? '',
+  };
+}
+
+export function vendorToRow(v: Partial<Vendor>): Record<string, any> {
+  const map: Record<string, string> = {
+    id: 'id', name: 'name', province: 'province',
+    contactEmail: 'contact_email', contactPhone: 'contact_phone', notes: 'notes',
+  };
+  const row: Record<string, any> = {};
+  for (const [k, val] of Object.entries(v)) {
+    if (map[k]) row[map[k]] = val;
   }
   return row;
 }
@@ -272,6 +310,76 @@ export function freightToRow(fr: Partial<FreightRecord>): Record<string, any> {
   };
   const row: Record<string, any> = {};
   for (const [k, v] of Object.entries(fr)) {
+    if (map[k]) row[map[k]] = v;
+  }
+  return row;
+}
+
+// --- ManufacturerRFQ ---
+export function manufacturerRFQFromRow(r: any): ManufacturerRFQ {
+  return {
+    id: r.id ?? '',
+    jobId: r.job_id ?? '',
+    title: r.title ?? '',
+    buildingSpec: r.building_spec ?? '',
+    width: Number(r.width) || 0,
+    length: Number(r.length) || 0,
+    height: Number(r.height) || 0,
+    weight: Number(r.weight) || 0,
+    province: r.province ?? '',
+    city: r.city ?? '',
+    deliveryAddress: r.delivery_address ?? '',
+    requiredByDate: r.required_by_date ?? '',
+    notes: r.notes ?? '',
+    status: r.status ?? 'Open',
+    createdBy: r.created_by ?? '',
+    createdAt: r.created_at ?? '',
+    closingDate: r.closing_date ?? '',
+    awardedBidId: r.awarded_bid_id ?? '',
+  };
+}
+
+export function manufacturerRFQToRow(m: Partial<ManufacturerRFQ>): Record<string, any> {
+  const map: Record<string, string> = {
+    id: 'id', jobId: 'job_id', title: 'title', buildingSpec: 'building_spec',
+    width: 'width', length: 'length', height: 'height', weight: 'weight',
+    province: 'province', city: 'city', deliveryAddress: 'delivery_address',
+    requiredByDate: 'required_by_date', notes: 'notes', status: 'status',
+    createdBy: 'created_by', createdAt: 'created_at', closingDate: 'closing_date',
+    awardedBidId: 'awarded_bid_id',
+  };
+  const row: Record<string, any> = {};
+  for (const [k, v] of Object.entries(m)) {
+    if (map[k]) row[map[k]] = v;
+  }
+  return row;
+}
+
+// --- ManufacturerBid ---
+export function manufacturerBidFromRow(r: any): ManufacturerBid {
+  return {
+    id: r.id ?? '',
+    rfqId: r.rfq_id ?? '',
+    manufacturerId: r.manufacturer_id ?? '',
+    manufacturerName: r.manufacturer_name ?? '',
+    pricePerLb: Number(r.price_per_lb) || 0,
+    totalPrice: Number(r.total_price) || 0,
+    leadTimeDays: Number(r.lead_time_days) || 0,
+    notes: r.notes ?? '',
+    status: r.status ?? 'Submitted',
+    submittedAt: r.submitted_at ?? '',
+  };
+}
+
+export function manufacturerBidToRow(b: Partial<ManufacturerBid>): Record<string, any> {
+  const map: Record<string, string> = {
+    id: 'id', rfqId: 'rfq_id', manufacturerId: 'manufacturer_id',
+    manufacturerName: 'manufacturer_name', pricePerLb: 'price_per_lb',
+    totalPrice: 'total_price', leadTimeDays: 'lead_time_days',
+    notes: 'notes', status: 'status', submittedAt: 'submitted_at',
+  };
+  const row: Record<string, any> = {};
+  for (const [k, v] of Object.entries(b)) {
     if (map[k]) row[map[k]] = v;
   }
   return row;
