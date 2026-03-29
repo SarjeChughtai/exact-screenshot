@@ -4,8 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ChevronDown, Plus } from 'lucide-react';
-import { useSettings } from '@/context/SettingsContext';
-import type { ClientEntry } from '@/context/SettingsContext';
+import { useAppContext } from '@/context/AppContext';
+import type { Client } from '@/types';
 
 interface ClientSelectProps {
   mode: 'id' | 'name';
@@ -16,14 +16,12 @@ interface ClientSelectProps {
 }
 
 export function ClientSelect({ mode, valueId, valueName, onSelect, className }: ClientSelectProps) {
-  const { settings, updateSettings } = useSettings();
+  const { clients, addClient } = useAppContext();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [showAdd, setShowAdd] = useState(false);
   const [newId, setNewId] = useState('');
   const [newName, setNewName] = useState('');
-
-  const clients = settings.clients || [];
 
   const filtered = useMemo(() => {
     if (!search) return clients;
@@ -35,18 +33,17 @@ export function ClientSelect({ mode, valueId, valueName, onSelect, className }: 
 
   const displayValue = mode === 'id' ? valueId : valueName;
 
-  const handleSelect = (c: ClientEntry) => {
+  const handleSelect = (c: Client) => {
     onSelect({ clientId: c.clientId, clientName: c.clientName });
     setOpen(false);
     setSearch('');
   };
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     if (!newId && !newName) return;
     const id = newId || `C-${Date.now().toString(36).toUpperCase()}`;
     const name = newName || id;
-    const entry: ClientEntry = { clientId: id, clientName: name };
-    updateSettings({ clients: [...clients, entry] });
+    await addClient(id, name);
     onSelect({ clientId: id, clientName: name });
     setNewId('');
     setNewName('');

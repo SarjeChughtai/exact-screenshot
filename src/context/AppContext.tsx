@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
-import { Quote, Deal, InternalCost, PaymentEntry, ProductionRecord, FreightRecord, RFQ } from '@/types';
+import { Quote, Deal, InternalCost, PaymentEntry, ProductionRecord, FreightRecord, RFQ, Client } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
 import { useRoles } from '@/context/RoleContext';
 import { logAudit } from '@/lib/auditLog';
@@ -10,6 +10,7 @@ import {
   paymentFromRow, paymentToRow,
   productionFromRow, productionToRow,
   freightFromRow, freightToRow,
+  clientFromRow, clientToRow,
 } from '@/lib/supabaseMappers';
 import { SEED_DEALS } from '@/data/seedDeals';
 import { toast } from 'sonner';
@@ -22,6 +23,7 @@ interface AppState {
   production: ProductionRecord[];
   freight: FreightRecord[];
   rfqs: RFQ[];
+  clients: Client[];
   loading: boolean;
 }
 
@@ -43,6 +45,7 @@ interface AppContextType extends AppState {
   addRFQ: (rfq: RFQ) => void;
   updateRFQ: (id: string, updates: Partial<RFQ>) => void;
   deleteRFQ: (id: string) => void;
+  addClient: (clientId: string, clientName: string) => Promise<Client | null>;
   refreshData: () => Promise<void>;
 }
 
@@ -51,18 +54,19 @@ const AppContext = createContext<AppContextType | null>(null);
 export function AppProvider({ children }: { children: ReactNode }) {
   const { currentUser } = useRoles();
   const [state, setState] = useState<AppState>({
-    quotes: [], deals: [], internalCosts: [], payments: [], production: [], freight: [], rfqs: [], loading: true,
+    quotes: [], deals: [], internalCosts: [], payments: [], production: [], freight: [], rfqs: [], clients: [], loading: true,
   });
 
   const fetchAll = useCallback(async () => {
     try {
-      const [quotesRes, dealsRes, costsRes, paymentsRes, prodRes, freightRes] = await Promise.all([
+      const [quotesRes, dealsRes, costsRes, paymentsRes, prodRes, freightRes, clientsRes] = await Promise.all([
         supabase.from('quotes').select('*'),
         supabase.from('deals').select('*'),
         supabase.from('internal_costs').select('*'),
         supabase.from('payments').select('*'),
         supabase.from('production').select('*'),
         supabase.from('freight').select('*'),
+        supabase.from('clients').select('*'),
       ]);
 
       // Log fetch results for debugging
@@ -73,6 +77,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         payments: paymentsRes.data?.length, paymentsErr: paymentsRes.error,
         production: prodRes.data?.length, prodErr: prodRes.error,
         freight: freightRes.data?.length, freightErr: freightRes.error,
+        clients: clientsRes.data?.length, clientsErr: clientsRes.error,
       });
 
       // Check if any query had an error (e.g. RLS blocking unauthenticated)
@@ -90,6 +95,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const payments = (paymentsRes.data || []).map(paymentFromRow);
       const production = (prodRes.data || []).map(productionFromRow);
       const freight = (freightRes.data || []).map(freightFromRow);
+      const clients = (clientsRes.data || []).map(clientFromRow);
 
       // If all Supabase tables are empty, try migrating from localStorage
       const allEmpty = quotes.length === 0 && deals.length === 0 && payments.length === 0;
@@ -105,7 +111,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      setState({ quotes, deals, internalCosts, payments, production, freight, rfqs: state.rfqs, loading: false });
+      setState({ quotes, deals, internalCosts, payments, production, freight, rfqs: state.rfqs, clients, loading: false });
     } catch (err) {
       console.error('Supabase fetch error, falling back to localStorage', err);
       loadFromLocalStorage();
@@ -125,6 +131,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           production: data.production || [],
           freight: data.freight || [],
           rfqs: data.rfqs || [],
+          clients: data.clients || [],
           loading: false,
         });
       } else {
@@ -176,13 +183,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       localStorage.removeItem('canada_steel_state');
 
       // Re-fetch from Supabase after migration
-      const [qR, dR, cR, pR, prR, fR] = await Promise.all([
+      const [qR, dR, cR, pR, prR, fR, clR] = await Promise.all([
         supabase.from('quotes').select('*'),
         supabase.from('deals').select('*'),
         supabase.from('internal_costs').select('*'),
         supabase.from('payments').select('*'),
         supabase.from('production').select('*'),
         supabase.from('freight').select('*'),
+        supabase.from('clients').select('*'),
       ]);
 
       setState({
@@ -193,6 +201,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         production: (prR.data || []).map(productionFromRow),
         freight: (fR.data || []).map(freightFromRow),
         rfqs: [],
+        clients: (clR.data || []).map(clientFromRow),
         loading: false,
       });
       return true;
@@ -259,6 +268,54 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } catch {}
   }, [currentUser]);
 
+  // --- Clients ---
+  const addClient = useCallback(async (clientId: string, clientName: string): Promise<Client | null> => {
+    try {
+      const { data, error } = await supabase
+        .from('clients')
+        .insert({ client_id: clientId, client_name: clientName, job_ids: [] })
+        .select()
+        .single();
+      if (error || !data) return null;
+      const client = clientFromRow(data);
+      setState(prev => ({ ...prev, clients: [...prev.clients, client] }));
+      return client;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  // Upsert client: create if missing, append jobId to job_ids
+  const upsertClientJob = useCallback(async (clientId: string, clientName: string, jobId: string) => {
+    try {
+      const { data: existing } = await supabase
+        .from('clients')
+        .select('id, job_ids')
+        .eq('client_id', clientId)
+        .maybeSingle();
+
+      if (existing) {
+        const newJobIds = [...(existing.job_ids || []), jobId];
+        await supabase.from('clients').update({ job_ids: newJobIds }).eq('client_id', clientId);
+        setState(prev => ({
+          ...prev,
+          clients: prev.clients.map(c =>
+            c.clientId === clientId ? { ...c, jobIds: newJobIds } : c
+          ),
+        }));
+      } else {
+        const { data } = await supabase
+          .from('clients')
+          .insert({ client_id: clientId, client_name: clientName, job_ids: [jobId] })
+          .select()
+          .single();
+        if (data) {
+          setState(prev => ({ ...prev, clients: [...prev.clients, clientFromRow(data)] }));
+        }
+      }
+    } catch {}
+  }, []);
+
   // --- Deals ---
   const addDeal = useCallback(async (d: Deal) => {
     setState(prev => ({ ...prev, deals: [...prev.deals, d] }));
@@ -267,7 +324,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const row = dealToRow(d);
       await supabase.from('deals').insert(row as any).select().single();
     } catch {}
-  }, [currentUser]);
+    // Upsert client record with the new job ID
+    if (d.clientName || d.clientId) {
+      const cId = d.clientId || `C-${Date.now().toString(36).toUpperCase()}`;
+      await upsertClientJob(cId, d.clientName, d.jobId);
+    }
+  }, [currentUser, upsertClientJob]);
 
   const updateDeal = useCallback(async (jobId: string, updates: Partial<Deal>) => {
     setState(prev => {
@@ -437,6 +499,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addInternalCost, updateInternalCost, addPayment, updatePayment, deletePayment,
       addProduction, updateProduction, addFreight, updateFreight,
       addRFQ, updateRFQ, deleteRFQ,
+      addClient,
       refreshData: fetchAll,
     }}>
       {children}

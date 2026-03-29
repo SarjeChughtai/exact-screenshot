@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useAppContext } from '@/context/AppContext';
 import { PROVINCES } from '@/lib/calculations';
 import { PersonnelSelect } from '@/components/PersonnelSelect';
+import { ClientSelect } from '@/components/ClientSelect';
 import type { Deal } from '@/types';
 import { toast } from 'sonner';
 
@@ -113,11 +114,23 @@ export function CreateJobDialog({ open, onOpenChange, onJobCreated }: CreateJobD
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label className="text-xs">Client Name <span className="text-destructive">*</span></Label>
-              <Input className="input-blue mt-1" value={form.clientName} onChange={e => set('clientName', e.target.value)} />
+              <ClientSelect
+                mode="name"
+                valueId={form.clientId}
+                valueName={form.clientName}
+                onSelect={({ clientId, clientName }) => setForm(f => ({ ...f, clientId, clientName }))}
+                className="mt-1"
+              />
             </div>
             <div>
               <Label className="text-xs">Client ID</Label>
-              <Input className="input-blue mt-1" value={form.clientId} onChange={e => set('clientId', e.target.value)} />
+              <ClientSelect
+                mode="id"
+                valueId={form.clientId}
+                valueName={form.clientName}
+                onSelect={({ clientId, clientName }) => setForm(f => ({ ...f, clientId, clientName }))}
+                className="mt-1"
+              />
             </div>
           </div>
 

@@ -1,3 +1,11 @@
+export interface Client {
+  id: string;
+  clientId: string;
+  clientName: string;
+  jobIds: string[];
+  createdAt: string;
+}
+
 export interface Quote {
   id: string;
   date: string;

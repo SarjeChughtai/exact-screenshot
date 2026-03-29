@@ -1,4 +1,23 @@
-import type { Quote, Deal, InternalCost, PaymentEntry, ProductionRecord, FreightRecord } from '@/types';
+import type { Quote, Deal, InternalCost, PaymentEntry, ProductionRecord, FreightRecord, Client } from '@/types';
+
+// --- Client ---
+export function clientFromRow(r: any): Client {
+  return {
+    id: r.id ?? '',
+    clientId: r.client_id ?? '',
+    clientName: r.client_name ?? '',
+    jobIds: r.job_ids ?? [],
+    createdAt: r.created_at ?? '',
+  };
+}
+
+export function clientToRow(c: Partial<Client>): Record<string, any> {
+  const row: Record<string, any> = {};
+  if (c.clientId !== undefined) row.client_id = c.clientId;
+  if (c.clientName !== undefined) row.client_name = c.clientName;
+  if (c.jobIds !== undefined) row.job_ids = c.jobIds;
+  return row;
+}
 
 // --- Deal ---
 export function dealFromRow(r: any): Deal {
