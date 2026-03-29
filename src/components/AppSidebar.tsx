@@ -2,7 +2,7 @@ import {
   Calculator, FileText, ClipboardList, Briefcase, DollarSign,
   BarChart3, CreditCard, Users, Truck, Factory, Award, FileSpreadsheet,
   Receipt, TrendingUp, Building2, ChevronDown, FileInput,
-  Shield, User, Settings as SettingsIcon, Send, LogOut, List, Store, Eye, EyeOff, Database
+  Shield, User, Settings as SettingsIcon, Send, LogOut, List, Store, Eye, EyeOff, Database, UserCircle, Package
 } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import { useLocation } from 'react-router-dom';
@@ -66,6 +66,8 @@ const menuGroups: MenuGroup[] = [
     label: 'Financials',
     items: [
       { path: '/payment-ledger', label: 'Payment Ledger', icon: CreditCard, module: 'payment-ledger' },
+      { path: '/clients', label: 'Clients', icon: UserCircle, module: 'payment-ledger' },
+      { path: '/vendors', label: 'Vendors', icon: Package, module: 'payment-ledger' },
       { path: '/client-payments', label: 'Client Payments', icon: Users, module: 'client-payments' },
       { path: '/vendor-payments', label: 'Vendor Payments', icon: Receipt, module: 'vendor-payments' },
       { path: '/financials', label: 'Projected Financials', icon: TrendingUp, module: 'financials' },
@@ -85,6 +87,13 @@ const menuGroups: MenuGroup[] = [
     items: [
       { path: '/dealer-rfq', label: 'Dealer RFQ', icon: Store, module: 'dealer-rfq' },
       { path: '/dealer-log', label: 'My Requests', icon: ClipboardList, module: 'dealer-log' },
+    ],
+  },
+  {
+    label: 'Manufacturer',
+    items: [
+      { path: '/manufacturer-rfq-board', label: 'RFQ Board', icon: Factory, module: 'manufacturer-rfq-board' },
+      { path: '/manufacturer-portal', label: 'Bid Portal', icon: Store, module: 'manufacturer-portal' },
     ],
   },
   {

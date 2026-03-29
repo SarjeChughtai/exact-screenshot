@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode } from 'react';
-import { Quote, Deal, InternalCost, PaymentEntry, ProductionRecord, FreightRecord, RFQ, PaymentChangeLog } from '@/types';
+import { Quote, Deal, InternalCost, PaymentEntry, ProductionRecord, FreightRecord, RFQ, Client, Vendor, PaymentChangeLog } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
 import { useRoles } from '@/context/RoleContext';
 import { logAudit } from '@/lib/auditLog';
@@ -10,6 +10,8 @@ import {
   paymentFromRow, paymentToRow,
   productionFromRow, productionToRow,
   freightFromRow, freightToRow,
+  clientFromRow, clientToRow,
+  vendorFromRow, vendorToRow,
   paymentChangeLogFromRow, paymentChangeLogToRow,
 } from '@/lib/supabaseMappers';
 import { SEED_DEALS } from '@/data/seedDeals';
@@ -24,6 +26,8 @@ interface AppState {
   production: ProductionRecord[];
   freight: FreightRecord[];
   rfqs: RFQ[];
+  clients: Client[];
+  vendors: Vendor[];
   loading: boolean;
 }
 
@@ -45,6 +49,12 @@ interface AppContextType extends AppState {
   addRFQ: (rfq: RFQ) => void;
   updateRFQ: (id: string, updates: Partial<RFQ>) => void;
   deleteRFQ: (id: string) => void;
+  addClient: (c: Client) => void;
+  updateClient: (id: string, updates: Partial<Client>) => void;
+  deleteClient: (id: string) => void;
+  addVendor: (v: Vendor) => void;
+  updateVendor: (id: string, updates: Partial<Vendor>) => void;
+  deleteVendor: (id: string) => void;
   refreshData: () => Promise<void>;
 }
 
@@ -53,20 +63,23 @@ const AppContext = createContext<AppContextType | null>(null);
 export function AppProvider({ children }: { children: ReactNode }) {
   const { currentUser } = useRoles();
   const [state, setState] = useState<AppState>({
-    quotes: [], deals: [], internalCosts: [], payments: [], paymentChangeLogs: [], production: [], freight: [], rfqs: [], loading: true,
+    quotes: [], deals: [], internalCosts: [], payments: [], paymentChangeLogs: [],
+    production: [], freight: [], rfqs: [], clients: [], vendors: [], loading: true,
   });
   const stateRef = useRef(state);
   stateRef.current = state;
 
   const fetchAll = useCallback(async () => {
     try {
-      const [quotesRes, dealsRes, costsRes, paymentsRes, prodRes, freightRes, changeLogRes] = await Promise.all([
+      const [quotesRes, dealsRes, costsRes, paymentsRes, prodRes, freightRes, clientsRes, vendorsRes, changeLogRes] = await Promise.all([
         supabase.from('quotes').select('*'),
         supabase.from('deals').select('*'),
         supabase.from('internal_costs').select('*'),
         supabase.from('payments').select('*'),
         supabase.from('production').select('*'),
         supabase.from('freight').select('*'),
+        supabase.from('clients').select('*'),
+        supabase.from('vendors').select('*'),
         supabase.from('payment_change_log').select('*').order('changed_at', { ascending: false }).limit(500),
       ]);
 
@@ -78,9 +91,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         payments: paymentsRes.data?.length, paymentsErr: paymentsRes.error,
         production: prodRes.data?.length, prodErr: prodRes.error,
         freight: freightRes.data?.length, freightErr: freightRes.error,
+        clients: clientsRes.data?.length, clientsErr: clientsRes.error,
+        vendors: vendorsRes.data?.length, vendorsErr: vendorsRes.error,
       });
 
-      // Check if any query had an error (e.g. RLS blocking unauthenticated)
+      // Check if any core query had an error (e.g. RLS blocking unauthenticated)
       const anyError = [quotesRes, dealsRes, costsRes, paymentsRes, prodRes, freightRes].some(r => r.error);
 
       if (anyError) {
@@ -95,6 +110,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const payments = (paymentsRes.data || []).map(paymentFromRow);
       const production = (prodRes.data || []).map(productionFromRow);
       const freight = (freightRes.data || []).map(freightFromRow);
+      const clients = (clientsRes.data || []).map(clientFromRow);
+      const vendors = (vendorsRes.data || []).map(vendorFromRow);
+      const paymentChangeLogs = (changeLogRes.data || []).map(paymentChangeLogFromRow);
 
       // If all Supabase tables are empty, try migrating from localStorage
       const allEmpty = quotes.length === 0 && deals.length === 0 && payments.length === 0;
@@ -110,7 +128,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      setState({ quotes, deals, internalCosts, payments, paymentChangeLogs: (changeLogRes.data || []).map(paymentChangeLogFromRow), production, freight, rfqs: state.rfqs, loading: false });
+      setState({ quotes, deals, internalCosts, payments, paymentChangeLogs, production, freight, rfqs: state.rfqs, clients, vendors, loading: false });
     } catch (err) {
       console.error('Supabase fetch error, falling back to localStorage', err);
       loadFromLocalStorage();
@@ -131,6 +149,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
           production: data.production || [],
           freight: data.freight || [],
           rfqs: data.rfqs || [],
+          clients: data.clients || [],
+          vendors: data.vendors || [],
           loading: false,
         });
       } else {
@@ -182,13 +202,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
       localStorage.removeItem('canada_steel_state');
 
       // Re-fetch from Supabase after migration
-      const [qR, dR, cR, pR, prR, fR] = await Promise.all([
+      const [qR, dR, cR, pR, prR, fR, clR, vR] = await Promise.all([
         supabase.from('quotes').select('*'),
         supabase.from('deals').select('*'),
         supabase.from('internal_costs').select('*'),
         supabase.from('payments').select('*'),
         supabase.from('production').select('*'),
         supabase.from('freight').select('*'),
+        supabase.from('clients').select('*'),
+        supabase.from('vendors').select('*'),
       ]);
 
       setState({
@@ -199,6 +221,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         paymentChangeLogs: [],
         production: (prR.data || []).map(productionFromRow),
         freight: (fR.data || []).map(freightFromRow),
+        clients: (clR.data || []).map(clientFromRow),
+        vendors: (vR.data || []).map(vendorFromRow),
         rfqs: [],
         loading: false,
       });
@@ -266,6 +290,109 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } catch {}
   }, [currentUser]);
 
+  // --- Clients ---
+  const addClient = useCallback(async (c: Client) => {
+    setState(prev => ({ ...prev, clients: [...prev.clients, c] }));
+    logAudit(currentUser?.name || 'System', 'CREATE', 'Client', c.id, c);
+    try {
+      const row = clientToRow(c);
+      await supabase.from('clients').insert(row as any).select().single();
+    } catch {}
+  }, [currentUser]);
+
+  const updateClient = useCallback(async (id: string, updates: Partial<Client>) => {
+    setState(prev => {
+      const existing = prev.clients.find(c => c.id === id);
+      if (existing) logAudit(currentUser?.name || 'System', 'UPDATE', 'Client', id, updates, existing);
+      return {
+        ...prev,
+        clients: prev.clients.map(c => c.id === id ? { ...c, ...updates } : c),
+      };
+    });
+    try {
+      const row = clientToRow(updates);
+      await supabase.from('clients').update(row as any).eq('id', id);
+    } catch {}
+  }, [currentUser]);
+
+  const deleteClient = useCallback(async (id: string) => {
+    setState(prev => {
+      const existing = prev.clients.find(c => c.id === id);
+      if (existing) logAudit(currentUser?.name || 'System', 'DELETE', 'Client', id, { id }, existing);
+      return { ...prev, clients: prev.clients.filter(c => c.id !== id) };
+    });
+    try {
+      await supabase.from('clients').delete().eq('id', id);
+    } catch {}
+  }, [currentUser]);
+
+  // Upsert client: create if missing, append jobId to job_ids
+  const upsertClientJob = useCallback(async (clientId: string, clientName: string, jobId: string) => {
+    try {
+      const { data: existing } = await supabase
+        .from('clients')
+        .select('id, job_ids')
+        .eq('client_id', clientId)
+        .maybeSingle();
+
+      if (existing) {
+        const newJobIds = [...(existing.job_ids || []), jobId];
+        await supabase.from('clients').update({ job_ids: newJobIds }).eq('client_id', clientId);
+        setState(prev => ({
+          ...prev,
+          clients: prev.clients.map(c =>
+            (c as any).clientId === clientId ? { ...c, jobIds: newJobIds } : c
+          ),
+        }));
+      } else {
+        const { data } = await supabase
+          .from('clients')
+          .insert({ client_id: clientId, client_name: clientName, job_ids: [jobId] })
+          .select()
+          .single();
+        if (data) {
+          setState(prev => ({ ...prev, clients: [...prev.clients, clientFromRow(data)] }));
+        }
+      }
+    } catch {}
+  }, []);
+
+  // --- Vendors ---
+  const addVendor = useCallback(async (v: Vendor) => {
+    setState(prev => ({ ...prev, vendors: [...prev.vendors, v] }));
+    logAudit(currentUser?.name || 'System', 'CREATE', 'Vendor', v.id, v);
+    try {
+      const row = vendorToRow(v);
+      await supabase.from('vendors').insert(row as any).select().single();
+    } catch {}
+  }, [currentUser]);
+
+  const updateVendor = useCallback(async (id: string, updates: Partial<Vendor>) => {
+    setState(prev => {
+      const existing = prev.vendors.find(v => v.id === id);
+      if (existing) logAudit(currentUser?.name || 'System', 'UPDATE', 'Vendor', id, updates, existing);
+      return {
+        ...prev,
+        vendors: prev.vendors.map(v => v.id === id ? { ...v, ...updates } : v),
+      };
+    });
+    try {
+      const row = vendorToRow(updates);
+      await supabase.from('vendors').update(row as any).eq('id', id);
+    } catch {}
+  }, [currentUser]);
+
+  const deleteVendor = useCallback(async (id: string) => {
+    setState(prev => {
+      const existing = prev.vendors.find(v => v.id === id);
+      if (existing) logAudit(currentUser?.name || 'System', 'DELETE', 'Vendor', id, { id }, existing);
+      return { ...prev, vendors: prev.vendors.filter(v => v.id !== id) };
+    });
+    try {
+      await supabase.from('vendors').delete().eq('id', id);
+    } catch {}
+  }, [currentUser]);
+
   // --- Deals ---
   const addDeal = useCallback(async (d: Deal) => {
     setState(prev => ({ ...prev, deals: [...prev.deals, d] }));
@@ -274,7 +401,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const row = dealToRow(d);
       await supabase.from('deals').insert(row as any).select().single();
     } catch {}
-  }, [currentUser]);
+    // Upsert client record with the new job ID
+    if (d.clientName || d.clientId) {
+      const cId = d.clientId || `C-${Date.now().toString(36).toUpperCase()}`;
+      await upsertClientJob(cId, d.clientName, d.jobId);
+    }
+  }, [currentUser, upsertClientJob]);
 
   const updateDeal = useCallback(async (jobId: string, updates: Partial<Deal>) => {
     setState(prev => {
@@ -364,6 +496,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const fieldLabels: Record<string, string> = {
         date: 'date', jobId: 'job', clientVendorName: 'name', direction: 'direction',
         type: 'type', amountExclTax: 'amount', paymentMethod: 'method', referenceNumber: 'ref #', notes: 'notes',
+        taxOverride: 'tax override', taxOverrideRate: 'tax rate', vendorProvinceOverride: 'vendor province',
       };
       const changed = Object.keys(updates)
         .filter(k => fieldLabels[k] && (updates as any)[k] !== (existing as any)[k])
@@ -474,6 +607,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addInternalCost, updateInternalCost, addPayment, updatePayment, deletePayment,
       addProduction, updateProduction, addFreight, updateFreight,
       addRFQ, updateRFQ, deleteRFQ,
+      addClient, updateClient, deleteClient,
+      addVendor, updateVendor, deleteVendor,
       refreshData: fetchAll,
     }}>
       {children}
