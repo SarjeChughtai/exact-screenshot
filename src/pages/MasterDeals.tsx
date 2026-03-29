@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { ChevronDown, ChevronRight, Edit, Trash2, Plus } from 'lucide-react';
+import { ChevronDown, ChevronRight, Edit, Trash2, Plus, EyeOff, Eye } from 'lucide-react';
 import type { Deal, DealStatus } from '@/types';
 
 const DEAL_STATUS_LABELS: Record<string, string> = {
@@ -31,6 +31,7 @@ export default function MasterDeals() {
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterRep, setFilterRep] = useState<string>('all');
   const [searchClient, setSearchClient] = useState('');
+  const [showCancelled, setShowCancelled] = useState(false);
   const [expandedJob, setExpandedJob] = useState<string | null>(null);
   const [editingDeal, setEditingDeal] = useState<Deal | null>(null);
   const [showAddDeal, setShowAddDeal] = useState(false);
@@ -45,7 +46,9 @@ export default function MasterDeals() {
     : deals;
 
   const reps = [...new Set(visibleDeals.map(d => d.salesRep).filter(Boolean))];
+  const cancelledCount = visibleDeals.filter(d => d.dealStatus === 'Cancelled').length;
   const filtered = visibleDeals.filter(d => {
+    if (!showCancelled && d.dealStatus === 'Cancelled') return false;
     if (filterStatus !== 'all' && d.dealStatus !== filterStatus) return false;
     if (filterRep !== 'all' && d.salesRep !== filterRep) return false;
     if (searchClient && !d.clientName.toLowerCase().includes(searchClient.toLowerCase()) && !d.clientId.includes(searchClient) && !d.jobId.toLowerCase().includes(searchClient.toLowerCase())) return false;
@@ -105,6 +108,9 @@ export default function MasterDeals() {
           <p className="text-sm text-muted-foreground mt-1">
             {filtered.length} of {visibleDeals.length} deals shown
             {isSalesRep && ' (your deals only)'}
+            {!showCancelled && cancelledCount > 0 && (
+              <span className="ml-1">· {cancelledCount} cancelled hidden</span>
+            )}
           </p>
         </div>
         {isAdminOwner && (
@@ -132,6 +138,15 @@ export default function MasterDeals() {
           </Select>
         )}
         <Input className="w-48 input-blue" placeholder="Search job, client, ID..." value={searchClient} onChange={e => setSearchClient(e.target.value)} />
+        <Button
+          size="sm"
+          variant={showCancelled ? 'default' : 'outline'}
+          onClick={() => setShowCancelled(prev => !prev)}
+          className="gap-1.5"
+        >
+          {showCancelled ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+          {showCancelled ? 'Hide Cancelled' : 'Show Cancelled'}
+        </Button>
       </div>
 
       <div className="bg-card border rounded-lg overflow-x-auto">

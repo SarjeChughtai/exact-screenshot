@@ -89,7 +89,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         vendors: vendorsRes.data?.length, vendorsErr: vendorsRes.error,
       });
 
-      // Check if any query had an error (e.g. RLS blocking unauthenticated)
+      // Check if any core query had an error (e.g. RLS blocking unauthenticated)
       const anyError = [quotesRes, dealsRes, costsRes, paymentsRes, prodRes, freightRes].some(r => r.error);
 
       if (anyError) {
@@ -215,6 +215,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         clients: (clR.data || []).map(clientFromRow),
         vendors: (vR.data || []).map(vendorFromRow),
         rfqs: [],
+        manufacturerRFQs: [],
+        manufacturerBids: [],
         loading: false,
       });
       return true;
@@ -237,12 +239,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         console.warn('[Data] Supabase insert returned 0 rows — using SEED_DEALS in-memory');
         setState(prev => ({ ...prev, deals: SEED_DEALS, loading: false }));
         // Also save to localStorage so it persists
-        const currentState = { quotes: [], deals: SEED_DEALS, internalCosts: [], payments: [], production: [], freight: [], rfqs: [] };
+        const currentState = { quotes: [], deals: SEED_DEALS, internalCosts: [], payments: [], production: [], freight: [], rfqs: [], manufacturerRFQs: [], manufacturerBids: [] };
         localStorage.setItem('canada_steel_state', JSON.stringify(currentState));
       }
     } catch {
       setState(prev => ({ ...prev, deals: SEED_DEALS, loading: false }));
-      const currentState = { quotes: [], deals: SEED_DEALS, internalCosts: [], payments: [], production: [], freight: [], rfqs: [] };
+      const currentState = { quotes: [], deals: SEED_DEALS, internalCosts: [], payments: [], production: [], freight: [], rfqs: [], manufacturerRFQs: [], manufacturerBids: [] };
       localStorage.setItem('canada_steel_state', JSON.stringify(currentState));
     }
   }, []);

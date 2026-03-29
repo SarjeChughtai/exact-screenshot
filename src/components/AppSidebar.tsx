@@ -90,6 +90,13 @@ const menuGroups: MenuGroup[] = [
     ],
   },
   {
+    label: 'Manufacturer',
+    items: [
+      { path: '/manufacturer-rfq-board', label: 'RFQ Board', icon: Factory, module: 'manufacturer-rfq-board' },
+      { path: '/manufacturer-portal', label: 'Bid Portal', icon: Store, module: 'manufacturer-portal' },
+    ],
+  },
+  {
     label: 'System',
     items: [
       { path: '/settings', label: 'Settings', icon: SettingsIcon, module: 'settings' },

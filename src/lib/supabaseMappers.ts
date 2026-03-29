@@ -314,3 +314,73 @@ export function freightToRow(fr: Partial<FreightRecord>): Record<string, any> {
   }
   return row;
 }
+
+// --- ManufacturerRFQ ---
+export function manufacturerRFQFromRow(r: any): ManufacturerRFQ {
+  return {
+    id: r.id ?? '',
+    jobId: r.job_id ?? '',
+    title: r.title ?? '',
+    buildingSpec: r.building_spec ?? '',
+    width: Number(r.width) || 0,
+    length: Number(r.length) || 0,
+    height: Number(r.height) || 0,
+    weight: Number(r.weight) || 0,
+    province: r.province ?? '',
+    city: r.city ?? '',
+    deliveryAddress: r.delivery_address ?? '',
+    requiredByDate: r.required_by_date ?? '',
+    notes: r.notes ?? '',
+    status: r.status ?? 'Open',
+    createdBy: r.created_by ?? '',
+    createdAt: r.created_at ?? '',
+    closingDate: r.closing_date ?? '',
+    awardedBidId: r.awarded_bid_id ?? '',
+  };
+}
+
+export function manufacturerRFQToRow(m: Partial<ManufacturerRFQ>): Record<string, any> {
+  const map: Record<string, string> = {
+    id: 'id', jobId: 'job_id', title: 'title', buildingSpec: 'building_spec',
+    width: 'width', length: 'length', height: 'height', weight: 'weight',
+    province: 'province', city: 'city', deliveryAddress: 'delivery_address',
+    requiredByDate: 'required_by_date', notes: 'notes', status: 'status',
+    createdBy: 'created_by', createdAt: 'created_at', closingDate: 'closing_date',
+    awardedBidId: 'awarded_bid_id',
+  };
+  const row: Record<string, any> = {};
+  for (const [k, v] of Object.entries(m)) {
+    if (map[k]) row[map[k]] = v;
+  }
+  return row;
+}
+
+// --- ManufacturerBid ---
+export function manufacturerBidFromRow(r: any): ManufacturerBid {
+  return {
+    id: r.id ?? '',
+    rfqId: r.rfq_id ?? '',
+    manufacturerId: r.manufacturer_id ?? '',
+    manufacturerName: r.manufacturer_name ?? '',
+    pricePerLb: Number(r.price_per_lb) || 0,
+    totalPrice: Number(r.total_price) || 0,
+    leadTimeDays: Number(r.lead_time_days) || 0,
+    notes: r.notes ?? '',
+    status: r.status ?? 'Submitted',
+    submittedAt: r.submitted_at ?? '',
+  };
+}
+
+export function manufacturerBidToRow(b: Partial<ManufacturerBid>): Record<string, any> {
+  const map: Record<string, string> = {
+    id: 'id', rfqId: 'rfq_id', manufacturerId: 'manufacturer_id',
+    manufacturerName: 'manufacturer_name', pricePerLb: 'price_per_lb',
+    totalPrice: 'total_price', leadTimeDays: 'lead_time_days',
+    notes: 'notes', status: 'status', submittedAt: 'submitted_at',
+  };
+  const row: Record<string, any> = {};
+  for (const [k, v] of Object.entries(b)) {
+    if (map[k]) row[map[k]] = v;
+  }
+  return row;
+}
