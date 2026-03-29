@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useAppContext } from '@/context/AppContext';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -6,81 +6,175 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
 import { JobIdSelect } from '@/components/JobIdSelect';
-import { Checkbox } from '@/components/ui/checkbox';
-import { formatCurrency, getProvinceTax } from '@/lib/calculations';
+import { formatCurrency, getProvinceTax, PROVINCES } from '@/lib/calculations';
 import { supabase } from '@/integrations/supabase/client';
 import type { PaymentEntry, PaymentDirection, PaymentType } from '@/types';
 import { toast } from 'sonner';
-import { Pencil, Trash2 } from 'lucide-react';
+import { Pencil, Trash2, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 
 const DIRECTIONS: PaymentDirection[] = ['Client Payment IN', 'Vendor Payment OUT', 'Refund IN', 'Refund OUT'];
 const TYPES: PaymentType[] = ['Deposit', 'Progress Payment', 'Final Payment', 'Freight', 'Insulation', 'Drawings', 'Other'];
+const PROVINCE_CODES = PROVINCES.map(p => p.code);
+
+const isClientDirection = (dir: PaymentDirection) =>
+  dir === 'Client Payment IN' || dir === 'Refund OUT';
 
 const BLANK_FORM = {
   date: new Date().toISOString().split('T')[0],
-  jobId: '', clientVendorName: '', direction: 'Client Payment IN' as PaymentDirection,
-  type: 'Deposit' as PaymentType, amountExclTax: '',
-  paymentMethod: '', referenceNumber: '', notes: '',
+  jobId: '',
+  direction: 'Client Payment IN' as PaymentDirection,
+  type: 'Deposit' as PaymentType,
+  clientId: '',
+  vendorId: '',
+  clientVendorName: '',
+  vendorProvinceOverride: '',
+  amountExclTax: '',
+  taxOverride: false,
+  taxOverrideRate: '',
+  paymentMethod: '',
+  referenceNumber: '',
+  notes: '',
 };
 
+type SortCol = 'date' | 'jobId' | 'clientVendorName' | 'direction' | 'type' | 'amountExclTax' | 'taxAmount' | 'totalInclTax' | 'paymentMethod' | 'referenceNumber';
+
+function computeTax(amount: number, province: string, taxOverride: boolean, taxOverrideRateStr: string) {
+  if (taxOverride) {
+    const overrideRate = parseFloat(taxOverrideRateStr) / 100 || 0;
+    return { taxRate: overrideRate, taxAmount: amount * overrideRate, totalInclTax: amount + amount * overrideRate };
+  }
+  const prov = getProvinceTax(province || 'ON');
+  const taxAmount = amount * prov.order_rate;
+  return { taxRate: prov.order_rate, taxAmount, totalInclTax: amount + taxAmount };
+}
+
 export default function PaymentLedger() {
-  const { payments, deals, addPayment, updatePayment, refreshData, deletePayment } = useAppContext();
+  const { payments, deals, clients, vendors, addPayment, updatePayment, refreshData, deletePayment } = useAppContext();
   const [showForm, setShowForm] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncSummary, setSyncSummary] = useState('');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [form, setForm] = useState(BLANK_FORM);
 
-  // View state
+  const [sortCol, setSortCol] = useState<SortCol>('date');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+
   const [viewingPayment, setViewingPayment] = useState<PaymentEntry | null>(null);
 
-  // Edit state
   const [editingPayment, setEditingPayment] = useState<PaymentEntry | null>(null);
   const [editForm, setEditForm] = useState(BLANK_FORM);
+  const [editAuditNote, setEditAuditNote] = useState('');
+  const [pendingConfirmEdit, setPendingConfirmEdit] = useState(false);
 
-  const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
-  const setEdit = (k: string, v: string) => setEditForm(f => ({ ...f, [k]: v }));
+  const set = (k: string, v: string | boolean) => setForm(f => ({ ...f, [k]: v }));
+  const setEdit = (k: string, v: string | boolean) => setEditForm(f => ({ ...f, [k]: v }));
+
+  const handleDirectionChange = (dir: string) => {
+    setForm(f => ({ ...f, direction: dir as PaymentDirection, clientId: '', vendorId: '', clientVendorName: '', vendorProvinceOverride: '' }));
+  };
+  const handleEditDirectionChange = (dir: string) => {
+    setEditForm(f => ({ ...f, direction: dir as PaymentDirection, clientId: '', vendorId: '', clientVendorName: '', vendorProvinceOverride: '' }));
+  };
+
+  const handleClientSelect = (clientId: string) => {
+    const c = clients.find(c => c.id === clientId);
+    setForm(f => ({ ...f, clientId, clientVendorName: c?.name ?? '' }));
+  };
+  const handleEditClientSelect = (clientId: string) => {
+    const c = clients.find(c => c.id === clientId);
+    setEditForm(f => ({ ...f, clientId, clientVendorName: c?.name ?? '' }));
+  };
+
+  const handleVendorSelect = (vendorId: string) => {
+    const v = vendors.find(v => v.id === vendorId);
+    setForm(f => ({ ...f, vendorId, clientVendorName: v?.name ?? '', vendorProvinceOverride: v?.province ?? '' }));
+  };
+  const handleEditVendorSelect = (vendorId: string) => {
+    const v = vendors.find(v => v.id === vendorId);
+    setEditForm(f => ({ ...f, vendorId, clientVendorName: v?.name ?? '', vendorProvinceOverride: v?.province ?? '' }));
+  };
+
+  const resolveProvince = (f: typeof BLANK_FORM, jobId: string) => {
+    if (!isClientDirection(f.direction)) {
+      return f.vendorProvinceOverride || vendors.find(v => v.id === f.vendorId)?.province
+        || deals.find(d => d.jobId === jobId)?.province || 'ON';
+    }
+    return deals.find(d => d.jobId === jobId)?.province || 'ON';
+  };
+
+  const save = () => {
+    const amount = parseFloat(form.amountExclTax) || 0;
+    if (!form.jobId || !amount) { toast.error('Job ID and amount required'); return; }
+    const province = resolveProvince(form, form.jobId);
+    const { taxRate, taxAmount, totalInclTax } = computeTax(amount, province, form.taxOverride, form.taxOverrideRate);
+    const entry: PaymentEntry = {
+      id: crypto.randomUUID(),
+      date: form.date, jobId: form.jobId,
+      clientVendorName: form.clientVendorName,
+      clientId: isClientDirection(form.direction) ? (form.clientId && form.clientId !== '__manual' ? form.clientId : undefined) : undefined,
+      vendorId: !isClientDirection(form.direction) ? (form.vendorId && form.vendorId !== '__manual' ? form.vendorId : undefined) : undefined,
+      direction: form.direction, type: form.type,
+      amountExclTax: amount, province, taxRate, taxAmount, totalInclTax,
+      taxOverride: form.taxOverride,
+      taxOverrideRate: form.taxOverride ? parseFloat(form.taxOverrideRate) / 100 || 0 : undefined,
+      vendorProvinceOverride: !isClientDirection(form.direction) ? form.vendorProvinceOverride || undefined : undefined,
+      paymentMethod: form.paymentMethod, referenceNumber: form.referenceNumber,
+      qbSynced: false, notes: form.notes,
+    };
+    addPayment(entry);
+    setShowForm(false);
+    setForm(BLANK_FORM);
+    toast.success('Payment recorded');
+  };
 
   const openEdit = (p: PaymentEntry) => {
     setEditingPayment(p);
     setEditForm({
-      date: p.date,
-      jobId: p.jobId,
+      date: p.date, jobId: p.jobId, direction: p.direction, type: p.type,
+      clientId: p.clientId ?? '',
+      vendorId: p.vendorId ?? '',
       clientVendorName: p.clientVendorName,
-      direction: p.direction,
-      type: p.type,
+      vendorProvinceOverride: p.vendorProvinceOverride ?? '',
       amountExclTax: String(p.amountExclTax),
-      paymentMethod: p.paymentMethod,
-      referenceNumber: p.referenceNumber,
-      notes: p.notes,
+      taxOverride: p.taxOverride,
+      taxOverrideRate: p.taxOverride && p.taxOverrideRate != null ? String(p.taxOverrideRate * 100) : '',
+      paymentMethod: p.paymentMethod, referenceNumber: p.referenceNumber, notes: p.notes,
     });
+    setEditAuditNote('');
+    setPendingConfirmEdit(false);
   };
 
-  const saveEdit = () => {
+  const requestSaveEdit = () => {
     if (!editingPayment) return;
     const amount = parseFloat(editForm.amountExclTax) || 0;
     if (!editForm.jobId || !amount) { toast.error('Job ID and amount required'); return; }
-    const deal = deals.find(d => d.jobId === editForm.jobId);
-    const province = deal?.province || 'ON';
-    const prov = getProvinceTax(province);
-    const taxAmount = amount * prov.order_rate;
+    setPendingConfirmEdit(true);
+  };
+
+  const confirmSaveEdit = () => {
+    if (!editingPayment) return;
+    if (!editAuditNote.trim()) { toast.error('Audit note required'); return; }
+    const amount = parseFloat(editForm.amountExclTax) || 0;
+    const province = resolveProvince(editForm, editForm.jobId);
+    const { taxRate, taxAmount, totalInclTax } = computeTax(amount, province, editForm.taxOverride, editForm.taxOverrideRate);
     updatePayment(editingPayment.id, {
-      date: editForm.date,
-      jobId: editForm.jobId,
+      date: editForm.date, jobId: editForm.jobId,
       clientVendorName: editForm.clientVendorName,
-      direction: editForm.direction,
-      type: editForm.type,
-      amountExclTax: amount,
-      province,
-      taxRate: prov.order_rate,
-      taxAmount,
-      totalInclTax: amount + taxAmount,
-      paymentMethod: editForm.paymentMethod,
-      referenceNumber: editForm.referenceNumber,
-      notes: editForm.notes,
+      clientId: isClientDirection(editForm.direction) ? (editForm.clientId && editForm.clientId !== '__manual' ? editForm.clientId : undefined) : undefined,
+      vendorId: !isClientDirection(editForm.direction) ? (editForm.vendorId && editForm.vendorId !== '__manual' ? editForm.vendorId : undefined) : undefined,
+      direction: editForm.direction, type: editForm.type,
+      amountExclTax: amount, province, taxRate, taxAmount, totalInclTax,
+      taxOverride: editForm.taxOverride,
+      taxOverrideRate: editForm.taxOverride ? parseFloat(editForm.taxOverrideRate) / 100 || 0 : undefined,
+      vendorProvinceOverride: !isClientDirection(editForm.direction) ? editForm.vendorProvinceOverride || undefined : undefined,
+      paymentMethod: editForm.paymentMethod, referenceNumber: editForm.referenceNumber,
+      notes: editForm.notes + (editAuditNote ? `\n[Edit note: ${editAuditNote}]` : ''),
     });
     setEditingPayment(null);
+    setPendingConfirmEdit(false);
     toast.success('Payment updated');
   };
 
@@ -91,28 +185,6 @@ export default function PaymentLedger() {
     toast.success('Payment deleted');
   };
 
-  const save = () => {
-    const amount = parseFloat(form.amountExclTax) || 0;
-    if (!form.jobId || !amount) { toast.error('Job ID and amount required'); return; }
-
-    const deal = deals.find(d => d.jobId === form.jobId);
-    const province = deal?.province || 'ON';
-    const prov = getProvinceTax(province);
-    const taxAmount = amount * prov.order_rate;
-
-    const entry: PaymentEntry = {
-      id: crypto.randomUUID(), date: form.date, jobId: form.jobId,
-      clientVendorName: form.clientVendorName, direction: form.direction,
-      type: form.type, amountExclTax: amount, province,
-      taxRate: prov.order_rate, taxAmount, totalInclTax: amount + taxAmount,
-      paymentMethod: form.paymentMethod, referenceNumber: form.referenceNumber,
-      qbSynced: false, notes: form.notes,
-    };
-    addPayment(entry);
-    setShowForm(false);
-    toast.success('Payment recorded');
-  };
-
   const syncQuickBooks = async () => {
     setSyncing(true);
     setSyncSummary('');
@@ -120,18 +192,12 @@ export default function PaymentLedger() {
       const existingKeys = new Set(
         payments.map(p => `${p.jobId}|${p.date}|${p.direction}|${p.type}|${p.amountExclTax}|${p.referenceNumber}`)
       );
-
-      const { data, error } = await supabase.functions.invoke('qbo-sync', {
-        body: { action: 'sync' },
-      });
-
+      const { data, error } = await supabase.functions.invoke('qbo-sync', { body: { action: 'sync' } });
       if (error) throw new Error(error.message);
-
       const incoming = Array.isArray(data?.payments) ? data.payments : [];
       if (incoming.length > 0) {
         let inserted = 0;
         let skipped = 0;
-
         for (const item of incoming) {
           const jobId = item.jobId ?? item.job_id ?? '';
           const direction = item.direction;
@@ -139,44 +205,30 @@ export default function PaymentLedger() {
           const date = item.date ?? new Date().toISOString().split('T')[0];
           const referenceNumber = (item.referenceNumber ?? item.reference_number ?? '') as string;
           const clientVendorName = (item.clientVendorName ?? item.client_vendor_name ?? '') as string;
-
           const amountExclTax = Number(item.amountExclTax ?? item.amount_excl_tax ?? 0);
-          if (!direction || !type || !Number.isFinite(amountExclTax) || amountExclTax <= 0) {
-            skipped++;
-            continue;
-          }
-
+          if (!direction || !type || !Number.isFinite(amountExclTax) || amountExclTax <= 0) { skipped++; continue; }
           const deal = deals.find(d => d.jobId === jobId);
           const province = (item.province ?? deal?.province ?? 'ON') as string;
           const prov = getProvinceTax(province);
-
           const taxAmount = typeof item.taxAmount === 'number' ? item.taxAmount : amountExclTax * prov.order_rate;
           const totalInclTax = typeof item.totalInclTax === 'number' ? item.totalInclTax : amountExclTax + taxAmount;
-
           const key = `${jobId}|${date}|${direction}|${type}|${amountExclTax}|${referenceNumber}`;
-          if (existingKeys.has(key)) {
-            skipped++;
-            continue;
-          }
-
+          if (existingKeys.has(key)) { skipped++; continue; }
           const entry: PaymentEntry = {
             id: crypto.randomUUID(), date, jobId, clientVendorName, direction, type,
             amountExclTax, province, taxRate: prov.order_rate, taxAmount, totalInclTax,
+            taxOverride: false,
             paymentMethod: (item.paymentMethod ?? item.payment_method ?? '') as string,
-            referenceNumber, qbSynced: true,
-            notes: (item.notes ?? '') as string,
+            referenceNumber, qbSynced: true, notes: (item.notes ?? '') as string,
           };
-
           await addPayment(entry);
           existingKeys.add(key);
           inserted++;
         }
-
-        setSyncSummary(`Inserted ${inserted}. Skipped ${skipped}. (${data.summary?.paymentsIn ?? 0} payments in, ${data.summary?.paymentsOut ?? 0} payments out from QBO)`);
+        setSyncSummary(`Inserted ${inserted}. Skipped ${skipped}. (${data.summary?.paymentsIn ?? 0} in, ${data.summary?.paymentsOut ?? 0} out from QBO)`);
         toast.success('QuickBooks sync complete');
         return;
       }
-
       await refreshData();
       setSyncSummary('Sync complete — no new transactions found.');
       toast.success('QuickBooks sync complete');
@@ -189,6 +241,36 @@ export default function PaymentLedger() {
     }
   };
 
+  const handleSort = (col: SortCol) => {
+    if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortCol(col); setSortDir('asc'); }
+  };
+
+  const sortedPayments = useMemo(() => {
+    return [...payments].sort((a, b) => {
+      if (sortCol === 'amountExclTax' || sortCol === 'taxAmount' || sortCol === 'totalInclTax') {
+        const av = a[sortCol] ?? 0;
+        const bv = b[sortCol] ?? 0;
+        return sortDir === 'asc' ? av - bv : bv - av;
+      }
+      const av = String(a[sortCol] ?? '');
+      const bv = String(b[sortCol] ?? '');
+      return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+    });
+  }, [payments, sortCol, sortDir]);
+
+  const SortIcon = ({ col }: { col: SortCol }) => {
+    if (sortCol !== col) return <ArrowUpDown className="h-3 w-3 ml-1 inline opacity-40" />;
+    return sortDir === 'asc' ? <ArrowUp className="h-3 w-3 ml-1 inline" /> : <ArrowDown className="h-3 w-3 ml-1 inline" />;
+  };
+
+  const fmtRate = (rate: number) => `${(rate * 100).toFixed(1)}%`;
+
+  const addProvince = resolveProvince(form, form.jobId);
+  const addTaxPreview = form.amountExclTax
+    ? computeTax(parseFloat(form.amountExclTax) || 0, addProvince, form.taxOverride, form.taxOverrideRate)
+    : null;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -200,22 +282,24 @@ export default function PaymentLedger() {
           <Button variant="outline" onClick={() => void syncQuickBooks()} disabled={syncing}>
             {syncing ? 'Syncing...' : 'Sync QuickBooks'}
           </Button>
-          <Button onClick={() => setShowForm(!showForm)}>{showForm ? 'Cancel' : '+ New Payment'}</Button>
+          <Button onClick={() => { setShowForm(!showForm); setForm(BLANK_FORM); }}>{showForm ? 'Cancel' : '+ New Payment'}</Button>
         </div>
       </div>
 
       {showForm && (
         <div className="bg-card border rounded-lg p-5 space-y-4">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div><Label className="text-xs">Date</Label><Input className="input-blue mt-1" type="date" value={form.date} onChange={e => set('date', e.target.value)} /></div>
+            <div>
+              <Label className="text-xs">Date</Label>
+              <Input className="input-blue mt-1" type="date" value={form.date} onChange={e => set('date', e.target.value)} />
+            </div>
             <div>
               <Label className="text-xs">Job ID</Label>
               <JobIdSelect value={form.jobId} onValueChange={v => set('jobId', v)} deals={deals} />
             </div>
-            <div><Label className="text-xs">Client/Vendor Name</Label><Input className="input-blue mt-1" value={form.clientVendorName} onChange={e => set('clientVendorName', e.target.value)} /></div>
             <div>
               <Label className="text-xs">Direction</Label>
-              <Select value={form.direction} onValueChange={v => set('direction', v)}>
+              <Select value={form.direction} onValueChange={handleDirectionChange}>
                 <SelectTrigger className="input-blue mt-1"><SelectValue /></SelectTrigger>
                 <SelectContent>{DIRECTIONS.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent>
               </Select>
@@ -227,9 +311,86 @@ export default function PaymentLedger() {
                 <SelectContent>{TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
               </Select>
             </div>
-            <div><Label className="text-xs">Amount (excl. tax)</Label><Input className="input-blue mt-1" value={form.amountExclTax} onChange={e => set('amountExclTax', e.target.value)} /></div>
-            <div><Label className="text-xs">Method</Label><Input className="input-blue mt-1" value={form.paymentMethod} onChange={e => set('paymentMethod', e.target.value)} /></div>
-            <div><Label className="text-xs">Reference #</Label><Input className="input-blue mt-1" value={form.referenceNumber} onChange={e => set('referenceNumber', e.target.value)} /></div>
+
+            {isClientDirection(form.direction) ? (
+              <div>
+                <Label className="text-xs">Client</Label>
+                <Select value={form.clientId} onValueChange={handleClientSelect}>
+                  <SelectTrigger className="input-blue mt-1"><SelectValue placeholder="Select client..." /></SelectTrigger>
+                  <SelectContent>
+                    {clients.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                    <SelectItem value="__manual">Manual entry</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : (
+              <div>
+                <Label className="text-xs">Vendor</Label>
+                <Select value={form.vendorId} onValueChange={handleVendorSelect}>
+                  <SelectTrigger className="input-blue mt-1"><SelectValue placeholder="Select vendor..." /></SelectTrigger>
+                  <SelectContent>
+                    {vendors.map(v => <SelectItem key={v.id} value={v.id}>{v.name} ({v.province})</SelectItem>)}
+                    <SelectItem value="__manual">Manual entry</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            <div>
+              <Label className="text-xs">Name (auto-filled or override)</Label>
+              <Input className="input-blue mt-1" value={form.clientVendorName} onChange={e => set('clientVendorName', e.target.value)} placeholder="Client/vendor name..." />
+            </div>
+
+            {!isClientDirection(form.direction) && (
+              <div>
+                <Label className="text-xs">Vendor Province (this tx)</Label>
+                <Select value={form.vendorProvinceOverride || addProvince} onValueChange={v => set('vendorProvinceOverride', v)}>
+                  <SelectTrigger className="input-blue mt-1"><SelectValue /></SelectTrigger>
+                  <SelectContent>{PROVINCE_CODES.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+            )}
+
+            <div>
+              <Label className="text-xs">Amount (excl. tax)</Label>
+              <Input className="input-blue mt-1" type="number" min="0" step="0.01" value={form.amountExclTax} onChange={e => set('amountExclTax', e.target.value)} />
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <Label className="text-xs">Tax Override</Label>
+              <div className="flex items-center gap-2 mt-2">
+                <Switch checked={form.taxOverride} onCheckedChange={v => set('taxOverride', v)} />
+                <span className="text-xs text-muted-foreground">
+                  {form.taxOverride ? 'Custom rate' : `Auto (${fmtRate(getProvinceTax(addProvince).order_rate)})`}
+                </span>
+              </div>
+            </div>
+            {form.taxOverride && (
+              <div>
+                <Label className="text-xs">Override Rate (%)</Label>
+                <Input className="input-blue mt-1" type="number" min="0" max="100" step="0.1" value={form.taxOverrideRate} onChange={e => set('taxOverrideRate', e.target.value)} placeholder="e.g. 13" />
+              </div>
+            )}
+
+            {addTaxPreview && (
+              <div className="flex flex-col justify-end">
+                <p className="text-xs text-muted-foreground">Tax: <span className="font-mono">{formatCurrency(addTaxPreview.taxAmount)}</span></p>
+                <p className="text-xs font-semibold">Total: <span className="font-mono">{formatCurrency(addTaxPreview.totalInclTax)}</span></p>
+              </div>
+            )}
+
+            <div>
+              <Label className="text-xs">Method</Label>
+              <Input className="input-blue mt-1" value={form.paymentMethod} onChange={e => set('paymentMethod', e.target.value)} />
+            </div>
+            <div>
+              <Label className="text-xs">Reference #</Label>
+              <Input className="input-blue mt-1" value={form.referenceNumber} onChange={e => set('referenceNumber', e.target.value)} />
+            </div>
+            <div className="col-span-2 md:col-span-4">
+              <Label className="text-xs">Notes</Label>
+              <Input className="input-blue mt-1" value={form.notes} onChange={e => set('notes', e.target.value)} />
+            </div>
           </div>
           <Button onClick={save}>Save Payment</Button>
         </div>
@@ -239,15 +400,29 @@ export default function PaymentLedger() {
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-primary text-primary-foreground text-xs">
-              {['Date','Job ID','Name','Direction','Type','Amount','Tax','Total','Method','Ref #',''].map(h => (
-                <th key={h} className="px-3 py-2 text-left font-medium whitespace-nowrap">{h}</th>
+              {(
+                [
+                  ['date', 'Date'], ['jobId', 'Job ID'], ['clientVendorName', 'Name'],
+                  ['direction', 'Direction'], ['type', 'Type'], ['amountExclTax', 'Amount'],
+                  ['taxAmount', 'Tax'], ['totalInclTax', 'Total'],
+                  ['paymentMethod', 'Method'], ['referenceNumber', 'Ref #'],
+                ] as [SortCol, string][]
+              ).map(([col, label]) => (
+                <th
+                  key={col}
+                  className="px-3 py-2 text-left font-medium whitespace-nowrap cursor-pointer select-none hover:bg-primary/80"
+                  onClick={() => handleSort(col)}
+                >
+                  {label}<SortIcon col={col} />
+                </th>
               ))}
+              <th className="px-3 py-2"></th>
             </tr>
           </thead>
           <tbody>
-            {payments.length === 0 ? (
+            {sortedPayments.length === 0 ? (
               <tr><td colSpan={11} className="px-3 py-8 text-center text-muted-foreground">No payments recorded</td></tr>
-            ) : payments.map(p => (
+            ) : sortedPayments.map(p => (
               <tr key={p.id} className="border-b hover:bg-muted/50 cursor-pointer" onClick={() => setViewingPayment(p)}>
                 <td className="px-3 py-2 text-xs">{p.date}</td>
                 <td className="px-3 py-2 font-mono text-xs">{p.jobId}</td>
@@ -255,7 +430,10 @@ export default function PaymentLedger() {
                 <td className="px-3 py-2 text-xs">{p.direction}</td>
                 <td className="px-3 py-2 text-xs">{p.type}</td>
                 <td className="px-3 py-2 font-mono">{formatCurrency(p.amountExclTax)}</td>
-                <td className="px-3 py-2 font-mono">{formatCurrency(p.taxAmount)}</td>
+                <td className="px-3 py-2 font-mono text-xs">
+                  {formatCurrency(p.taxAmount)}
+                  {p.taxOverride && <span className="ml-1 text-amber-600 text-[10px]">*</span>}
+                </td>
                 <td className="px-3 py-2 font-mono font-semibold">{formatCurrency(p.totalInclTax)}</td>
                 <td className="px-3 py-2 text-xs">{p.paymentMethod}</td>
                 <td className="px-3 py-2 text-xs">{p.referenceNumber}</td>
@@ -275,64 +453,61 @@ export default function PaymentLedger() {
         </table>
       </div>
 
+      {sortedPayments.some(p => p.taxOverride) && (
+        <p className="text-xs text-muted-foreground">* Tax override applied on this transaction</p>
+      )}
+
       {syncSummary && (
-        <div className="bg-muted rounded-md p-3 text-xs text-muted-foreground">
-          {syncSummary}
-        </div>
+        <div className="bg-muted rounded-md p-3 text-xs text-muted-foreground">{syncSummary}</div>
       )}
 
       <AlertDialog open={!!pendingDeleteId} onOpenChange={open => { if (!open) setPendingDeleteId(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Payment</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete this payment? This action cannot be undone.
-            </AlertDialogDescription>
+            <AlertDialogDescription>Are you sure you want to delete this payment? This action cannot be undone.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction className={buttonVariants({ variant: 'destructive' })} onClick={confirmDelete}>
-              Delete
-            </AlertDialogAction>
+            <AlertDialogAction className={buttonVariants({ variant: 'destructive' })} onClick={confirmDelete}>Delete</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* View Payment Dialog */}
       <Dialog open={!!viewingPayment} onOpenChange={open => { if (!open) setViewingPayment(null); }}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Payment Details</DialogTitle>
-          </DialogHeader>
-
+          <DialogHeader><DialogTitle>Payment Details</DialogTitle></DialogHeader>
           {viewingPayment && (() => {
             const deal = deals.find(d => d.jobId === viewingPayment.jobId);
             const jobPayments = payments.filter(p => p.jobId === viewingPayment.jobId);
             const totalIn = jobPayments.filter(p => p.direction === 'Client Payment IN' || p.direction === 'Refund IN').reduce((s, p) => s + p.totalInclTax, 0);
             const totalOut = jobPayments.filter(p => p.direction === 'Vendor Payment OUT' || p.direction === 'Refund OUT').reduce((s, p) => s + p.totalInclTax, 0);
+            const linkedClient = clients.find(c => c.id === viewingPayment.clientId);
+            const linkedVendor = vendors.find(v => v.id === viewingPayment.vendorId);
             return (
               <div className="space-y-5">
-                {/* Payment info */}
                 <div className="bg-muted/50 rounded-lg p-4 space-y-3">
                   <h3 className="font-semibold text-sm">Payment Information</h3>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-1 text-xs">
                     <div><span className="text-muted-foreground">Date:</span> <span className="font-medium">{viewingPayment.date}</span></div>
                     <div><span className="text-muted-foreground">Job ID:</span> <span className="font-mono font-medium">{viewingPayment.jobId}</span></div>
-                    <div><span className="text-muted-foreground">Client/Vendor:</span> <span className="font-medium">{viewingPayment.clientVendorName}</span></div>
+                    <div><span className="text-muted-foreground">Name:</span> <span className="font-medium">{viewingPayment.clientVendorName}</span></div>
+                    {linkedClient && <div><span className="text-muted-foreground">Linked Client:</span> <span className="font-medium">{linkedClient.name}</span></div>}
+                    {linkedVendor && <div><span className="text-muted-foreground">Linked Vendor:</span> <span className="font-medium">{linkedVendor.name} ({linkedVendor.province})</span></div>}
                     <div><span className="text-muted-foreground">Direction:</span> <span className="font-medium">{viewingPayment.direction}</span></div>
                     <div><span className="text-muted-foreground">Type:</span> <span className="font-medium">{viewingPayment.type}</span></div>
                     <div><span className="text-muted-foreground">Method:</span> <span className="font-medium">{viewingPayment.paymentMethod || '—'}</span></div>
                     <div><span className="text-muted-foreground">Reference #:</span> <span className="font-medium">{viewingPayment.referenceNumber || '—'}</span></div>
+                    <div><span className="text-muted-foreground">Province:</span> <span className="font-medium">{viewingPayment.vendorProvinceOverride || viewingPayment.province}</span></div>
                     <div><span className="text-muted-foreground">Amount (excl. tax):</span> <span className="font-mono font-medium">{formatCurrency(viewingPayment.amountExclTax)}</span></div>
-                    <div><span className="text-muted-foreground">Tax:</span> <span className="font-mono font-medium">{formatCurrency(viewingPayment.taxAmount)}</span></div>
+                    <div><span className="text-muted-foreground">Tax ({viewingPayment.taxOverride ? 'override' : fmtRate(viewingPayment.taxRate)}):</span> <span className="font-mono font-medium">{formatCurrency(viewingPayment.taxAmount)}</span></div>
                     <div><span className="text-muted-foreground">Total (incl. tax):</span> <span className="font-mono font-semibold">{formatCurrency(viewingPayment.totalInclTax)}</span></div>
                     {viewingPayment.notes && (
-                      <div className="col-span-2 md:col-span-3"><span className="text-muted-foreground">Notes:</span> <span className="font-medium">{viewingPayment.notes}</span></div>
+                      <div className="col-span-2 md:col-span-3"><span className="text-muted-foreground">Notes:</span> <span className="font-medium whitespace-pre-wrap">{viewingPayment.notes}</span></div>
                     )}
                   </div>
                 </div>
 
-                {/* Job Info */}
                 {deal && (
                   <div className="bg-muted/50 rounded-lg p-4 space-y-3">
                     <h3 className="font-semibold text-sm">Job Information — {deal.jobId}</h3>
@@ -343,12 +518,6 @@ export default function PaymentLedger() {
                       <div><span className="text-muted-foreground">Province:</span> <span className="font-medium">{deal.province}</span></div>
                       <div><span className="text-muted-foreground">City:</span> <span className="font-medium">{deal.city}</span></div>
                       <div><span className="text-muted-foreground">Deal Status:</span> <span className="font-medium">{deal.dealStatus}</span></div>
-                      <div><span className="text-muted-foreground">Payment Status:</span> <span className="font-medium">{deal.paymentStatus}</span></div>
-                      <div><span className="text-muted-foreground">Production:</span> <span className="font-medium">{deal.productionStatus}</span></div>
-                      <div><span className="text-muted-foreground">Date Signed:</span> <span className="font-medium">{deal.dateSigned}</span></div>
-                      <div><span className="text-muted-foreground">Delivery:</span> <span className="font-medium">{deal.deliveryDate || '—'}</span></div>
-                      <div><span className="text-muted-foreground">Size:</span> <span className="font-medium">{deal.width}×{deal.length}×{deal.height} ft</span></div>
-                      <div><span className="text-muted-foreground">Sq ft:</span> <span className="font-medium">{deal.sqft?.toLocaleString()}</span></div>
                     </div>
                     <div className="flex gap-6 pt-1 text-xs font-medium">
                       <span className="text-green-600">Total IN: {formatCurrency(totalIn)}</span>
@@ -358,7 +527,6 @@ export default function PaymentLedger() {
                   </div>
                 )}
 
-                {/* All payments for this job */}
                 {jobPayments.length > 0 && (
                   <div>
                     <h3 className="font-semibold text-sm mb-2">All Payments for Job {viewingPayment.jobId}</h3>
@@ -400,54 +568,145 @@ export default function PaymentLedger() {
         </DialogContent>
       </Dialog>
 
-      {/* Edit Payment Dialog */}
-      <Dialog open={!!editingPayment} onOpenChange={open => { if (!open) setEditingPayment(null); }}>
+      <Dialog open={!!editingPayment} onOpenChange={open => { if (!open) { setEditingPayment(null); setPendingConfirmEdit(false); } }}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Edit Payment</DialogTitle>
-          </DialogHeader>
-
+          <DialogHeader><DialogTitle>Edit Payment</DialogTitle></DialogHeader>
           {editingPayment && (() => {
+            const editProvince = resolveProvince(editForm, editForm.jobId);
+            const editTaxPreview = computeTax(parseFloat(editForm.amountExclTax) || 0, editProvince, editForm.taxOverride, editForm.taxOverrideRate);
             return (
-              <div className="space-y-5">
-                {/* Edit form */}
-                <div>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                    <div><Label className="text-xs">Date</Label><Input className="input-blue mt-1" type="date" value={editForm.date} onChange={e => setEdit('date', e.target.value)} /></div>
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  <div>
+                    <Label className="text-xs">Date</Label>
+                    <Input className="input-blue mt-1" type="date" value={editForm.date} onChange={e => setEdit('date', e.target.value)} />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Job ID</Label>
+                    <JobIdSelect value={editForm.jobId} onValueChange={v => setEdit('jobId', v)} deals={deals} />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Direction</Label>
+                    <Select value={editForm.direction} onValueChange={handleEditDirectionChange}>
+                      <SelectTrigger className="input-blue mt-1"><SelectValue /></SelectTrigger>
+                      <SelectContent>{DIRECTIONS.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-xs">Type</Label>
+                    <Select value={editForm.type} onValueChange={v => setEdit('type', v)}>
+                      <SelectTrigger className="input-blue mt-1"><SelectValue /></SelectTrigger>
+                      <SelectContent>{TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+
+                  {isClientDirection(editForm.direction) ? (
                     <div>
-                      <Label className="text-xs">Job ID</Label>
-                      <JobIdSelect value={editForm.jobId} onValueChange={v => setEdit('jobId', v)} deals={deals} />
-                    </div>
-                    <div><Label className="text-xs">Client/Vendor Name</Label><Input className="input-blue mt-1" value={editForm.clientVendorName} onChange={e => setEdit('clientVendorName', e.target.value)} /></div>
-                    <div>
-                      <Label className="text-xs">Direction</Label>
-                      <Select value={editForm.direction} onValueChange={v => setEdit('direction', v)}>
-                        <SelectTrigger className="input-blue mt-1"><SelectValue /></SelectTrigger>
-                        <SelectContent>{DIRECTIONS.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent>
+                      <Label className="text-xs">Client</Label>
+                      <Select value={editForm.clientId} onValueChange={handleEditClientSelect}>
+                        <SelectTrigger className="input-blue mt-1"><SelectValue placeholder="Select client..." /></SelectTrigger>
+                        <SelectContent>
+                          {clients.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                          <SelectItem value="__manual">Manual entry</SelectItem>
+                        </SelectContent>
                       </Select>
                     </div>
+                  ) : (
                     <div>
-                      <Label className="text-xs">Type</Label>
-                      <Select value={editForm.type} onValueChange={v => setEdit('type', v)}>
-                        <SelectTrigger className="input-blue mt-1"><SelectValue /></SelectTrigger>
-                        <SelectContent>{TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+                      <Label className="text-xs">Vendor</Label>
+                      <Select value={editForm.vendorId} onValueChange={handleEditVendorSelect}>
+                        <SelectTrigger className="input-blue mt-1"><SelectValue placeholder="Select vendor..." /></SelectTrigger>
+                        <SelectContent>
+                          {vendors.map(v => <SelectItem key={v.id} value={v.id}>{v.name} ({v.province})</SelectItem>)}
+                          <SelectItem value="__manual">Manual entry</SelectItem>
+                        </SelectContent>
                       </Select>
                     </div>
-                    <div><Label className="text-xs">Amount (excl. tax)</Label><Input className="input-blue mt-1" value={editForm.amountExclTax} onChange={e => setEdit('amountExclTax', e.target.value)} /></div>
-                    <div><Label className="text-xs">Method</Label><Input className="input-blue mt-1" value={editForm.paymentMethod} onChange={e => setEdit('paymentMethod', e.target.value)} /></div>
-                    <div><Label className="text-xs">Reference #</Label><Input className="input-blue mt-1" value={editForm.referenceNumber} onChange={e => setEdit('referenceNumber', e.target.value)} /></div>
-                    <div className="col-span-2 md:col-span-3"><Label className="text-xs">Notes</Label><Input className="input-blue mt-1" value={editForm.notes} onChange={e => setEdit('notes', e.target.value)} /></div>
+                  )}
+
+                  <div>
+                    <Label className="text-xs">Name (override)</Label>
+                    <Input className="input-blue mt-1" value={editForm.clientVendorName} onChange={e => setEdit('clientVendorName', e.target.value)} />
                   </div>
-                  <div className="flex gap-2 mt-4">
-                    <Button onClick={saveEdit}>Save Changes</Button>
-                    <Button variant="outline" onClick={() => setEditingPayment(null)}>Cancel</Button>
+
+                  {!isClientDirection(editForm.direction) && (
+                    <div>
+                      <Label className="text-xs">Vendor Province (this tx)</Label>
+                      <Select value={editForm.vendorProvinceOverride || editProvince} onValueChange={v => setEdit('vendorProvinceOverride', v)}>
+                        <SelectTrigger className="input-blue mt-1"><SelectValue /></SelectTrigger>
+                        <SelectContent>{PROVINCE_CODES.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  <div>
+                    <Label className="text-xs">Amount (excl. tax)</Label>
+                    <Input className="input-blue mt-1" type="number" min="0" step="0.01" value={editForm.amountExclTax} onChange={e => setEdit('amountExclTax', e.target.value)} />
                   </div>
+
+                  <div className="flex flex-col gap-1">
+                    <Label className="text-xs">Tax Override</Label>
+                    <div className="flex items-center gap-2 mt-2">
+                      <Switch checked={editForm.taxOverride} onCheckedChange={v => setEdit('taxOverride', v)} />
+                      <span className="text-xs text-muted-foreground">
+                        {editForm.taxOverride ? 'Custom rate' : `Auto (${fmtRate(getProvinceTax(editProvince).order_rate)})`}
+                      </span>
+                    </div>
+                  </div>
+
+                  {editForm.taxOverride && (
+                    <div>
+                      <Label className="text-xs">Override Rate (%)</Label>
+                      <Input className="input-blue mt-1" type="number" min="0" max="100" step="0.1" value={editForm.taxOverrideRate} onChange={e => setEdit('taxOverrideRate', e.target.value)} placeholder="e.g. 13" />
+                    </div>
+                  )}
+
+                  <div className="flex flex-col justify-end">
+                    <p className="text-xs text-muted-foreground">Tax: <span className="font-mono">{formatCurrency(editTaxPreview.taxAmount)}</span></p>
+                    <p className="text-xs font-semibold">Total: <span className="font-mono">{formatCurrency(editTaxPreview.totalInclTax)}</span></p>
+                  </div>
+
+                  <div>
+                    <Label className="text-xs">Method</Label>
+                    <Input className="input-blue mt-1" value={editForm.paymentMethod} onChange={e => setEdit('paymentMethod', e.target.value)} />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Reference #</Label>
+                    <Input className="input-blue mt-1" value={editForm.referenceNumber} onChange={e => setEdit('referenceNumber', e.target.value)} />
+                  </div>
+                  <div className="col-span-2 md:col-span-3">
+                    <Label className="text-xs">Notes</Label>
+                    <Input className="input-blue mt-1" value={editForm.notes} onChange={e => setEdit('notes', e.target.value)} />
+                  </div>
+                </div>
+                <div className="flex gap-2 mt-4">
+                  <Button onClick={requestSaveEdit}>Save Changes</Button>
+                  <Button variant="outline" onClick={() => { setEditingPayment(null); setPendingConfirmEdit(false); }}>Cancel</Button>
                 </div>
               </div>
             );
           })()}
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={pendingConfirmEdit} onOpenChange={open => { if (!open) setPendingConfirmEdit(false); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Payment Edit</AlertDialogTitle>
+            <AlertDialogDescription>Please provide a reason for this change (required for audit trail).</AlertDialogDescription>
+          </AlertDialogHeader>
+          <Textarea
+            className="mt-2"
+            placeholder="Reason for change..."
+            value={editAuditNote}
+            onChange={e => setEditAuditNote(e.target.value)}
+          />
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setPendingConfirmEdit(false)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmSaveEdit}>Confirm & Save</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
