@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { Building2, Clock, CheckCircle2, XCircle, RefreshCw, LogOut } from 'lucide-react';
 
@@ -40,6 +39,7 @@ export default function PendingApproval() {
   });
   const [submitting, setSubmitting] = useState(false);
   const [checking, setChecking] = useState(true);
+  const [autoSubmitError, setAutoSubmitError] = useState(false);
 
   const checkAccessRequest = useCallback(async () => {
     if (!user?.id) return;
@@ -55,6 +55,48 @@ export default function PendingApproval() {
     setAccessRequest(data as AccessRequest | null);
     setChecking(false);
   }, [user?.id]);
+
+  // Auto-submit an access request as soon as we know there isn't one yet.
+  // This removes the need for the user to fill in a form — they see a
+  // "we got your request" screen immediately after signing in with Google.
+  useEffect(() => {
+    if (!user || checking || accessRequest !== null) return;
+    // accessRequest is null (confirmed no existing request) — auto-submit.
+    const autoSubmit = async () => {
+      setSubmitting(true);
+      setAutoSubmitError(false);
+      const displayName =
+        user.user_metadata?.full_name ||
+        user.user_metadata?.name ||
+        user.email ||
+        '';
+
+      // `requestedRole` is captured once at mount from localStorage; we
+      // intentionally omit it from the dep array so this effect only fires
+      // once when the check resolves to null, not on every role dropdown change.
+      const roleToRequest = requestedRole;
+
+      const { error } = await supabase.from('access_requests').insert({
+        user_id: user.id,
+        email: user.email || '',
+        name: displayName,
+        requested_role: roleToRequest as any,
+        status: 'pending',
+      });
+
+      setSubmitting(false);
+
+      if (error) {
+        setAutoSubmitError(true);
+        toast.error('Failed to submit access request. Please try again.');
+      } else {
+        checkAccessRequest();
+      }
+    };
+
+    autoSubmit();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally run once when check resolves to null; requestedRole is stable (set from localStorage at mount)
+  }, [user, checking, accessRequest]);
 
   useEffect(() => {
     checkAccessRequest();
@@ -133,29 +175,25 @@ export default function PendingApproval() {
         </CardHeader>
         <CardContent className="space-y-4">
 
-          {/* No request yet — show request form */}
+          {/* No request yet — auto-submitting, show a brief spinner or error */}
           {!accessRequest && (
-            <div className="space-y-4">
-              <div className="rounded-lg border bg-muted/40 p-4 text-center text-sm text-muted-foreground">
-                Your account doesn't have access yet. Request your access level below.
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="role-select">Requested Access Level</Label>
-                <Select value={requestedRole} onValueChange={setRequestedRole}>
-                  <SelectTrigger id="role-select"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {REQUESTABLE_ROLES.map(r => (
-                      <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  An admin will review and approve your access request.
-                </p>
-              </div>
-              <Button className="w-full" onClick={handleSubmitRequest} disabled={submitting}>
-                {submitting ? 'Submitting...' : 'Request Access'}
-              </Button>
+            <div className="flex flex-col items-center gap-3 rounded-lg border bg-muted/40 p-5 text-center">
+              {autoSubmitError ? (
+                <>
+                  <XCircle className="h-8 w-8 text-red-500" />
+                  <p className="text-sm text-muted-foreground">
+                    Could not submit your access request. Please try again.
+                  </p>
+                  <Button size="sm" onClick={() => { setAutoSubmitError(false); checkAccessRequest(); }} disabled={submitting}>
+                    Retry
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+                  <p className="text-sm text-muted-foreground">Submitting your access request…</p>
+                </>
+              )}
             </div>
           )}
 
@@ -165,13 +203,9 @@ export default function PendingApproval() {
               <div className="flex flex-col items-center gap-3 rounded-lg border bg-muted/40 p-5 text-center">
                 <Clock className="h-8 w-8 text-amber-500" />
                 <div>
-                  <p className="font-semibold">Access Request Pending</p>
+                  <p className="font-semibold">We've got your request!</p>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Your request for{' '}
-                    <Badge variant="outline">
-                      {REQUESTABLE_ROLES.find(r => r.value === accessRequest.requested_role)?.label || accessRequest.requested_role}
-                    </Badge>{' '}
-                    access is under review.
+                    You'll be let in once an admin has granted you access.
                   </p>
                   <p className="text-xs text-muted-foreground mt-2">
                     Submitted {new Date(accessRequest.created_at).toLocaleDateString()}
