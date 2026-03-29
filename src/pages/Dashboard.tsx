@@ -170,50 +170,6 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* Active Quotes (prominent for sales reps, also visible for others) */}
-      {activeQuotes.length > 0 && (
-        <div className="bg-card rounded-lg border p-5">
-          <h3 className="text-sm font-semibold text-card-foreground mb-4 flex items-center gap-2">
-            <Clock className="h-4 w-4 text-warning" />
-            Active Quotes Out
-          </h3>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b text-left text-muted-foreground">
-                  <th className="pb-2 font-medium">Job ID</th>
-                  <th className="pb-2 font-medium">Client</th>
-                  {!isSalesRep && <th className="pb-2 font-medium">Sales Rep</th>}
-                  <th className="pb-2 font-medium">Building</th>
-                  <th className="pb-2 font-medium">Total</th>
-                  <th className="pb-2 font-medium">Status</th>
-                  <th className="pb-2 font-medium">Date</th>
-                </tr>
-              </thead>
-              <tbody>
-                {activeQuotes.map(q => (
-                  <tr key={q.id} className="border-b last:border-0">
-                    <td className="py-2 font-mono text-xs">{q.jobId}</td>
-                    <td className="py-2">{q.clientName}</td>
-                    {!isSalesRep && <td className="py-2 text-xs">{q.salesRep}</td>}
-                    <td className="py-2 text-xs">{q.width}×{q.length}×{q.height}</td>
-                    <td className="py-2 font-mono">{formatCurrency(q.grandTotal)}</td>
-                    <td className="py-2">
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                        q.status === 'Sent' ? 'status-partial' :
-                        q.status === 'Follow Up' ? 'bg-warning/20 text-warning' :
-                        'bg-muted text-muted-foreground'
-                      }`}>{q.status}</span>
-                    </td>
-                    <td className="py-2 text-xs text-muted-foreground">{q.date}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
       {/* Recent deals */}
       <div className="bg-card rounded-lg border p-5">
         <h3 className="text-sm font-semibold text-card-foreground mb-4">Recent Deals</h3>
@@ -259,6 +215,50 @@ export default function Dashboard() {
           </div>
         )}
       </div>
+
+      {/* Active Quotes (prominent for sales reps, also visible for others) */}
+      {activeQuotes.length > 0 && (
+        <div className="bg-card rounded-lg border p-5">
+          <h3 className="text-sm font-semibold text-card-foreground mb-4 flex items-center gap-2">
+            <Clock className="h-4 w-4 text-warning" />
+            Active Quotes Out
+          </h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-left text-muted-foreground">
+                  <th className="pb-2 font-medium">Job ID</th>
+                  <th className="pb-2 font-medium">Client</th>
+                  {!isSalesRep && <th className="pb-2 font-medium">Sales Rep</th>}
+                  <th className="pb-2 font-medium">Building</th>
+                  <th className="pb-2 font-medium">Total</th>
+                  <th className="pb-2 font-medium">Status</th>
+                  <th className="pb-2 font-medium">Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {activeQuotes.map(q => (
+                  <tr key={q.id} className="border-b last:border-0">
+                    <td className="py-2 font-mono text-xs">{q.jobId}</td>
+                    <td className="py-2">{q.clientName}</td>
+                    {!isSalesRep && <td className="py-2 text-xs">{q.salesRep}</td>}
+                    <td className="py-2 text-xs">{q.width}×{q.length}×{q.height}</td>
+                    <td className="py-2 font-mono">{formatCurrency(q.grandTotal)}</td>
+                    <td className="py-2">
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                        q.status === 'Sent' ? 'status-partial' :
+                        q.status === 'Follow Up' ? 'bg-warning/20 text-warning' :
+                        'bg-muted text-muted-foreground'
+                      }`}>{q.status}</span>
+                    </td>
+                    <td className="py-2 text-xs text-muted-foreground">{q.date}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
