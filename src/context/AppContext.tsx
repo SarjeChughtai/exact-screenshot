@@ -45,7 +45,13 @@ interface AppContextType extends AppState {
   addRFQ: (rfq: RFQ) => void;
   updateRFQ: (id: string, updates: Partial<RFQ>) => void;
   deleteRFQ: (id: string) => void;
-  addClient: (clientId: string, clientName: string) => Promise<Client | null>;
+  addClient: (c: Client) => void;
+  updateClient: (id: string, updates: Partial<Client>) => void;
+  deleteClient: (id: string) => void;
+  addVendor: (v: Vendor) => void;
+  updateVendor: (id: string, updates: Partial<Vendor>) => void;
+  deleteVendor: (id: string) => void;
+  quickAddClient: (clientId: string, clientName: string) => Promise<Client | null>;
   refreshData: () => Promise<void>;
 }
 
@@ -208,7 +214,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
         clients: (clR.data || []).map(clientFromRow),
         vendors: (vR.data || []).map(vendorFromRow),
         rfqs: [],
-        clients: (clR.data || []).map(clientFromRow),
         loading: false,
       });
       return true;
@@ -276,7 +281,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [currentUser]);
 
   // --- Clients ---
-  const addClient = useCallback(async (clientId: string, clientName: string): Promise<Client | null> => {
+  const quickAddClient = useCallback(async (clientId: string, clientName: string): Promise<Client | null> => {
     try {
       const { data, error } = await supabase
         .from('clients')
@@ -578,7 +583,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addInternalCost, updateInternalCost, addPayment, updatePayment, deletePayment,
       addProduction, updateProduction, addFreight, updateFreight,
       addRFQ, updateRFQ, deleteRFQ,
-      addClient, updateClient, deleteClient,
+      quickAddClient, addClient, updateClient, deleteClient,
       addVendor, updateVendor, deleteVendor,
       refreshData: fetchAll,
     }}>

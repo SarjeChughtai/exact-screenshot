@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(B=\"C:/Users/Sarje/.gemini/antigravity/scratch/exact-screenshot\")",
+      "Bash(A=\"C:/Users/Sarje/.gemini/antigravity/scratch/exact-screenshot-main\")",
+      "Bash(cp \"$B/src/context/AuthContext.tsx\" \"$A/src/context/AuthContext.tsx\")",
+      "Bash(cp \"$B/src/pages/Auth.tsx\" \"$A/src/pages/Auth.tsx\")",
+      "Bash(cp \"$B/src/pages/ResetPassword.tsx\" \"$A/src/pages/ResetPassword.tsx\")",
+      "Bash(cp \"$B/src/App.tsx\" \"$A/src/App.tsx\")",
+      "Bash(cp \"$B/src/context/AppContext.tsx\" \"$A/src/context/AppContext.tsx\")",
+      "Bash(cp \"$B/src/types/index.ts\" \"$A/src/types/index.ts\")",
+      "Bash(cp \"$B/src/components/AppSidebar.tsx\" \"$A/src/components/AppSidebar.tsx\")",
+      "Bash(npm run:*)",
+      "Bash(npx tsc:*)",
+      "Read(//c/Program Files/nodejs/**)",
+      "Read(//c/Users/Sarje/AppData/Roaming/npm/**)",
+      "Read(//c/Users/Sarje/**)",
+      "Bash(export PATH=\"/c/Program Files/nodejs:$PATH\")",
+      "Bash(npm install:*)",
+      "Bash(gh auth:*)",
+      "Bash(export PATH=\"/c/Program Files/GitHub CLI:$PATH:/c/Program Files \\(x86\\)/GitHub CLI\")",
+      "Bash(export PATH=\"/c/Program Files/GitHub CLI:$PATH\")",
+      "Bash(gh repo:*)"
+    ]
+  }
+}

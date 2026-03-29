@@ -16,7 +16,7 @@ interface ClientSelectProps {
 }
 
 export function ClientSelect({ mode, valueId, valueName, onSelect, className }: ClientSelectProps) {
-  const { clients, addClient } = useAppContext();
+  const { clients, quickAddClient } = useAppContext();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [showAdd, setShowAdd] = useState(false);
@@ -43,7 +43,7 @@ export function ClientSelect({ mode, valueId, valueName, onSelect, className }: 
     if (!newId && !newName) return;
     const id = newId || `C-${Date.now().toString(36).toUpperCase()}`;
     const name = newName || id;
-    await addClient(id, name);
+    await quickAddClient(id, name);
     onSelect({ clientId: id, clientName: name });
     setNewId('');
     setNewName('');
