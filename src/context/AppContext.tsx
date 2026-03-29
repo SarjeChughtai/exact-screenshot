@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
-import { Quote, Deal, InternalCost, PaymentEntry, ProductionRecord, FreightRecord, RFQ, ManufacturerRFQ, ManufacturerBid } from '@/types';
+import { Quote, Deal, InternalCost, PaymentEntry, ProductionRecord, FreightRecord, RFQ, Client, Vendor } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
 import { useRoles } from '@/context/RoleContext';
 import { logAudit } from '@/lib/auditLog';
@@ -10,8 +10,8 @@ import {
   paymentFromRow, paymentToRow,
   productionFromRow, productionToRow,
   freightFromRow, freightToRow,
-  manufacturerRFQFromRow, manufacturerRFQToRow,
-  manufacturerBidFromRow, manufacturerBidToRow,
+  clientFromRow, clientToRow,
+  vendorFromRow, vendorToRow,
 } from '@/lib/supabaseMappers';
 import { SEED_DEALS } from '@/data/seedDeals';
 import { toast } from 'sonner';
@@ -24,8 +24,8 @@ interface AppState {
   production: ProductionRecord[];
   freight: FreightRecord[];
   rfqs: RFQ[];
-  manufacturerRFQs: ManufacturerRFQ[];
-  manufacturerBids: ManufacturerBid[];
+  clients: Client[];
+  vendors: Vendor[];
   loading: boolean;
 }
 
@@ -47,11 +47,12 @@ interface AppContextType extends AppState {
   addRFQ: (rfq: RFQ) => void;
   updateRFQ: (id: string, updates: Partial<RFQ>) => void;
   deleteRFQ: (id: string) => void;
-  addManufacturerRFQ: (rfq: ManufacturerRFQ) => void;
-  updateManufacturerRFQ: (id: string, updates: Partial<ManufacturerRFQ>) => void;
-  deleteManufacturerRFQ: (id: string) => void;
-  addManufacturerBid: (bid: ManufacturerBid) => void;
-  updateManufacturerBid: (id: string, updates: Partial<ManufacturerBid>) => void;
+  addClient: (c: Client) => void;
+  updateClient: (id: string, updates: Partial<Client>) => void;
+  deleteClient: (id: string) => void;
+  addVendor: (v: Vendor) => void;
+  updateVendor: (id: string, updates: Partial<Vendor>) => void;
+  deleteVendor: (id: string) => void;
   refreshData: () => Promise<void>;
 }
 
@@ -60,20 +61,20 @@ const AppContext = createContext<AppContextType | null>(null);
 export function AppProvider({ children }: { children: ReactNode }) {
   const { currentUser } = useRoles();
   const [state, setState] = useState<AppState>({
-    quotes: [], deals: [], internalCosts: [], payments: [], production: [], freight: [], rfqs: [], manufacturerRFQs: [], manufacturerBids: [], loading: true,
+    quotes: [], deals: [], internalCosts: [], payments: [], production: [], freight: [], rfqs: [], clients: [], vendors: [], loading: true,
   });
 
   const fetchAll = useCallback(async () => {
     try {
-      const [quotesRes, dealsRes, costsRes, paymentsRes, prodRes, freightRes, mfgRfqRes, mfgBidRes] = await Promise.all([
+      const [quotesRes, dealsRes, costsRes, paymentsRes, prodRes, freightRes, clientsRes, vendorsRes] = await Promise.all([
         supabase.from('quotes').select('*'),
         supabase.from('deals').select('*'),
         supabase.from('internal_costs').select('*'),
         supabase.from('payments').select('*'),
         supabase.from('production').select('*'),
         supabase.from('freight').select('*'),
-        supabase.from('manufacturer_rfqs').select('*'),
-        supabase.from('manufacturer_bids').select('*'),
+        supabase.from('clients').select('*'),
+        supabase.from('vendors').select('*'),
       ]);
 
       // Log fetch results for debugging
@@ -84,6 +85,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         payments: paymentsRes.data?.length, paymentsErr: paymentsRes.error,
         production: prodRes.data?.length, prodErr: prodRes.error,
         freight: freightRes.data?.length, freightErr: freightRes.error,
+        clients: clientsRes.data?.length, clientsErr: clientsRes.error,
+        vendors: vendorsRes.data?.length, vendorsErr: vendorsRes.error,
       });
 
       // Check if any core query had an error (e.g. RLS blocking unauthenticated)
@@ -101,9 +104,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const payments = (paymentsRes.data || []).map(paymentFromRow);
       const production = (prodRes.data || []).map(productionFromRow);
       const freight = (freightRes.data || []).map(freightFromRow);
-      // Manufacturer tables may not exist yet — handle gracefully
-      const manufacturerRFQs = mfgRfqRes.error ? [] : (mfgRfqRes.data || []).map(manufacturerRFQFromRow);
-      const manufacturerBids = mfgBidRes.error ? [] : (mfgBidRes.data || []).map(manufacturerBidFromRow);
+      const clients = (clientsRes.data || []).map(clientFromRow);
+      const vendors = (vendorsRes.data || []).map(vendorFromRow);
 
       // If all Supabase tables are empty, try migrating from localStorage
       const allEmpty = quotes.length === 0 && deals.length === 0 && payments.length === 0;
@@ -119,7 +121,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      setState({ quotes, deals, internalCosts, payments, production, freight, rfqs: state.rfqs, manufacturerRFQs, manufacturerBids, loading: false });
+      setState({ quotes, deals, internalCosts, payments, production, freight, rfqs: state.rfqs, clients, vendors, loading: false });
     } catch (err) {
       console.error('Supabase fetch error, falling back to localStorage', err);
       loadFromLocalStorage();
@@ -139,8 +141,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
           production: data.production || [],
           freight: data.freight || [],
           rfqs: data.rfqs || [],
-          manufacturerRFQs: data.manufacturerRFQs || [],
-          manufacturerBids: data.manufacturerBids || [],
+          clients: data.clients || [],
+          vendors: data.vendors || [],
           loading: false,
         });
       } else {
@@ -192,13 +194,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
       localStorage.removeItem('canada_steel_state');
 
       // Re-fetch from Supabase after migration
-      const [qR, dR, cR, pR, prR, fR] = await Promise.all([
+      const [qR, dR, cR, pR, prR, fR, clR, vR] = await Promise.all([
         supabase.from('quotes').select('*'),
         supabase.from('deals').select('*'),
         supabase.from('internal_costs').select('*'),
         supabase.from('payments').select('*'),
         supabase.from('production').select('*'),
         supabase.from('freight').select('*'),
+        supabase.from('clients').select('*'),
+        supabase.from('vendors').select('*'),
       ]);
 
       setState({
@@ -208,6 +212,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         payments: (pR.data || []).map(paymentFromRow),
         production: (prR.data || []).map(productionFromRow),
         freight: (fR.data || []).map(freightFromRow),
+        clients: (clR.data || []).map(clientFromRow),
+        vendors: (vR.data || []).map(vendorFromRow),
         rfqs: [],
         manufacturerRFQs: [],
         manufacturerBids: [],
@@ -449,64 +455,75 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
   }, [currentUser]);
 
-  // --- Manufacturer RFQs ---
-  const addManufacturerRFQ = useCallback(async (rfq: ManufacturerRFQ) => {
-    setState(prev => ({ ...prev, manufacturerRFQs: [...prev.manufacturerRFQs, rfq] }));
-    logAudit(currentUser?.name || 'System', 'CREATE', 'ManufacturerRFQ', rfq.id, rfq);
+  // --- Clients ---
+  const addClient = useCallback(async (c: Client) => {
+    setState(prev => ({ ...prev, clients: [...prev.clients, c] }));
+    logAudit(currentUser?.name || 'System', 'CREATE', 'Client', c.id, c);
     try {
-      const row = manufacturerRFQToRow(rfq);
-      await supabase.from('manufacturer_rfqs').insert(row as any).select().single();
+      const row = clientToRow(c);
+      await supabase.from('clients').insert(row as any).select().single();
     } catch {}
   }, [currentUser]);
 
-  const updateManufacturerRFQ = useCallback(async (id: string, updates: Partial<ManufacturerRFQ>) => {
+  const updateClient = useCallback(async (id: string, updates: Partial<Client>) => {
     setState(prev => {
-      const existing = prev.manufacturerRFQs.find(r => r.id === id);
-      if (existing) logAudit(currentUser?.name || 'System', 'UPDATE', 'ManufacturerRFQ', id, updates, existing);
+      const existing = prev.clients.find(c => c.id === id);
+      if (existing) logAudit(currentUser?.name || 'System', 'UPDATE', 'Client', id, updates, existing);
       return {
         ...prev,
-        manufacturerRFQs: prev.manufacturerRFQs.map(r => r.id === id ? { ...r, ...updates } : r),
+        clients: prev.clients.map(c => c.id === id ? { ...c, ...updates } : c),
       };
     });
     try {
-      const row = manufacturerRFQToRow(updates);
-      await supabase.from('manufacturer_rfqs').update(row as any).eq('id', id);
+      const row = clientToRow(updates);
+      await supabase.from('clients').update(row as any).eq('id', id);
     } catch {}
   }, [currentUser]);
 
-  const deleteManufacturerRFQ = useCallback(async (id: string) => {
+  const deleteClient = useCallback(async (id: string) => {
     setState(prev => {
-      const existing = prev.manufacturerRFQs.find(r => r.id === id);
-      if (existing) logAudit(currentUser?.name || 'System', 'DELETE', 'ManufacturerRFQ', id, { id }, existing);
-      return { ...prev, manufacturerRFQs: prev.manufacturerRFQs.filter(r => r.id !== id) };
+      const existing = prev.clients.find(c => c.id === id);
+      if (existing) logAudit(currentUser?.name || 'System', 'DELETE', 'Client', id, { id }, existing);
+      return { ...prev, clients: prev.clients.filter(c => c.id !== id) };
     });
     try {
-      await supabase.from('manufacturer_rfqs').delete().eq('id', id);
+      await supabase.from('clients').delete().eq('id', id);
     } catch {}
   }, [currentUser]);
 
-  // --- Manufacturer Bids ---
-  const addManufacturerBid = useCallback(async (bid: ManufacturerBid) => {
-    setState(prev => ({ ...prev, manufacturerBids: [...prev.manufacturerBids, bid] }));
-    logAudit(currentUser?.name || 'System', 'CREATE', 'ManufacturerBid', bid.id, bid);
+  // --- Vendors ---
+  const addVendor = useCallback(async (v: Vendor) => {
+    setState(prev => ({ ...prev, vendors: [...prev.vendors, v] }));
+    logAudit(currentUser?.name || 'System', 'CREATE', 'Vendor', v.id, v);
     try {
-      const row = manufacturerBidToRow(bid);
-      await supabase.from('manufacturer_bids').insert(row as any).select().single();
+      const row = vendorToRow(v);
+      await supabase.from('vendors').insert(row as any).select().single();
     } catch {}
   }, [currentUser]);
 
-  const updateManufacturerBid = useCallback(async (id: string, updates: Partial<ManufacturerBid>) => {
+  const updateVendor = useCallback(async (id: string, updates: Partial<Vendor>) => {
     setState(prev => {
-      const existing = prev.manufacturerBids.find(b => b.id === id);
-      if (existing) logAudit(currentUser?.name || 'System', 'UPDATE', 'ManufacturerBid', id, updates, existing);
+      const existing = prev.vendors.find(v => v.id === id);
+      if (existing) logAudit(currentUser?.name || 'System', 'UPDATE', 'Vendor', id, updates, existing);
       return {
         ...prev,
-        manufacturerBids: prev.manufacturerBids.map(b => b.id === id ? { ...b, ...updates } : b),
+        vendors: prev.vendors.map(v => v.id === id ? { ...v, ...updates } : v),
       };
     });
     try {
-      const row = manufacturerBidToRow(updates);
-      await supabase.from('manufacturer_bids').update(row as any).eq('id', id);
+      const row = vendorToRow(updates);
+      await supabase.from('vendors').update(row as any).eq('id', id);
+    } catch {}
+  }, [currentUser]);
+
+  const deleteVendor = useCallback(async (id: string) => {
+    setState(prev => {
+      const existing = prev.vendors.find(v => v.id === id);
+      if (existing) logAudit(currentUser?.name || 'System', 'DELETE', 'Vendor', id, { id }, existing);
+      return { ...prev, vendors: prev.vendors.filter(v => v.id !== id) };
+    });
+    try {
+      await supabase.from('vendors').delete().eq('id', id);
     } catch {}
   }, [currentUser]);
 
@@ -516,8 +533,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addInternalCost, updateInternalCost, addPayment, updatePayment, deletePayment,
       addProduction, updateProduction, addFreight, updateFreight,
       addRFQ, updateRFQ, deleteRFQ,
-      addManufacturerRFQ, updateManufacturerRFQ, deleteManufacturerRFQ,
-      addManufacturerBid, updateManufacturerBid,
+      addClient, updateClient, deleteClient,
+      addVendor, updateVendor, deleteVendor,
       refreshData: fetchAll,
     }}>
       {children}

@@ -1,4 +1,4 @@
-import type { Quote, Deal, InternalCost, PaymentEntry, ProductionRecord, FreightRecord, ManufacturerRFQ, ManufacturerBid } from '@/types';
+import type { Quote, Deal, InternalCost, PaymentEntry, ProductionRecord, FreightRecord, Client, Vendor } from '@/types';
 
 // --- Deal ---
 export function dealFromRow(r: any): Deal {
@@ -167,6 +167,8 @@ export function paymentFromRow(r: any): PaymentEntry {
     date: r.date ?? '',
     jobId: r.job_id ?? '',
     clientVendorName: r.client_vendor_name ?? '',
+    clientId: r.client_id ?? undefined,
+    vendorId: r.vendor_id ?? undefined,
     direction: r.direction ?? 'Client Payment IN',
     type: r.type ?? 'Deposit',
     amountExclTax: Number(r.amount_excl_tax) || 0,
@@ -174,6 +176,9 @@ export function paymentFromRow(r: any): PaymentEntry {
     taxRate: Number(r.tax_rate) || 0,
     taxAmount: Number(r.tax_amount) || 0,
     totalInclTax: Number(r.total_incl_tax) || 0,
+    taxOverride: r.tax_override ?? false,
+    taxOverrideRate: r.tax_override_rate != null ? Number(r.tax_override_rate) : undefined,
+    vendorProvinceOverride: r.vendor_province_override ?? undefined,
     paymentMethod: r.payment_method ?? '',
     referenceNumber: r.reference_number ?? '',
     qbSynced: r.qb_synced ?? false,
@@ -184,14 +189,66 @@ export function paymentFromRow(r: any): PaymentEntry {
 export function paymentToRow(p: Partial<PaymentEntry>): Record<string, any> {
   const map: Record<string, string> = {
     id: 'id', date: 'date', jobId: 'job_id', clientVendorName: 'client_vendor_name',
+    clientId: 'client_id', vendorId: 'vendor_id',
     direction: 'direction', type: 'type', amountExclTax: 'amount_excl_tax', province: 'province',
     taxRate: 'tax_rate', taxAmount: 'tax_amount', totalInclTax: 'total_incl_tax',
+    taxOverride: 'tax_override', taxOverrideRate: 'tax_override_rate',
+    vendorProvinceOverride: 'vendor_province_override',
     paymentMethod: 'payment_method', referenceNumber: 'reference_number',
     qbSynced: 'qb_synced', notes: 'notes',
   };
   const row: Record<string, any> = {};
   for (const [k, v] of Object.entries(p)) {
     if (map[k]) row[map[k]] = v;
+  }
+  return row;
+}
+
+// --- Client ---
+export function clientFromRow(r: any): Client {
+  return {
+    id: r.id ?? '',
+    name: r.name ?? '',
+    contactEmail: r.contact_email ?? '',
+    contactPhone: r.contact_phone ?? '',
+    notes: r.notes ?? '',
+    createdAt: r.created_at ?? '',
+  };
+}
+
+export function clientToRow(c: Partial<Client>): Record<string, any> {
+  const map: Record<string, string> = {
+    id: 'id', name: 'name', contactEmail: 'contact_email',
+    contactPhone: 'contact_phone', notes: 'notes',
+  };
+  const row: Record<string, any> = {};
+  for (const [k, v] of Object.entries(c)) {
+    if (map[k]) row[map[k]] = v;
+  }
+  return row;
+}
+
+// --- Vendor ---
+export function vendorFromRow(r: any): Vendor {
+  return {
+    id: r.id ?? '',
+    name: r.name ?? '',
+    province: r.province ?? 'ON',
+    contactEmail: r.contact_email ?? '',
+    contactPhone: r.contact_phone ?? '',
+    notes: r.notes ?? '',
+    createdAt: r.created_at ?? '',
+  };
+}
+
+export function vendorToRow(v: Partial<Vendor>): Record<string, any> {
+  const map: Record<string, string> = {
+    id: 'id', name: 'name', province: 'province',
+    contactEmail: 'contact_email', contactPhone: 'contact_phone', notes: 'notes',
+  };
+  const row: Record<string, any> = {};
+  for (const [k, val] of Object.entries(v)) {
+    if (map[k]) row[map[k]] = val;
   }
   return row;
 }
