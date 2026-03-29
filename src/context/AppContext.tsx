@@ -11,7 +11,6 @@ import {
   productionFromRow, productionToRow,
   freightFromRow, freightToRow,
   clientFromRow, clientToRow,
-  vendorFromRow, vendorToRow,
 } from '@/lib/supabaseMappers';
 import { SEED_DEALS } from '@/data/seedDeals';
 import { toast } from 'sonner';
@@ -25,7 +24,6 @@ interface AppState {
   freight: FreightRecord[];
   rfqs: RFQ[];
   clients: Client[];
-  vendors: Vendor[];
   loading: boolean;
 }
 
@@ -47,12 +45,7 @@ interface AppContextType extends AppState {
   addRFQ: (rfq: RFQ) => void;
   updateRFQ: (id: string, updates: Partial<RFQ>) => void;
   deleteRFQ: (id: string) => void;
-  addClient: (c: Client) => void;
-  updateClient: (id: string, updates: Partial<Client>) => void;
-  deleteClient: (id: string) => void;
-  addVendor: (v: Vendor) => void;
-  updateVendor: (id: string, updates: Partial<Vendor>) => void;
-  deleteVendor: (id: string) => void;
+  addClient: (clientId: string, clientName: string) => Promise<Client | null>;
   refreshData: () => Promise<void>;
 }
 
@@ -215,8 +208,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         clients: (clR.data || []).map(clientFromRow),
         vendors: (vR.data || []).map(vendorFromRow),
         rfqs: [],
-        manufacturerRFQs: [],
-        manufacturerBids: [],
+        clients: (clR.data || []).map(clientFromRow),
         loading: false,
       });
       return true;
@@ -283,6 +275,54 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } catch {}
   }, [currentUser]);
 
+  // --- Clients ---
+  const addClient = useCallback(async (clientId: string, clientName: string): Promise<Client | null> => {
+    try {
+      const { data, error } = await supabase
+        .from('clients')
+        .insert({ client_id: clientId, client_name: clientName, job_ids: [] })
+        .select()
+        .single();
+      if (error || !data) return null;
+      const client = clientFromRow(data);
+      setState(prev => ({ ...prev, clients: [...prev.clients, client] }));
+      return client;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  // Upsert client: create if missing, append jobId to job_ids
+  const upsertClientJob = useCallback(async (clientId: string, clientName: string, jobId: string) => {
+    try {
+      const { data: existing } = await supabase
+        .from('clients')
+        .select('id, job_ids')
+        .eq('client_id', clientId)
+        .maybeSingle();
+
+      if (existing) {
+        const newJobIds = [...(existing.job_ids || []), jobId];
+        await supabase.from('clients').update({ job_ids: newJobIds }).eq('client_id', clientId);
+        setState(prev => ({
+          ...prev,
+          clients: prev.clients.map(c =>
+            c.clientId === clientId ? { ...c, jobIds: newJobIds } : c
+          ),
+        }));
+      } else {
+        const { data } = await supabase
+          .from('clients')
+          .insert({ client_id: clientId, client_name: clientName, job_ids: [jobId] })
+          .select()
+          .single();
+        if (data) {
+          setState(prev => ({ ...prev, clients: [...prev.clients, clientFromRow(data)] }));
+        }
+      }
+    } catch {}
+  }, []);
+
   // --- Deals ---
   const addDeal = useCallback(async (d: Deal) => {
     setState(prev => ({ ...prev, deals: [...prev.deals, d] }));
@@ -291,7 +331,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const row = dealToRow(d);
       await supabase.from('deals').insert(row as any).select().single();
     } catch {}
-  }, [currentUser]);
+    // Upsert client record with the new job ID
+    if (d.clientName || d.clientId) {
+      const cId = d.clientId || `C-${Date.now().toString(36).toUpperCase()}`;
+      await upsertClientJob(cId, d.clientName, d.jobId);
+    }
+  }, [currentUser, upsertClientJob]);
 
   const updateDeal = useCallback(async (jobId: string, updates: Partial<Deal>) => {
     setState(prev => {
