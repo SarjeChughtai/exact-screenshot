@@ -110,7 +110,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      setState({ quotes, deals, internalCosts, payments, production, freight, rfqs: state.rfqs, loading: false });
+      setState({ quotes, deals, internalCosts, payments, paymentChangeLogs: (changeLogRes.data || []).map(paymentChangeLogFromRow), production, freight, rfqs: state.rfqs, loading: false });
     } catch (err) {
       console.error('Supabase fetch error, falling back to localStorage', err);
       loadFromLocalStorage();
@@ -127,6 +127,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           deals: data.deals || [],
           internalCosts: data.internalCosts || [],
           payments: data.payments || [],
+          paymentChangeLogs: [],
           production: data.production || [],
           freight: data.freight || [],
           rfqs: data.rfqs || [],
@@ -195,6 +196,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         deals: (dR.data || []).map(dealFromRow),
         internalCosts: (cR.data || []).map(internalCostFromRow),
         payments: (pR.data || []).map(paymentFromRow),
+        paymentChangeLogs: [],
         production: (prR.data || []).map(productionFromRow),
         freight: (fR.data || []).map(freightFromRow),
         rfqs: [],
@@ -326,40 +328,70 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [currentUser]);
 
   // --- Payments ---
+  const writePaymentChangeLog = useCallback(async (
+    paymentId: string,
+    action: 'CREATE' | 'UPDATE' | 'DELETE',
+    summary: string,
+  ) => {
+    const entry: PaymentChangeLog = {
+      id: crypto.randomUUID(),
+      paymentId,
+      changedBy: currentUser?.name || 'System',
+      action,
+      summary,
+      changedAt: new Date().toISOString(),
+    };
+    setState(prev => ({ ...prev, paymentChangeLogs: [entry, ...prev.paymentChangeLogs] }));
+    try {
+      await supabase.from('payment_change_log').insert(paymentChangeLogToRow(entry) as any);
+    } catch {}
+  }, [currentUser]);
+
   const addPayment = useCallback(async (p: PaymentEntry) => {
     setState(prev => ({ ...prev, payments: [...prev.payments, p] }));
     logAudit(currentUser?.name || 'System', 'CREATE', 'Payment', p.id, p);
+    void writePaymentChangeLog(p.id, 'CREATE', `Added ${p.type} · ${p.direction}`);
     try {
       const row = paymentToRow(p);
       await supabase.from('payments').insert(row as any).select().single();
     } catch {}
-  }, [currentUser]);
+  }, [currentUser, writePaymentChangeLog]);
 
   const updatePayment = useCallback(async (id: string, updates: Partial<PaymentEntry>) => {
-    setState(prev => {
-      const existing = prev.payments.find(p => p.id === id);
-      if (existing) logAudit(currentUser?.name || 'System', 'UPDATE', 'Payment', id, updates, existing);
-      return {
-        ...prev,
-        payments: prev.payments.map(p => p.id === id ? { ...p, ...updates } : p),
+    const existing = stateRef.current.payments.find(p => p.id === id);
+    if (existing) {
+      logAudit(currentUser?.name || 'System', 'UPDATE', 'Payment', id, updates, existing);
+      const fieldLabels: Record<string, string> = {
+        date: 'date', jobId: 'job', clientVendorName: 'name', direction: 'direction',
+        type: 'type', amountExclTax: 'amount', paymentMethod: 'method', referenceNumber: 'ref #', notes: 'notes',
       };
-    });
+      const changed = Object.keys(updates)
+        .filter(k => fieldLabels[k] && (updates as any)[k] !== (existing as any)[k])
+        .map(k => fieldLabels[k]);
+      const summary = changed.length > 0 ? `Changed: ${changed.join(', ')}` : 'Updated';
+      void writePaymentChangeLog(id, 'UPDATE', summary);
+    }
+    setState(prev => ({
+      ...prev,
+      payments: prev.payments.map(p => p.id === id ? { ...p, ...updates } : p),
+    }));
     try {
       const row = paymentToRow(updates);
       await supabase.from('payments').update(row as any).eq('id', id);
     } catch {}
-  }, [currentUser]);
+  }, [currentUser, writePaymentChangeLog]);
 
   const deletePayment = useCallback(async (id: string) => {
-    setState(prev => {
-      const existing = prev.payments.find(p => p.id === id);
-      if (existing) logAudit(currentUser?.name || 'System', 'DELETE', 'Payment', id, { id }, existing);
-      return { ...prev, payments: prev.payments.filter(p => p.id !== id) };
-    });
+    const existing = stateRef.current.payments.find(p => p.id === id);
+    if (existing) {
+      logAudit(currentUser?.name || 'System', 'DELETE', 'Payment', id, { id }, existing);
+      void writePaymentChangeLog(id, 'DELETE', `Deleted ${existing.type} · ${existing.direction}`);
+    }
+    setState(prev => ({ ...prev, payments: prev.payments.filter(p => p.id !== id) }));
     try {
       await supabase.from('payments').delete().eq('id', id);
     } catch {}
-  }, [currentUser]);
+  }, [currentUser, writePaymentChangeLog]);
 
   // --- Production ---
   const addProduction = useCallback(async (pr: ProductionRecord) => {
