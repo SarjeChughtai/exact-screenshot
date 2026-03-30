@@ -24,6 +24,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [userRoles, setUserRoles] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [rolesLoading, setRolesLoading] = useState(true);
+  // Track current user ID via ref so the auth listener always sees the latest value
+  const currentUserIdRef = React.useRef<string | null>(null);
 
   const fetchRoles = async (userId: string) => {
     setRolesLoading(true);
@@ -43,11 +45,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Set up auth listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, currentSession) => {
-        // Prevent redundant state updates if it's just a token refresh and the user is the same
-        if (event === 'TOKEN_REFRESHED' && currentSession?.user?.id === session?.user?.id) {
+        const incomingUserId = currentSession?.user?.id ?? null;
+
+        // Skip cross-tab auth events that don't represent a real change for this tab.
+        // currentUserIdRef always holds the latest value (no stale closure issue).
+        if (event !== 'SIGNED_OUT' && incomingUserId && incomingUserId === currentUserIdRef.current) {
           return;
         }
 
+        currentUserIdRef.current = incomingUserId;
         setSession(currentSession);
         setUser(currentSession?.user ?? null);
         if (currentSession?.user) {
@@ -62,6 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // THEN check existing session
     supabase.auth.getSession().then(({ data: { session } }) => {
+      currentUserIdRef.current = session?.user?.id ?? null;
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
