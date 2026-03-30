@@ -28,7 +28,7 @@ export default function Dashboard() {
   }
 
   if (hasAnyRole('dealer')) {
-     return <Navigate to="/dealer-rfq" replace />;
+     return <Navigate to="/dealer-log" replace />;
   }
 
   const isSalesRep = !hasAnyRole('admin', 'owner', 'accounting', 'operations', 'freight');
