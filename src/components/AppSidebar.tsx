@@ -85,8 +85,8 @@ const menuGroups: MenuGroup[] = [
   {
     label: 'Dealer',
     items: [
-      { path: '/dealer-rfq', label: 'Dealer RFQ', icon: Store, module: 'dealer-rfq' },
       { path: '/dealer-log', label: 'My Requests', icon: ClipboardList, module: 'dealer-log' },
+      { path: '/dealer-rfq', label: 'Dealer RFQ', icon: Store, module: 'dealer-rfq' },
     ],
   },
   {
