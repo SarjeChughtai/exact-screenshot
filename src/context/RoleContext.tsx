@@ -41,7 +41,7 @@ const MODULE_ACCESS: Record<string, UserRole[]> = {
   'commission-statement': ['admin', 'owner', 'accounting'],
   freight: ['admin', 'owner', 'freight', 'operations'],
   rfq: ['admin', 'owner', 'freight', 'operations'],
-  settings: ['admin', 'owner', 'accounting', 'operations', 'sales_rep', 'freight', 'manufacturer'],
+  settings: ['admin', 'owner', 'accounting', 'operations', 'sales_rep', 'freight', 'manufacturer', 'dealer'],
   'dealer-rfq': ['admin', 'owner', 'dealer'],
   'dealer-log': ['admin', 'owner', 'dealer'],
   'draft-log': ['admin', 'owner'],

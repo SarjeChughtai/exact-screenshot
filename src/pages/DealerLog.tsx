@@ -3,6 +3,9 @@ import { formatNumber } from '@/lib/calculations';
 import { Store, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
+import { useSettings } from '@/context/SettingsContext';
+import { useAuth } from '@/context/AuthContext';
+import { useRoles } from '@/context/RoleContext';
 
 interface DealerRequest {
   id: string;
@@ -22,6 +25,20 @@ interface DealerRequest {
 export default function DealerLog() {
   const [requests, setRequests] = useState<DealerRequest[]>([]);
   const navigate = useNavigate();
+
+  const { settings } = useSettings();
+  const { user } = useAuth();
+  const { hasRole } = useRoles();
+
+  useEffect(() => {
+    // Check if user is a dealer and needs profile setup
+    if (user && hasRole('dealer')) {
+      const hasProfile = settings.dealers?.some(d => d.userId === user.id);
+      if (!hasProfile) {
+        navigate('/settings');
+      }
+    }
+  }, [user, hasRole, settings.dealers, navigate]);
 
   useEffect(() => {
     try {

@@ -15,12 +15,14 @@ import { UserManagement } from '@/components/UserManagement';
 import CRMSettings from '@/components/CRMSettings';
 import QBOSettings from '@/components/QBOSettings';
 import DataImportSettings from '@/components/DataImportSettings';
+import DealerProfileSettings from '@/components/DealerProfileSettings';
 
 export default function Settings() {
   const { settings, updateSettings } = useSettings();
   const appCtx = useAppContext();
   const { hasAnyRole } = useRoles();
   const isAdmin = hasAnyRole('admin', 'owner');
+  const isDealer = hasAnyRole('dealer');
 
   const [newPerson, setNewPerson] = useState({ name: '', email: '', roles: ['sales_rep'] as PersonnelEntry['roles'] });
 
@@ -87,16 +89,17 @@ export default function Settings() {
         <p className="text-sm text-muted-foreground mt-1">Global configuration for markups, statuses, and personnel</p>
       </div>
 
-      <Tabs defaultValue={isAdmin ? "markups" : "statuses"}>
+      <Tabs defaultValue={isAdmin ? "markups" : isDealer ? "dealer-profile" : "statuses"}>
         <TabsList>
           {isAdmin && <TabsTrigger value="markups">Markup & Costs</TabsTrigger>}
           {isAdmin && <TabsTrigger value="estimator">Estimator</TabsTrigger>}
-          <TabsTrigger value="statuses">Status Options</TabsTrigger>
-          <TabsTrigger value="personnel">Personnel</TabsTrigger>
+          {isDealer && <TabsTrigger value="dealer-profile">Dealer Profile</TabsTrigger>}
+          {!isDealer && <TabsTrigger value="statuses">Status Options</TabsTrigger>}
+          {!isDealer && <TabsTrigger value="personnel">Personnel</TabsTrigger>}
            {isAdmin && <TabsTrigger value="users">Users & Access</TabsTrigger>}
            {isAdmin && <TabsTrigger value="crm">CRM</TabsTrigger>}
            {isAdmin && <TabsTrigger value="quickbooks">QuickBooks</TabsTrigger>}
-           <TabsTrigger value="data">Data</TabsTrigger>
+           {!isDealer && <TabsTrigger value="data">Data</TabsTrigger>}
         </TabsList>
 
         {isAdmin && (
@@ -184,6 +187,12 @@ export default function Settings() {
               </div>
               <p className="text-xs text-muted-foreground">When OFF, the Quick Estimator shows final prices only with no mention of supplier increase %, internal margin %, or any markup labels.</p>
             </div>
+          </TabsContent>
+        )}
+
+        {isDealer && (
+          <TabsContent value="dealer-profile" className="space-y-4">
+            <DealerProfileSettings />
           </TabsContent>
         )}
 

@@ -15,6 +15,14 @@ export interface ClientEntry {
   clientName: string;
 }
 
+export interface DealerProfile {
+  userId: string;
+  clientId: string;
+  contactEmail: string;
+  contactPhone: string;
+  billingInfo: string;
+}
+
 export interface AppSettings {
   supplierIncreasePct: number;
   internalMarkupTiers: { threshold: number; rate: number }[];
@@ -36,6 +44,7 @@ export interface AppSettings {
   freightStatuses: string[];
   personnel: PersonnelEntry[];
   clients: ClientEntry[];
+  dealers: DealerProfile[];
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -70,6 +79,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     { id: '3', name: 'Mitch Fink', email: 'mitch@canadasteel.ca', role: 'sales_rep', roles: ['sales_rep'] },
   ],
   clients: [],
+  dealers: [],
 };
 
 interface SettingsContextType {
