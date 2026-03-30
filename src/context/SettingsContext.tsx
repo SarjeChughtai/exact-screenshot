@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react';
+import { useRoles } from '@/context/RoleContext';
 
 export type PersonnelRole = 'sales_rep' | 'estimator' | 'team_lead';
 
@@ -113,6 +114,7 @@ const SettingsContext = createContext<SettingsContextType | null>(null);
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<AppSettings>(loadSettings);
+  const { actualRoles, currentUser } = useRoles();
 
   const updateSettings = useCallback((updates: Partial<AppSettings>) => {
     setSettings(prev => {
@@ -121,6 +123,23 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       return next;
     });
   }, []);
+
+  useEffect(() => {
+    // Automatically add current user to personnel if they have sales_rep role
+    if (actualRoles.includes('sales_rep') && currentUser.email) {
+      const exists = settings.personnel.some(p => p.email.toLowerCase() === currentUser.email.toLowerCase());
+      if (!exists) {
+        const newEntry: PersonnelEntry = {
+          id: currentUser.id || crypto.randomUUID(),
+          name: currentUser.name || currentUser.email,
+          email: currentUser.email,
+          role: 'sales_rep',
+          roles: ['sales_rep']
+        };
+        updateSettings({ personnel: [...settings.personnel, newEntry] });
+      }
+    }
+  }, [actualRoles, currentUser, settings.personnel, updateSettings]);
 
   const getSalesReps = useCallback(() => settings.personnel.filter(p => (p.roles || [p.role]).includes('sales_rep')), [settings]);
   const getEstimators = useCallback(() => settings.personnel.filter(p => (p.roles || [p.role]).includes('estimator')), [settings]);

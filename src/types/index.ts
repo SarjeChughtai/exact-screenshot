@@ -3,6 +3,9 @@ export interface Client {
   clientId: string;
   clientName: string;
   jobIds: string[];
+  contactEmail?: string;
+  contactPhone?: string;
+  notes?: string;
   createdAt: string;
 }
 
@@ -49,6 +52,7 @@ export interface Quote {
   qst: number;
   grandTotal: number;
   status: QuoteStatus;
+  isDeleted?: boolean;
 }
 
 export type QuoteStatus = 'Draft' | 'Sent' | 'Follow Up' | 'Won' | 'Lost' | 'Expired';
@@ -110,15 +114,6 @@ export interface InternalCost {
 
 export type PaymentDirection = 'Client Payment IN' | 'Vendor Payment OUT' | 'Refund IN' | 'Refund OUT';
 export type PaymentType = 'Deposit' | 'Progress Payment' | 'Final Payment' | 'Freight' | 'Insulation' | 'Drawings' | 'Other';
-
-export interface Client {
-  id: string;
-  name: string;
-  contactEmail: string;
-  contactPhone: string;
-  notes: string;
-  createdAt: string;
-}
 
 export interface Vendor {
   id: string;
@@ -239,4 +234,3 @@ export interface ManufacturerBid {
   status: ManufacturerBidStatus;
   submittedAt: string;
 }
-

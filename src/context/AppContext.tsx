@@ -11,6 +11,7 @@ import {
   productionFromRow, productionToRow,
   freightFromRow, freightToRow,
   clientFromRow, clientToRow,
+  vendorFromRow, vendorToRow,
 } from '@/lib/supabaseMappers';
 import { SEED_DEALS } from '@/data/seedDeals';
 import { toast } from 'sonner';
@@ -24,12 +25,15 @@ interface AppState {
   freight: FreightRecord[];
   rfqs: RFQ[];
   clients: Client[];
+  vendors: Vendor[];
   loading: boolean;
 }
 
 interface AppContextType extends AppState {
   addQuote: (q: Quote) => void;
   updateQuote: (id: string, updates: Partial<Quote>) => void;
+  deleteQuote: (id: string) => void;
+  restoreQuote: (id: string) => void;
   addDeal: (d: Deal) => void;
   updateDeal: (jobId: string, updates: Partial<Deal>) => void;
   deleteDeal: (jobId: string) => void;
@@ -277,6 +281,34 @@ export function AppProvider({ children }: { children: ReactNode }) {
     try {
       const row = quoteToRow(updates);
       await supabase.from('quotes').update(row as any).eq('id', id);
+    } catch {}
+  }, [currentUser]);
+
+  const deleteQuote = useCallback(async (id: string) => {
+    setState(prev => {
+      const existing = prev.quotes.find(q => q.id === id);
+      if (existing) logAudit(currentUser?.name || 'System', 'DELETE', 'Quote', id, { isDeleted: true }, existing);
+      return {
+        ...prev,
+        quotes: prev.quotes.map(q => q.id === id ? { ...q, isDeleted: true } : q),
+      };
+    });
+    try {
+      await (supabase.from('quotes').update({ is_deleted: true } as any) as any).eq('id', id);
+    } catch {}
+  }, [currentUser]);
+
+  const restoreQuote = useCallback(async (id: string) => {
+    setState(prev => {
+      const existing = prev.quotes.find(q => q.id === id);
+      if (existing) logAudit(currentUser?.name || 'System', 'RESTORE', 'Quote', id, { isDeleted: false }, existing);
+      return {
+        ...prev,
+        quotes: prev.quotes.map(q => q.id === id ? { ...q, isDeleted: false } : q),
+      };
+    });
+    try {
+      await (supabase.from('quotes').update({ is_deleted: false } as any) as any).eq('id', id);
     } catch {}
   }, [currentUser]);
 
@@ -579,7 +611,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   return (
     <AppContext.Provider value={{
-      ...state, addQuote, updateQuote, addDeal, updateDeal, deleteDeal,
+      ...state, addQuote, updateQuote, deleteQuote, restoreQuote, addDeal, updateDeal, deleteDeal,
       addInternalCost, updateInternalCost, addPayment, updatePayment, deletePayment,
       addProduction, updateProduction, addFreight, updateFreight,
       addRFQ, updateRFQ, deleteRFQ,

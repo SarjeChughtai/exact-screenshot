@@ -1,4 +1,4 @@
-import type { Quote, Deal, InternalCost, PaymentEntry, ProductionRecord, FreightRecord, Client, Vendor } from '@/types';
+import type { Quote, Deal, InternalCost, PaymentEntry, ProductionRecord, FreightRecord, Client, Vendor, ManufacturerRFQ, ManufacturerBid } from '@/types';
 
 // --- Deal ---
 export function dealFromRow(r: any): Deal {
@@ -101,6 +101,7 @@ export function quoteFromRow(r: any): Quote {
     qst: Number(r.qst) || 0,
     grandTotal: Number(r.grand_total) || 0,
     status: r.status ?? 'Draft',
+    isDeleted: r.is_deleted ?? false,
   };
 }
 
@@ -114,9 +115,10 @@ export function quoteToRow(q: Partial<Quote>): Record<string, any> {
     engineering: 'engineering', foundation: 'foundation', foundationType: 'foundation_type',
     gutters: 'gutters', liners: 'liners', insulation: 'insulation', insulationGrade: 'insulation_grade',
     freight: 'freight', combinedTotal: 'combined_total', perSqft: 'per_sqft', perLb: 'per_lb',
-    contingencyPct: 'contingency_pct', contingency: 'contingency', gstHst: 'gst_hst',
+    gstHst: 'gst_hst',
     qst: 'qst', grandTotal: 'grand_total', status: 'status',
     leftEaveHeight: 'left_eave_height', rightEaveHeight: 'right_eave_height', isSingleSlope: 'is_single_slope', pitch: 'pitch',
+    isDeleted: 'is_deleted',
   };
   const row: Record<string, any> = {};
   for (const [k, v] of Object.entries(q)) {
@@ -208,7 +210,9 @@ export function paymentToRow(p: Partial<PaymentEntry>): Record<string, any> {
 export function clientFromRow(r: any): Client {
   return {
     id: r.id ?? '',
-    name: r.name ?? '',
+    clientId: r.client_id ?? '',
+    clientName: r.client_name ?? r.name ?? '',
+    jobIds: r.job_ids ?? [],
     contactEmail: r.contact_email ?? '',
     contactPhone: r.contact_phone ?? '',
     notes: r.notes ?? '',
@@ -218,7 +222,8 @@ export function clientFromRow(r: any): Client {
 
 export function clientToRow(c: Partial<Client>): Record<string, any> {
   const map: Record<string, string> = {
-    id: 'id', name: 'name', contactEmail: 'contact_email',
+    id: 'id', clientId: 'client_id', clientName: 'client_name',
+    jobIds: 'job_ids', contactEmail: 'contact_email',
     contactPhone: 'contact_phone', notes: 'notes',
   };
   const row: Record<string, any> = {};
