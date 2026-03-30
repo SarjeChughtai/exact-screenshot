@@ -44,7 +44,13 @@ import Vendors from "@/pages/Vendors";
 import VendorQuoteBoard from "@/pages/VendorQuoteBoard";
 import NotFound from "@/pages/NotFound";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+    },
+  },
+});
 
 const App = () => (
   <QueryClientProvider client={queryClient}>

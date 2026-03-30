@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { formatCurrency } from '@/lib/calculations';
 import { Button } from '@/components/ui/button';
-import { Trash2 } from 'lucide-react';
+import { Trash2, ExternalLink } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
 interface DraftQuote {
@@ -28,6 +29,7 @@ function saveDrafts(drafts: DraftQuote[]) {
 
 export default function DraftLog() {
   const [drafts, setDrafts] = useState<DraftQuote[]>([]);
+  const navigate = useNavigate();
 
   useEffect(() => {
     setDrafts(getDrafts());
@@ -38,6 +40,35 @@ export default function DraftLog() {
     saveDrafts(updated);
     setDrafts(updated);
     toast.success('Draft deleted');
+  };
+
+  const loadDraft = (d: any) => {
+    // If we have full state (saved with my new implementation), use it
+    const stateToSave = {
+      form: d.form,
+      buildings: d.buildings,
+      supplierMarkupPct: d.supplierMarkupPct,
+      singleSlope: d.singleSlope,
+      leftEaveHeight: d.leftEaveHeight,
+      rightEaveHeight: d.rightEaveHeight,
+      updatedAt: new Date().toISOString()
+    };
+    
+    // If it's an old draft (saved before this change), try to reconstruct it
+    if (!d.form) {
+      stateToSave.form = {
+        jobId: d.jobId,
+        jobName: d.jobName,
+        clientName: d.clientName,
+        salesRep: d.salesRep,
+        province: d.province
+      };
+      stateToSave.buildings = d.buildings;
+    }
+
+    localStorage.setItem('csb_internal_builder_active_state', JSON.stringify(stateToSave));
+    toast.success('Draft loaded into Builder');
+    navigate('/internal-quote-builder');
   };
 
   const clearAll = () => {
@@ -80,9 +111,14 @@ export default function DraftLog() {
                 <td className="px-3 py-2 text-xs">{d.buildings.map(b => `${b.width || '?'}×${b.length || '?'}×${b.height || '?'}`).join(', ')}</td>
                 <td className="px-3 py-2 font-mono font-semibold">{formatCurrency(d.grandTotal)}</td>
                 <td className="px-3 py-2">
-                  <Button variant="ghost" size="sm" onClick={() => deleteDraft(d.id)}>
-                    <Trash2 className="h-3 w-3 text-destructive" />
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button variant="ghost" size="sm" onClick={() => loadDraft(d)}>
+                      <ExternalLink className="h-3 w-3 text-primary" />
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => deleteDraft(d.id)}>
+                      <Trash2 className="h-3 w-3 text-destructive" />
+                    </Button>
+                  </div>
                 </td>
               </tr>
             ))}
