@@ -69,6 +69,30 @@ export default function InternalQuoteBuilder() {
   const { addQuote, deals, quotes } = useAppContext();
   const { settings, getSalesReps } = useSettings();
 
+  const getInitialForm = () => ({
+    jobId: '', jobName: '', clientName: '', clientId: '',
+    salesRep: '', estimator: '', province: 'ON',
+    city: '', address: '', postalCode: '',
+    width: '', length: '', height: '14',
+    pitch: '1',
+    distance: '200', remoteLevel: 'none',
+    foundationType: 'slab' as 'slab' | 'frost_wall',
+    insulationCost: '0', insulationGrade: '',
+    gutters: '0', liners: '0',
+    contingencyPct: '5',
+    notes: '',
+  });
+
+  const getInitialBuilding = (label = 'Building 1'): BuildingTab => ({
+    label,
+    costData: { steelWeightLbs: 0, supplierCostPerLb: 0, totalSupplierCost: 0, accessories: [] },
+    files: [],
+    width: '',
+    length: '',
+    height: '14',
+    pitch: '1',
+  });
+
   const [form, setForm] = useState(() => {
     const saved = localStorage.getItem('csb_internal_builder_active_state');
     if (saved) {
@@ -77,19 +101,7 @@ export default function InternalQuoteBuilder() {
         if (parsed.form) return parsed.form;
       } catch (e) { console.error(e); }
     }
-    return {
-      jobId: '', jobName: '', clientName: '', clientId: '',
-      salesRep: '', estimator: '', province: 'ON',
-      city: '', address: '', postalCode: '',
-      width: '', length: '', height: '14',
-      pitch: '1',
-      distance: '200', remoteLevel: 'none',
-      foundationType: 'slab' as 'slab' | 'frost_wall',
-      insulationCost: '0', insulationGrade: '',
-      gutters: '0', liners: '0',
-      contingencyPct: '5',
-      notes: '',
-    };
+    return getInitialForm();
   });
 
   const [supplierMarkupPct, setSupplierMarkupPct] = useState(() => {
@@ -114,9 +126,7 @@ export default function InternalQuoteBuilder() {
         if (parsed.buildings) return parsed.buildings;
       } catch (e) { console.error(e); }
     }
-    return [
-      { label: 'Building 1', costData: { steelWeightLbs: 0, supplierCostPerLb: 0, totalSupplierCost: 0, accessories: [] }, files: [], width: '', length: '', height: '14', pitch: '1' },
-    ];
+    return [getInitialBuilding()];
   });
   const [activeBuildingIdx, setActiveBuildingIdx] = useState(() => {
     const saved = localStorage.getItem('csb_internal_builder_active_state');
@@ -474,6 +484,9 @@ export default function InternalQuoteBuilder() {
         }
 
         const aiResult = await extractWithAI(fullText, file.name);
+        const resolvedJobId = aiResult?.job_id || form.jobId || '';
+        const resolvedClientName = aiResult?.client_name || form.clientName || '';
+        const resolvedClientId = aiResult?.client_id || form.clientId || '';
 
         // Track extraction source and resolved document type for upload
         let extractionSource: 'ai' | 'regex' | 'unknown' = 'unknown';
@@ -570,9 +583,9 @@ export default function InternalQuoteBuilder() {
         uploadQuoteFile({
           file,
           fileType: lastParsed?.type || 'unknown',
-          jobId: form.jobId || '',
-          clientName: form.clientName || '',
-          clientId: form.clientId || '',
+          jobId: resolvedJobId,
+          clientName: resolvedClientName,
+          clientId: resolvedClientId,
           buildingLabel: buildings[activeBuildingIdx]?.label || 'Building 1',
           aiOutput: aiResult || null,
           extractionSource,
@@ -585,9 +598,9 @@ export default function InternalQuoteBuilder() {
               const extractedData = lastParsed.data || {};
               saveSteelCostEntry({
                 quoteFileId: result.id || undefined,
-                jobId: form.jobId || '',
-                clientName: form.clientName || '',
-                clientId: form.clientId || '',
+                jobId: resolvedJobId,
+                clientName: resolvedClientName,
+                clientId: resolvedClientId,
                 buildingLabel: buildings[activeBuildingIdx]?.label || 'Building 1',
                 documentType: resolvedDocType,
                 fileName: file.name,
@@ -672,6 +685,24 @@ export default function InternalQuoteBuilder() {
     if (buildings.length <= 1) return;
     setBuildings(prev => prev.filter((_, i) => i !== idx));
     setActiveBuildingIdx(Math.max(0, activeBuildingIdx - 1));
+  };
+
+  const resetBuilder = (message = 'Start a new quote? This clears the current screen and all uploaded file sets for this quote.') => {
+    if (!confirm(message)) return;
+    setForm(getInitialForm());
+    setSupplierMarkupPct(String(settings.supplierIncreasePct));
+    setBuildings([getInitialBuilding()]);
+    setActiveBuildingIdx(0);
+    setQuote(null);
+    setTieredMarkupInfo(null);
+    setComplianceNotes([]);
+    setCostSavingTips([]);
+    setLocationSource('');
+    setSingleSlope(false);
+    setLeftEaveHeight('14');
+    setRightEaveHeight('14');
+    localStorage.removeItem('csb_internal_builder_active_state');
+    toast.success('Started a new quote');
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -801,6 +832,13 @@ export default function InternalQuoteBuilder() {
     addQuote(quote);
 
     toast.success('Quote saved to Quote Log — convert to Deal from the Quote Log when ready');
+  };
+
+  const saveToLogAndNew = () => {
+    if (!quote) return;
+    addQuote(quote);
+    toast.success('Quote saved to Quote Log');
+    resetBuilder('Save is complete. Start a new quote and clear this screen?');
   };
 
   const downloadPdf = () => {
@@ -1117,6 +1155,9 @@ export default function InternalQuoteBuilder() {
           <Button onClick={generate} className="w-full" size="lg">
             <FileText className="h-4 w-4 mr-2" />Generate Internal Quote
           </Button>
+          <Button onClick={() => resetBuilder()} className="w-full" size="lg" variant="destructive">
+            <Trash2 className="h-4 w-4 mr-2" />New Quote (Clear Screen)
+          </Button>
         </div>
 
         {/* Quote Output */}
@@ -1129,6 +1170,7 @@ export default function InternalQuoteBuilder() {
                   <Button onClick={downloadPdf} size="sm" variant="outline"><Download className="h-3 w-3 mr-1" />PDF</Button>
                   <Button onClick={emailQuote} size="sm" variant="outline"><Mail className="h-3 w-3 mr-1" />Email</Button>
                   <Button onClick={saveToLog} size="sm" variant="outline">Save to Log</Button>
+                  <Button onClick={saveToLogAndNew} size="sm">Save & New</Button>
                 </div>
               </div>
 
