@@ -118,7 +118,16 @@ export default function InternalQuoteBuilder() {
       { label: 'Building 1', costData: { steelWeightLbs: 0, supplierCostPerLb: 0, totalSupplierCost: 0, accessories: [] }, files: [], width: '', length: '', height: '14', pitch: '1' },
     ];
   });
-  const [activeBuildingIdx, setActiveBuildingIdx] = useState(0);
+  const [activeBuildingIdx, setActiveBuildingIdx] = useState(() => {
+    const saved = localStorage.getItem('csb_internal_builder_active_state');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (typeof parsed.activeBuildingIdx === 'number') return parsed.activeBuildingIdx;
+      } catch (e) { console.error(e); }
+    }
+    return 0;
+  });
   const [quote, setQuote] = useState<Quote | null>(null);
   const [tieredMarkupInfo, setTieredMarkupInfo] = useState<{ rate: number; amount: number } | null>(null);
   const [dragActive, setDragActive] = useState(false);
@@ -156,13 +165,21 @@ export default function InternalQuoteBuilder() {
     }
     return '14';
   });
-  const [isInitialized, setIsInitialized] = useState(true);
+  const [isInitialized, setIsInitialized] = useState(false);
 
-  // Load notification only
+  // Set initialized after first render (safeguard against accidental overwrites)
+  useEffect(() => {
+    setIsInitialized(true);
+  }, []);
+
+  // Load notification only (once per browser session)
   useEffect(() => {
     const saved = localStorage.getItem('csb_internal_builder_active_state');
-    if (saved) {
+    const hasNotified = sessionStorage.getItem('csb_internal_builder_restored_notified');
+    
+    if (saved && !hasNotified) {
       toast.info('Restored your previous session');
+      sessionStorage.setItem('csb_internal_builder_restored_notified', 'true');
     }
   }, []);
 
@@ -176,10 +193,11 @@ export default function InternalQuoteBuilder() {
       singleSlope,
       leftEaveHeight,
       rightEaveHeight,
+      activeBuildingIdx,
       updatedAt: new Date().toISOString()
     };
     localStorage.setItem('csb_internal_builder_active_state', JSON.stringify(stateToSave));
-  }, [form, buildings, supplierMarkupPct, singleSlope, leftEaveHeight, rightEaveHeight, isInitialized]);
+  }, [form, buildings, supplierMarkupPct, singleSlope, leftEaveHeight, rightEaveHeight, activeBuildingIdx, isInitialized]);
 
   const handleEaveHeightChange = (side: 'left' | 'right', value: string) => {
     const left = side === 'left' ? value : leftEaveHeight;
@@ -246,13 +264,26 @@ export default function InternalQuoteBuilder() {
   const handleSelectHistoricalFile = async (fileRecord: any) => {
     setAiProcessing(true);
     try {
-      // 1. Try to use existing AI output if available
+      // 1. Add to the building's file list so the user can see it and remove it
+      const newFile: ParsedFile = {
+        name: fileRecord.file_name,
+        type: fileRecord.file_type || 'unknown',
+        status: 'success',
+        buildingIndex: activeBuildingIdx,
+        data: fileRecord.ai_output
+      };
+      
+      setBuildings(prev => prev.map((b, i) => 
+        i === activeBuildingIdx ? { ...b, files: [...b.files, newFile] } : b
+      ));
+
+      // 2. Try to use existing AI output if available
       if (fileRecord.ai_output) {
         const aiResult = fileRecord.ai_output;
         if (fileRecord.file_type === 'insulation') {
           set('insulationCost', String(aiResult.insulation_total || 0));
           if (aiResult.insulation_grade) set('insulationGrade', aiResult.insulation_grade);
-          toast.success(`Restored insulation data from ${fileRecord.file_name}`);
+          toast.success(`Pulled insulation data from ${fileRecord.file_name}`);
         } else {
           applyAIData(aiResult);
           const weight = aiResult.weight || 0;
@@ -260,10 +291,10 @@ export default function InternalQuoteBuilder() {
           const totalCost = aiResult.total_cost || weight * costPerLb;
           const components = (aiResult.components || []).map((c: any) => ({ name: c.name, weight: c.weight || 0, cost: c.cost || 0 }));
           setCostData({ steelWeightLbs: weight, supplierCostPerLb: costPerLb, totalSupplierCost: totalCost, accessories: components });
-          toast.success(`Restored MBS data from ${fileRecord.file_name}`);
+          toast.success(`Pulled MBS data from ${fileRecord.file_name}`);
         }
       } else {
-        // 2. No stored data, must fetch and re-parse
+        // 3. No stored data, must fetch and re-parse
         toast.info('Re-parsing historical document...');
         const url = await getQuoteFileUrl(fileRecord.storage_path);
         if (!url) throw new Error('Could not get file URL');
@@ -610,6 +641,19 @@ export default function InternalQuoteBuilder() {
   };
 
   const removeFile = (fileIndex: number) => {
+    const fileToRemove = parsedFiles[fileIndex];
+    if (fileToRemove) {
+      // If it's MBS, ask to clear cost data too
+      if (fileToRemove.type === 'mbs') {
+        if (confirm(`Do you want to clear the steel cost data associated with ${fileToRemove.name}?`)) {
+          setCostData({ steelWeightLbs: 0, supplierCostPerLb: 0, totalSupplierCost: 0, accessories: [] });
+        }
+      } else if (fileToRemove.type === 'insulation') {
+        if (confirm(`Do you want to clear the insulation cost data associated with ${fileToRemove.name}?`)) {
+          set('insulationCost', '0');
+        }
+      }
+    }
     setBuildings(prev => prev.map((b, i) => i === activeBuildingIdx ? { ...b, files: b.files.filter((_, fi) => fi !== fileIndex) } : b));
     toast.info('File removed');
   };

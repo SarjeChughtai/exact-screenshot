@@ -7,6 +7,22 @@
     <title>CSB Portal</title>
     <meta name="description" content="CSB Dealer portal">
     <meta name="author" content="Lovable" />
+    <script>
+      // FOCUS SHIELD: Prevent development platforms from auto-refreshing on window focus
+      (function() {
+        const block = (e) => {
+          if (e.isTrusted && (e.type === 'focus' || e.type === 'visibilitychange')) {
+            // Only block if it's coming from the window/document to avoid breaking inputs
+            if (e.target === window || e.target === document) {
+              e.stopImmediatePropagation();
+            }
+          }
+        };
+        window.addEventListener('focus', block, true);
+        window.addEventListener('visibilitychange', block, true);
+        console.log('🛡️ Focus Shield Active: Auto-refresh blocked.');
+      })();
+    </script>
 
     <!-- TODO: Update og:title to match your application name -->
     
