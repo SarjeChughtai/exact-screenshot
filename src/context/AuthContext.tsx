@@ -47,9 +47,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       async (event, currentSession) => {
         const incomingUserId = currentSession?.user?.id ?? null;
 
-        // Skip cross-tab auth events that don't represent a real change for this tab.
-        // currentUserIdRef always holds the latest value (no stale closure issue).
-        if (event !== 'SIGNED_OUT' && incomingUserId && incomingUserId === currentUserIdRef.current) {
+        // Skip cross-tab TOKEN_REFRESHED events that don't represent a real user change.
+        // Only TOKEN_REFRESHED is guarded — INITIAL_SESSION and SIGNED_IN must always
+        // be processed so new tabs can initialize their auth state.
+        if (event === 'TOKEN_REFRESHED' && incomingUserId && incomingUserId === currentUserIdRef.current) {
           return;
         }
 
