@@ -1,5 +1,5 @@
-export type AuditAction = 'CREATE' | 'UPDATE' | 'DELETE';
-export type EntityType = 'Deal' | 'Quote' | 'Payment' | 'InternalCost' | 'Production' | 'Freight' | 'RFQ' | 'Other';
+export type AuditAction = 'CREATE' | 'UPDATE' | 'DELETE' | 'RESTORE';
+export type EntityType = 'Deal' | 'Quote' | 'Payment' | 'InternalCost' | 'Production' | 'Freight' | 'RFQ' | 'Client' | 'Vendor' | 'Other';
 
 export interface AuditEntry {
   id: string;
