@@ -9,6 +9,8 @@ interface UploadQuoteFileParams {
   buildingLabel: string;
   aiOutput?: Record<string, unknown> | null;
   extractionSource?: 'ai' | 'regex' | 'unknown';
+  parseError?: string | null;
+  reviewStatus?: 'pending' | 'needs_review';
 }
 
 interface QuoteFileRecord {
@@ -97,6 +99,8 @@ export async function uploadQuoteFile({
         gdrive_status: 'pending',
         ai_output: aiOutput || null,
         extraction_source: extractionSource,
+        review_status: reviewStatus || (extractionSource === 'unknown' ? 'needs_review' : 'pending'),
+        parse_error: parseError || null,
       } as any)
       .select()
       .single();

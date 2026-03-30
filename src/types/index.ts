@@ -234,3 +234,56 @@ export interface ManufacturerBid {
   status: ManufacturerBidStatus;
   submittedAt: string;
 }
+
+// --- Import Review ---
+export type ImportReviewStatus = 'pending' | 'approved' | 'needs_review' | 'corrected' | 'rejected';
+
+export interface QuoteFileRecord {
+  id: string;
+  jobId: string;
+  clientName: string;
+  clientId: string;
+  fileName: string;
+  fileSize: number;
+  fileType: string;
+  storagePath: string;
+  buildingLabel: string;
+  extractionSource: string;
+  aiOutput: Record<string, unknown> | null;
+  reviewStatus: ImportReviewStatus;
+  parseError: string | null;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  correctedData: Record<string, unknown> | null;
+  gdriveStatus: string;
+  gdriveFileId: string | null;
+  uploadedBy: string | null;
+  createdAt: string;
+}
+
+export interface SteelCostEntry {
+  id: string;
+  quoteFileId: string | null;
+  jobId: string;
+  clientName: string;
+  clientId: string;
+  buildingLabel: string;
+  documentType: string;
+  fileName: string;
+  weightLbs: number;
+  costPerLb: number;
+  totalCost: number;
+  width: number | null;
+  length: number | null;
+  height: number | null;
+  roofPitch: number | null;
+  province: string | null;
+  city: string | null;
+  components: { name: string; weight?: number; cost: number }[] | null;
+  insulationTotal: number;
+  insulationGrade: string | null;
+  extractionSource: string;
+  aiRawOutput: Record<string, unknown> | null;
+  uploadedBy: string | null;
+  createdAt: string;
+}

@@ -15,6 +15,7 @@ import { toast } from 'sonner';
 import { Upload, FileText, CheckCircle2, AlertTriangle, Download, Mail, ChevronDown, X, Sparkles, Loader2, MapPin, Lightbulb, Trash2, Plus } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { uploadQuoteFile, saveSteelCostEntry } from '@/lib/quoteFileStorage';
+import { validateAIOutput } from '@/lib/aiOutputValidator';
 import { PersonnelSelect } from '@/components/PersonnelSelect';
 import { ClientSelect } from '@/components/ClientSelect';
 import { JobIdSelect } from '@/components/JobIdSelect';
@@ -253,17 +254,17 @@ export default function InternalQuoteBuilder() {
     return { weight, costPerLb, totalCost, pWidth, pLength, pHeight, pPitch, clientName, clientId, jobId, accessories, pLeftHeight, pRightHeight, pIsSingleSlope };
   };
 
-  const extractWithAI = async (text: string, filename: string) => {
+  const extractWithAI = async (text: string, filename: string): Promise<{ data: any; rawResponse: any; error: string | null }> => {
     try {
       const { data, error } = await supabase.functions.invoke('extract-quote-data', {
         body: { text, filename },
       });
-      if (error) throw error;
-      if (data?.success && data?.data) return data.data;
-      return null;
-    } catch (e) {
+      if (error) return { data: null, rawResponse: null, error: error.message || 'Edge function error' };
+      if (data?.success && data?.data) return { data: data.data, rawResponse: data, error: null };
+      return { data: null, rawResponse: data, error: 'AI returned no extractable data' };
+    } catch (e: any) {
       console.error('AI extraction error:', e);
-      return null;
+      return { data: null, rawResponse: null, error: e.message || 'Unknown AI error' };
     }
   };
 
@@ -322,15 +323,29 @@ export default function InternalQuoteBuilder() {
           continue;
         }
 
-        const aiResult = await extractWithAI(fullText, file.name);
+        const aiResponse = await extractWithAI(fullText, file.name);
+        const aiResult = aiResponse.data;
 
-        // Track extraction source and resolved document type for upload
+        // Track extraction source, resolved document type, and review state for upload
         let extractionSource: 'ai' | 'regex' | 'unknown' = 'unknown';
         let resolvedDocType: 'mbs' | 'insulation' | 'unknown' = 'unknown';
+        let parseError: string | null = aiResponse.error;
+        let reviewStatus: 'pending' | 'needs_review' = aiResponse.error ? 'needs_review' : 'pending';
 
         if (aiResult) {
           extractionSource = 'ai';
           const docType = aiResult.document_type || 'unknown';
+
+          // Validate AI output before applying
+          const detectedType = docType === 'mbs' ? 'mbs' : docType === 'insulation' ? 'insulation' : 'unknown' as const;
+          const validation = validateAIOutput(aiResult, detectedType);
+          if (!validation.isValid) {
+            reviewStatus = 'needs_review';
+            parseError = `AI validation failed: ${validation.errors.join('; ')}`;
+          }
+          if (validation.warnings.length > 0) {
+            validation.warnings.forEach(w => toast.warning(w, { duration: 5000 }));
+          }
 
           if (docType === 'insulation') {
             resolvedDocType = 'insulation';
@@ -338,7 +353,7 @@ export default function InternalQuoteBuilder() {
             set('insulationCost', String(total));
             if (aiResult.insulation_grade) set('insulationGrade', aiResult.insulation_grade);
             newParsedFiles.push({ name: file.name, type: 'insulation', status: 'success', data: aiResult, buildingIndex: activeBuildingIdx });
-            toast.success(`🤖 AI extracted insulation: ${formatCurrency(total)}`);
+            toast.success(`AI extracted insulation: ${formatCurrency(total)}`);
           } else if (docType === 'mbs') {
             resolvedDocType = 'mbs';
             applyAIData(aiResult);
@@ -350,7 +365,7 @@ export default function InternalQuoteBuilder() {
             }));
             setCostData({ steelWeightLbs: weight, supplierCostPerLb: costPerLb, totalSupplierCost: totalCost, accessories: components });
             newParsedFiles.push({ name: file.name, type: 'mbs', status: 'success', data: aiResult, buildingIndex: activeBuildingIdx });
-            toast.success(`🤖 AI extracted MBS: ${formatNumber(weight)} lbs @ $${costPerLb.toFixed(2)}/lb`);
+            toast.success(`AI extracted MBS: ${formatNumber(weight)} lbs @ $${costPerLb.toFixed(2)}/lb`);
           } else {
             applyAIData(aiResult);
             if (aiResult.weight && aiResult.total_cost) {
@@ -362,13 +377,15 @@ export default function InternalQuoteBuilder() {
                 accessories: (aiResult.components || []).map((c: any) => ({ name: c.name, weight: c.weight || 0, cost: c.cost || 0 })),
               });
               newParsedFiles.push({ name: file.name, type: 'mbs', status: 'success', data: aiResult, buildingIndex: activeBuildingIdx });
-              toast.success(`🤖 AI extracted data from ${file.name}`);
+              toast.success(`AI extracted data from ${file.name}`);
             } else if (aiResult.insulation_total) {
               resolvedDocType = 'insulation';
               set('insulationCost', String(aiResult.insulation_total));
               newParsedFiles.push({ name: file.name, type: 'insulation', status: 'success', data: aiResult, buildingIndex: activeBuildingIdx });
-              toast.success(`🤖 AI extracted insulation: ${formatCurrency(aiResult.insulation_total)}`);
+              toast.success(`AI extracted insulation: ${formatCurrency(aiResult.insulation_total)}`);
             } else {
+              reviewStatus = 'needs_review';
+              if (!parseError) parseError = 'AI could not extract useful data';
               newParsedFiles.push({ name: file.name, type: 'unknown', status: 'failed', buildingIndex: activeBuildingIdx });
               toast.error(`AI could not extract useful data from ${file.name}`);
             }
@@ -378,6 +395,7 @@ export default function InternalQuoteBuilder() {
             toast.info(`AI note: ${aiResult.notes}`, { duration: 5000 });
           }
         } else {
+          // AI failed — try regex fallback
           const pages = fullText.split('\n');
           if (detectInsulationPdf(fullText)) {
             extractionSource = 'regex';
@@ -408,6 +426,8 @@ export default function InternalQuoteBuilder() {
               newParsedFiles.push({ name: file.name, type: 'mbs', status: 'success', data: parsed, buildingIndex: activeBuildingIdx });
               toast.success(`MBS (regex): ${formatNumber(parsed.weight)} lbs`);
             } else {
+              reviewStatus = 'needs_review';
+              if (!parseError) parseError = 'Neither AI nor regex could extract data';
               newParsedFiles.push({ name: file.name, type: 'unknown', status: 'failed', buildingIndex: activeBuildingIdx });
               toast.error(`Could not parse: ${file.name}`);
             }
@@ -415,6 +435,7 @@ export default function InternalQuoteBuilder() {
         }
 
         // Always upload dropped file to Supabase Storage (regardless of parse success)
+        // Store AI raw response even on failure so it can be reviewed later
         const lastParsed = newParsedFiles[newParsedFiles.length - 1];
         uploadQuoteFile({
           file,
@@ -423,13 +444,15 @@ export default function InternalQuoteBuilder() {
           clientName: form.clientName || '',
           clientId: form.clientId || '',
           buildingLabel: buildings[activeBuildingIdx]?.label || 'Building 1',
-          aiOutput: aiResult || null,
+          aiOutput: aiResponse.rawResponse || aiResult || null,
           extractionSource,
+          parseError,
+          reviewStatus,
         }).then(result => {
           if (result) {
-            toast.success(`📁 ${file.name} stored & backup queued`);
+            toast.success(`${file.name} stored & backup queued`);
 
-            // Save extracted data to the steel cost database
+            // Save extracted data to the steel cost database (only on successful parse)
             if (lastParsed?.status === 'success') {
               const extractedData = lastParsed.data || {};
               saveSteelCostEntry({
@@ -453,7 +476,7 @@ export default function InternalQuoteBuilder() {
                 insulationTotal: extractedData.insulation_total || extractedData.total || 0,
                 insulationGrade: extractedData.insulation_grade || undefined,
                 extractionSource: extractionSource === 'unknown' ? 'ai' : extractionSource,
-                aiRawOutput: aiResult || null,
+                aiRawOutput: aiResponse.rawResponse || aiResult || null,
               }).then(entryId => {
                 if (entryId) {
                   console.log('Steel cost entry saved:', entryId);

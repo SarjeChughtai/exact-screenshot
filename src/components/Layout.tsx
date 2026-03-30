@@ -24,6 +24,7 @@ const routeLabels: Record<string, string> = {
   '/freight': 'Freight Board',
   '/rfq': 'RFQ Board',
   '/audit-log': 'Audit Log',
+  '/import-review': 'Import Review',
 };
 
 export default function Layout({ children }: { children: React.ReactNode }) {

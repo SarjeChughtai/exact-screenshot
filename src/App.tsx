@@ -42,6 +42,7 @@ import MasterData from "@/pages/MasterData";
 import Clients from "@/pages/Clients";
 import Vendors from "@/pages/Vendors";
 import VendorQuoteBoard from "@/pages/VendorQuoteBoard";
+import ImportReview from "@/pages/ImportReview";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -94,6 +95,7 @@ const App = () => (
                           <Route path="/clients" element={<Clients />} />
                           <Route path="/vendors" element={<Vendors />} />
                           <Route path="/vendor-board" element={<VendorQuoteBoard />} />
+                          <Route path="/import-review" element={<ImportReview />} />
                           <Route path="*" element={<NotFound />} />
                         </Routes>
                       </Layout>
