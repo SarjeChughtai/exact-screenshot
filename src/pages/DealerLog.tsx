@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { formatNumber } from '@/lib/calculations';
-import { Store } from 'lucide-react';
+import { Store, Plus } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { useNavigate } from 'react-router-dom';
 
 interface DealerRequest {
   id: string;
@@ -19,6 +21,7 @@ interface DealerRequest {
 
 export default function DealerLog() {
   const [requests, setRequests] = useState<DealerRequest[]>([]);
+  const navigate = useNavigate();
 
   useEffect(() => {
     try {
@@ -28,9 +31,15 @@ export default function DealerLog() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold flex items-center gap-2"><Store className="h-6 w-6" /> My Requests</h2>
-        <p className="text-sm text-muted-foreground mt-1">{requests.length} submitted requests</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold flex items-center gap-2"><Store className="h-6 w-6" /> My Requests</h2>
+          <p className="text-sm text-muted-foreground mt-1">{requests.length} submitted requests</p>
+        </div>
+        <Button onClick={() => navigate('/dealer-rfq')} className="flex items-center gap-2">
+          <Plus className="h-4 w-4" />
+          Add RFQ
+        </Button>
       </div>
 
       <div className="bg-card border rounded-lg overflow-x-auto">
