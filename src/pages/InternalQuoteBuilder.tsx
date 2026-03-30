@@ -167,6 +167,20 @@ export default function InternalQuoteBuilder() {
   });
   const [isInitialized, setIsInitialized] = useState(false);
 
+  const getDefaultFormState = () => ({
+    jobId: '', jobName: '', clientName: '', clientId: '',
+    salesRep: '', estimator: '', province: 'ON',
+    city: '', address: '', postalCode: '',
+    width: '', length: '', height: '14',
+    pitch: '1',
+    distance: '200', remoteLevel: 'none',
+    foundationType: 'slab' as 'slab' | 'frost_wall',
+    insulationCost: '0', insulationGrade: '',
+    gutters: '0', liners: '0',
+    contingencyPct: '5',
+    notes: '',
+  });
+
   // Set initialized after first render (safeguard against accidental overwrites)
   useEffect(() => {
     setIsInitialized(true);
@@ -216,6 +230,25 @@ export default function InternalQuoteBuilder() {
   };
 
   const set = (key: string, val: string) => setForm(f => ({ ...f, [key]: val }));
+
+  const resetBuilderForNewQuote = () => {
+    setForm(getDefaultFormState());
+    setSupplierMarkupPct(String(settings.supplierIncreasePct));
+    setBuildings([
+      { label: 'Building 1', costData: { steelWeightLbs: 0, supplierCostPerLb: 0, totalSupplierCost: 0, accessories: [] }, files: [], width: '', length: '', height: '14', pitch: '1' },
+    ]);
+    setActiveBuildingIdx(0);
+    setQuote(null);
+    setTieredMarkupInfo(null);
+    setComplianceNotes([]);
+    setCostSavingTips([]);
+    setLocationSource('');
+    setSingleSlope(false);
+    setLeftEaveHeight('14');
+    setRightEaveHeight('14');
+    localStorage.removeItem('csb_internal_builder_active_state');
+    toast.success('Started a new quote. Screen and document sets cleared.');
+  };
 
   // Location lookup for auto-populating distance/province
   const handleLocationLookup = async () => {
@@ -434,6 +467,18 @@ export default function InternalQuoteBuilder() {
     if (aiData.insulation_grade) set('insulationGrade', aiData.insulation_grade);
   };
 
+  const getNumber = (value: unknown): number => {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric : 0;
+  };
+
+  const normalizeDocType = (value: unknown): 'mbs' | 'insulation' | 'unknown' => {
+    const normalized = String(value || '').toLowerCase().trim();
+    if (normalized === 'mbs' || normalized.includes('steel')) return 'mbs';
+    if (normalized === 'insulation') return 'insulation';
+    return 'unknown';
+  };
+
   const handleFileUpload = async (files: FileList | File[]) => {
     const fileArr = Array.from(files);
     const newParsedFiles: ParsedFile[] = [];
@@ -474,6 +519,7 @@ export default function InternalQuoteBuilder() {
         }
 
         const aiResult = await extractWithAI(fullText, file.name);
+        const normalizedDocType = normalizeDocType(aiResult?.document_type);
 
         // Track extraction source and resolved document type for upload
         let extractionSource: 'ai' | 'regex' | 'unknown' = 'unknown';
@@ -481,7 +527,7 @@ export default function InternalQuoteBuilder() {
 
         if (aiResult) {
           extractionSource = 'ai';
-          const docType = aiResult.document_type || 'unknown';
+          const docType = normalizedDocType;
 
           if (docType === 'insulation') {
             resolvedDocType = 'insulation';
@@ -567,12 +613,16 @@ export default function InternalQuoteBuilder() {
 
         // Always upload dropped file to Supabase Storage (regardless of parse success)
         const lastParsed = newParsedFiles[newParsedFiles.length - 1];
-        uploadQuoteFile({
+          const extractedClientName = aiResult?.client_name || form.clientName || '';
+          const extractedClientId = aiResult?.client_id || form.clientId || '';
+          const extractedJobId = aiResult?.job_id || form.jobId || '';
+
+          uploadQuoteFile({
           file,
           fileType: lastParsed?.type || 'unknown',
-          jobId: form.jobId || '',
-          clientName: form.clientName || '',
-          clientId: form.clientId || '',
+          jobId: extractedJobId,
+          clientName: extractedClientName,
+          clientId: extractedClientId,
           buildingLabel: buildings[activeBuildingIdx]?.label || 'Building 1',
           aiOutput: aiResult || null,
           extractionSource,
@@ -585,23 +635,23 @@ export default function InternalQuoteBuilder() {
               const extractedData = lastParsed.data || {};
               saveSteelCostEntry({
                 quoteFileId: result.id || undefined,
-                jobId: form.jobId || '',
-                clientName: form.clientName || '',
-                clientId: form.clientId || '',
+                jobId: extractedJobId,
+                clientName: extractedClientName,
+                clientId: extractedClientId,
                 buildingLabel: buildings[activeBuildingIdx]?.label || 'Building 1',
                 documentType: resolvedDocType,
                 fileName: file.name,
-                weightLbs: extractedData.weight || extractedData.steelWeightLbs || 0,
-                costPerLb: extractedData.cost_per_lb || extractedData.costPerLb || extractedData.supplierCostPerLb || 0,
-                totalCost: extractedData.total_cost || extractedData.totalCost || extractedData.totalSupplierCost || 0,
-                width: extractedData.width || (form.width ? parseFloat(form.width) : undefined),
-                length: extractedData.length || (form.length ? parseFloat(form.length) : undefined),
-                height: extractedData.height || (form.height ? parseFloat(form.height) : undefined),
-                roofPitch: extractedData.roof_pitch || extractedData.pPitch || undefined,
+                weightLbs: getNumber(extractedData.weight ?? extractedData.steelWeightLbs),
+                costPerLb: getNumber(extractedData.cost_per_lb ?? extractedData.costPerLb ?? extractedData.supplierCostPerLb),
+                totalCost: getNumber(extractedData.total_cost ?? extractedData.totalCost ?? extractedData.totalSupplierCost),
+                width: getNumber(extractedData.width) || (form.width ? parseFloat(form.width) : undefined),
+                length: getNumber(extractedData.length) || (form.length ? parseFloat(form.length) : undefined),
+                height: getNumber(extractedData.height) || (form.height ? parseFloat(form.height) : undefined),
+                roofPitch: getNumber(extractedData.roof_pitch ?? extractedData.pPitch) || undefined,
                 province: extractedData.province || form.province || undefined,
                 city: extractedData.city || form.city || undefined,
                 components: extractedData.components || extractedData.accessories || [],
-                insulationTotal: extractedData.insulation_total || extractedData.total || 0,
+                insulationTotal: getNumber(extractedData.insulation_total ?? extractedData.total),
                 insulationGrade: extractedData.insulation_grade || undefined,
                 extractionSource: extractionSource === 'unknown' ? 'ai' : extractionSource,
                 aiRawOutput: aiResult || null,
@@ -801,6 +851,15 @@ export default function InternalQuoteBuilder() {
     addQuote(quote);
 
     toast.success('Quote saved to Quote Log — convert to Deal from the Quote Log when ready');
+  };
+
+  const saveAndStartNew = () => {
+    if (!quote) {
+      toast.error('Generate a quote before using Save & New');
+      return;
+    }
+    saveToLog();
+    resetBuilderForNewQuote();
   };
 
   const downloadPdf = () => {
@@ -1117,6 +1176,14 @@ export default function InternalQuoteBuilder() {
           <Button onClick={generate} className="w-full" size="lg">
             <FileText className="h-4 w-4 mr-2" />Generate Internal Quote
           </Button>
+          <div className="grid grid-cols-2 gap-2">
+            <Button onClick={saveAndStartNew} variant="outline" disabled={!quote}>
+              Save & New
+            </Button>
+            <Button onClick={resetBuilderForNewQuote} variant="destructive">
+              New Quote
+            </Button>
+          </div>
         </div>
 
         {/* Quote Output */}
