@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { upsertStoredDocument } from '@/lib/costDataWarehouse';
 
 interface UploadQuoteFileParams {
   file: File;
@@ -19,6 +20,7 @@ interface QuoteFileRecord {
   id: string;
   storagePath: string;
   gdriveStatus: string;
+  storedDocumentId?: string | null;
 }
 
 interface SteelCostEntryParams {
@@ -119,6 +121,27 @@ export async function uploadQuoteFile({
       return { id: '', storagePath, gdriveStatus: 'pending' };
     }
 
+    let storedDocumentId: string | null = null;
+    try {
+      storedDocumentId = await upsertStoredDocument({
+        quoteFileId: record.id,
+        documentId: documentId || null,
+        jobId: jobId || null,
+        clientId: clientId || null,
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: file.type || fileType,
+        storagePath,
+        uploadedBy: user.id,
+        sourceType: 'uploaded',
+        reviewStatus: (reviewStatus || (extractionSource === 'unknown' ? 'needs_review' : 'pending')) as any,
+        parseError: parseError || null,
+        parserName: extractionSource === 'regex' ? 'regex-pdf-parser' : extractionSource === 'ai' ? 'ai-extractor' : null,
+      });
+    } catch (storedDocError) {
+      console.warn('Stored document insert error:', storedDocError);
+    }
+
     // Fire-and-forget: trigger Google Drive backup via edge function
     triggerGdriveBackup(record.id, storagePath, file.name, fileType, jobId, clientName);
 
@@ -126,6 +149,7 @@ export async function uploadQuoteFile({
       id: record.id,
       storagePath,
       gdriveStatus: 'pending',
+      storedDocumentId,
     };
   } catch (err) {
     console.error('uploadQuoteFile error:', err);

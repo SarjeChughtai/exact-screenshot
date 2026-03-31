@@ -48,6 +48,7 @@ const MODULE_ACCESS: Record<string, UserRole[]> = {
   'internal-quote-log': ['admin', 'owner', 'operations', 'sales_rep'],
   'master-data': ['owner'],
   'vendor-board': ['admin', 'owner', 'operations', 'freight', 'manufacturer', 'construction'],
+  'cost-data': ['admin', 'owner', 'operations'],
 };
 
 const RoleContext = createContext<RoleContextType | null>(null);

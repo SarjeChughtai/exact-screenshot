@@ -83,6 +83,7 @@
     "dealerRfq": "RFQ Concessionnaire",
     "vendorPortal": "Portail Fournisseur",
     "quoteBoard": "Tableau des offres",
+    "costData": "Données de coût",
     "system": "Système",
     "settings": "Paramètres",
     "auditLog": "Journal d'audit",
@@ -323,5 +324,8 @@
     },
     "editDealer": "Modifier le profil concessionnaire",
     "noDealers": "Aucun profil de concessionnaire trouvé."
+  },
+  "layout": {
+    "costData": "Données de coût"
   }
 }

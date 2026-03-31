@@ -46,6 +46,7 @@ import Clients from "@/pages/Clients";
 import Vendors from "@/pages/Vendors";
 import VendorQuoteBoard from "@/pages/VendorQuoteBoard";
 import ImportReview from "@/pages/ImportReview";
+import CostData from "@/pages/CostData";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient({
@@ -111,6 +112,7 @@ const App = () => (
                           <Route path="/vendors" element={withModule('payment-ledger', <Vendors />)} />
                           <Route path="/vendor-board" element={withModule('vendor-board', <VendorQuoteBoard />)} />
                           <Route path="/import-review" element={withModule('internal-quote-builder', <ImportReview />)} />
+                          <Route path="/cost-data" element={withModule('cost-data', <CostData />)} />
                           <Route path="*" element={<NotFound />} />
                         </Routes>
                       </Layout>

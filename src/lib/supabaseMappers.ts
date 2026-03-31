@@ -1,4 +1,22 @@
-import type { Quote, Deal, InternalCost, PaymentEntry, ProductionRecord, FreightRecord, Client, Vendor, ManufacturerRFQ, ManufacturerBid, QuoteFileRecord, SteelCostEntry, Estimate, UserProfileSettings } from '@/types';
+import type {
+  Quote,
+  Deal,
+  InternalCost,
+  PaymentEntry,
+  ProductionRecord,
+  FreightRecord,
+  Client,
+  Vendor,
+  ManufacturerRFQ,
+  ManufacturerBid,
+  QuoteFileRecord,
+  SteelCostEntry,
+  Estimate,
+  UserProfileSettings,
+  StoredDocument,
+  SteelCostDataRecord,
+  InsulationCostDataRecord,
+} from '@/types';
 
 // --- Deal ---
 export function dealFromRow(r: any): Deal {
@@ -576,6 +594,267 @@ export function steelCostEntryToRow(e: Partial<SteelCostEntry>): Record<string, 
   };
   const row: Record<string, any> = {};
   for (const [k, v] of Object.entries(e)) {
+    if (map[k]) row[map[k]] = v;
+  }
+  return row;
+}
+
+// --- StoredDocument ---
+export function storedDocumentFromRow(r: any): StoredDocument {
+  return {
+    id: r.id ?? '',
+    quoteFileId: r.quote_file_id ?? null,
+    documentId: r.document_id ?? null,
+    jobId: r.job_id ?? null,
+    projectId: r.project_id ?? null,
+    clientId: r.client_id ?? null,
+    vendorId: r.vendor_id ?? null,
+    sourceType: r.source_type ?? 'uploaded',
+    sourceFilename: r.source_filename ?? null,
+    sourceFileExtension: r.source_file_extension ?? null,
+    fileName: r.file_name ?? '',
+    fileSize: r.file_size != null ? Number(r.file_size) : null,
+    fileType: r.file_type ?? 'unknown',
+    storagePath: r.storage_path ?? '',
+    extractedDocumentType: r.extracted_document_type ?? null,
+    parserName: r.parser_name ?? null,
+    parserVersion: r.parser_version ?? null,
+    parseError: r.parse_error ?? null,
+    reviewStatus: r.review_status ?? 'pending',
+    parsedData: r.parsed_data ?? null,
+    metadata: r.metadata ?? {},
+    parsedSuccessfully: r.parsed_successfully ?? null,
+    reviewedBy: r.reviewed_by ?? null,
+    reviewedAt: r.reviewed_at ?? null,
+    uploadedBy: r.uploaded_by ?? null,
+    uploadedAt: r.uploaded_at ?? null,
+    createdAt: r.created_at ?? '',
+  };
+}
+
+export function storedDocumentToRow(d: Partial<StoredDocument>): Record<string, any> {
+  const map: Record<string, string> = {
+    id: 'id',
+    quoteFileId: 'quote_file_id',
+    documentId: 'document_id',
+    jobId: 'job_id',
+    projectId: 'project_id',
+    clientId: 'client_id',
+    vendorId: 'vendor_id',
+    sourceType: 'source_type',
+    sourceFilename: 'source_filename',
+    sourceFileExtension: 'source_file_extension',
+    fileName: 'file_name',
+    fileSize: 'file_size',
+    fileType: 'file_type',
+    storagePath: 'storage_path',
+    extractedDocumentType: 'extracted_document_type',
+    parserName: 'parser_name',
+    parserVersion: 'parser_version',
+    parseError: 'parse_error',
+    reviewStatus: 'review_status',
+    parsedData: 'parsed_data',
+    metadata: 'metadata',
+    parsedSuccessfully: 'parsed_successfully',
+    reviewedBy: 'reviewed_by',
+    reviewedAt: 'reviewed_at',
+    uploadedBy: 'uploaded_by',
+    uploadedAt: 'uploaded_at',
+  };
+  const row: Record<string, any> = {};
+  for (const [k, v] of Object.entries(d)) {
+    if (map[k]) row[map[k]] = v;
+  }
+  return row;
+}
+
+// --- SteelCostDataRecord ---
+export function steelCostDataFromRow(r: any): SteelCostDataRecord {
+  return {
+    id: r.id ?? '',
+    storedDocumentId: r.stored_document_id ?? null,
+    quoteFileId: r.quote_file_id ?? null,
+    documentId: r.document_id ?? null,
+    jobId: r.job_id ?? null,
+    projectId: r.project_id ?? null,
+    clientId: r.client_id ?? null,
+    vendorId: r.vendor_id ?? null,
+    widthFt: r.width_ft != null ? Number(r.width_ft) : null,
+    lengthFt: r.length_ft != null ? Number(r.length_ft) : null,
+    eaveHeightFt: r.eave_height_ft != null ? Number(r.eave_height_ft) : null,
+    roofSlope: r.roof_slope != null ? Number(r.roof_slope) : null,
+    floorAreaSqft: r.floor_area_sqft != null ? Number(r.floor_area_sqft) : null,
+    totalWeightLb: r.total_weight_lb != null ? Number(r.total_weight_lb) : null,
+    totalCost: r.total_cost != null ? Number(r.total_cost) : null,
+    costPerSqft: r.cost_per_sqft != null ? Number(r.cost_per_sqft) : null,
+    weightPerSqft: r.weight_per_sqft != null ? Number(r.weight_per_sqft) : null,
+    pricePerLb: r.price_per_lb != null ? Number(r.price_per_lb) : null,
+    snowLoadPsf: r.snow_load_psf != null ? Number(r.snow_load_psf) : null,
+    windLoadPsf: r.wind_load_psf != null ? Number(r.wind_load_psf) : null,
+    windCode: r.wind_code ?? null,
+    province: r.province ?? null,
+    city: r.city ?? null,
+    seismicCat: r.seismic_cat ?? null,
+    dataSource: r.data_source ?? null,
+    sourceType: r.source_type ?? null,
+    sourceFileName: r.source_file_name ?? null,
+    sourceFilePath: r.source_file_path ?? null,
+    reviewStatus: r.review_status ?? 'pending',
+    parserVersion: r.parser_version ?? null,
+    rawExtraction: r.raw_extraction ?? null,
+    components: r.components ?? [],
+    addedBy: r.added_by ?? null,
+    reviewedBy: r.reviewed_by ?? null,
+    reviewedAt: r.reviewed_at ?? null,
+    dateAdded: r.date_added ?? null,
+    createdAt: r.created_at ?? '',
+  };
+}
+
+export function steelCostDataToRow(d: Partial<SteelCostDataRecord>): Record<string, any> {
+  const map: Record<string, string> = {
+    id: 'id',
+    storedDocumentId: 'stored_document_id',
+    quoteFileId: 'quote_file_id',
+    documentId: 'document_id',
+    jobId: 'job_id',
+    projectId: 'project_id',
+    clientId: 'client_id',
+    vendorId: 'vendor_id',
+    widthFt: 'width_ft',
+    lengthFt: 'length_ft',
+    eaveHeightFt: 'eave_height_ft',
+    roofSlope: 'roof_slope',
+    floorAreaSqft: 'floor_area_sqft',
+    totalWeightLb: 'total_weight_lb',
+    totalCost: 'total_cost',
+    costPerSqft: 'cost_per_sqft',
+    weightPerSqft: 'weight_per_sqft',
+    pricePerLb: 'price_per_lb',
+    snowLoadPsf: 'snow_load_psf',
+    windLoadPsf: 'wind_load_psf',
+    windCode: 'wind_code',
+    province: 'province',
+    city: 'city',
+    seismicCat: 'seismic_cat',
+    dataSource: 'data_source',
+    sourceType: 'source_type',
+    sourceFileName: 'source_file_name',
+    sourceFilePath: 'source_file_path',
+    reviewStatus: 'review_status',
+    parserVersion: 'parser_version',
+    rawExtraction: 'raw_extraction',
+    components: 'components',
+    addedBy: 'added_by',
+    reviewedBy: 'reviewed_by',
+    reviewedAt: 'reviewed_at',
+    dateAdded: 'date_added',
+  };
+  const row: Record<string, any> = {};
+  for (const [k, v] of Object.entries(d)) {
+    if (map[k]) row[map[k]] = v;
+  }
+  return row;
+}
+
+// --- InsulationCostDataRecord ---
+export function insulationCostDataFromRow(r: any): InsulationCostDataRecord {
+  return {
+    id: r.id ?? '',
+    storedDocumentId: r.stored_document_id ?? null,
+    quoteFileId: r.quote_file_id ?? null,
+    documentId: r.document_id ?? null,
+    jobId: r.job_id ?? null,
+    projectId: r.project_id ?? null,
+    clientId: r.client_id ?? null,
+    vendorId: r.vendor_id ?? null,
+    widthFt: r.width_ft != null ? Number(r.width_ft) : null,
+    lengthFt: r.length_ft != null ? Number(r.length_ft) : null,
+    eaveHeightFt: r.eave_height_ft != null ? Number(r.eave_height_ft) : null,
+    roofSlope: r.roof_slope != null ? Number(r.roof_slope) : null,
+    floorAreaSqft: r.floor_area_sqft != null ? Number(r.floor_area_sqft) : null,
+    location: r.location ?? null,
+    roofRValue: r.roof_r_value ?? null,
+    wallRValue: r.wall_r_value ?? null,
+    grade: r.grade ?? null,
+    roofAreaSqft: r.roof_area_sqft != null ? Number(r.roof_area_sqft) : null,
+    wallAreaSqft: r.wall_area_sqft != null ? Number(r.wall_area_sqft) : null,
+    totalInsulatedSqft: r.total_insulated_sqft != null ? Number(r.total_insulated_sqft) : null,
+    materialCost: r.material_cost != null ? Number(r.material_cost) : null,
+    freightCost: r.freight_cost != null ? Number(r.freight_cost) : null,
+    fuelSurcharge: r.fuel_surcharge != null ? Number(r.fuel_surcharge) : null,
+    totalDelivery: r.total_delivery != null ? Number(r.total_delivery) : null,
+    totalCost: r.total_cost != null ? Number(r.total_cost) : null,
+    materialPerSqft: r.material_per_sqft != null ? Number(r.material_per_sqft) : null,
+    totalPerSqft: r.total_per_sqft != null ? Number(r.total_per_sqft) : null,
+    weightLb: r.weight_lb != null ? Number(r.weight_lb) : null,
+    shipBranch: r.ship_branch ?? null,
+    quoteNumber: r.quote_number ?? null,
+    quoteDate: r.quote_date ?? null,
+    dataSource: r.data_source ?? null,
+    sourceType: r.source_type ?? null,
+    sourceFileName: r.source_file_name ?? null,
+    sourceFilePath: r.source_file_path ?? null,
+    reviewStatus: r.review_status ?? 'pending',
+    parserVersion: r.parser_version ?? null,
+    rawExtraction: r.raw_extraction ?? null,
+    accessories: r.accessories ?? [],
+    addedBy: r.added_by ?? null,
+    reviewedBy: r.reviewed_by ?? null,
+    reviewedAt: r.reviewed_at ?? null,
+    dateAdded: r.date_added ?? null,
+    createdAt: r.created_at ?? '',
+  };
+}
+
+export function insulationCostDataToRow(d: Partial<InsulationCostDataRecord>): Record<string, any> {
+  const map: Record<string, string> = {
+    id: 'id',
+    storedDocumentId: 'stored_document_id',
+    quoteFileId: 'quote_file_id',
+    documentId: 'document_id',
+    jobId: 'job_id',
+    projectId: 'project_id',
+    clientId: 'client_id',
+    vendorId: 'vendor_id',
+    widthFt: 'width_ft',
+    lengthFt: 'length_ft',
+    eaveHeightFt: 'eave_height_ft',
+    roofSlope: 'roof_slope',
+    floorAreaSqft: 'floor_area_sqft',
+    location: 'location',
+    roofRValue: 'roof_r_value',
+    wallRValue: 'wall_r_value',
+    grade: 'grade',
+    roofAreaSqft: 'roof_area_sqft',
+    wallAreaSqft: 'wall_area_sqft',
+    totalInsulatedSqft: 'total_insulated_sqft',
+    materialCost: 'material_cost',
+    freightCost: 'freight_cost',
+    fuelSurcharge: 'fuel_surcharge',
+    totalDelivery: 'total_delivery',
+    totalCost: 'total_cost',
+    materialPerSqft: 'material_per_sqft',
+    totalPerSqft: 'total_per_sqft',
+    weightLb: 'weight_lb',
+    shipBranch: 'ship_branch',
+    quoteNumber: 'quote_number',
+    quoteDate: 'quote_date',
+    dataSource: 'data_source',
+    sourceType: 'source_type',
+    sourceFileName: 'source_file_name',
+    sourceFilePath: 'source_file_path',
+    reviewStatus: 'review_status',
+    parserVersion: 'parser_version',
+    rawExtraction: 'raw_extraction',
+    accessories: 'accessories',
+    addedBy: 'added_by',
+    reviewedBy: 'reviewed_by',
+    reviewedAt: 'reviewed_at',
+    dateAdded: 'date_added',
+  };
+  const row: Record<string, any> = {};
+  for (const [k, v] of Object.entries(d)) {
     if (map[k]) row[map[k]] = v;
   }
   return row;

@@ -28,6 +28,7 @@ const routeLabelKeys: Record<string, string> = {
   '/rfq': 'layout.rfqBoard',
   '/audit-log': 'layout.auditLog',
   '/import-review': 'layout.importReview',
+  '/cost-data': 'layout.costData',
 };
 
 export default function Layout({ children }: { children: React.ReactNode }) {
