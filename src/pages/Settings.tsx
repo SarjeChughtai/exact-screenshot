@@ -18,14 +18,18 @@ import DataImportSettings from '@/components/DataImportSettings';
 import DealerProfileSettings from '@/components/DealerProfileSettings';
 import DealerManagement from '@/components/DealerManagement';
 import { useTranslation } from 'react-i18next';
+import { supabase } from '@/integrations/supabase/client';
 
 export default function Settings() {
   const { t } = useTranslation();
-  const { settings, updateSettings } = useSettings();
+  const { settings, profile, updateSettings, updateProfile } = useSettings();
   const appCtx = useAppContext();
   const { hasAnyRole } = useRoles();
+  const { user } = useAuth();
   const isAdmin = hasAnyRole('admin', 'owner');
   const isDealer = hasAnyRole('dealer');
+  const [pendingEmail, setPendingEmail] = useState(user?.email || '');
+  const [pendingPassword, setPendingPassword] = useState('');
 
   const [newPerson, setNewPerson] = useState({ name: '', email: '', roles: ['sales_rep'] as PersonnelEntry['roles'] });
 
@@ -87,6 +91,84 @@ export default function Settings() {
   const updateStatusList = (key: string, value: string) => {
     updateSettings({ [key]: value.split(',').map(s => s.trim()).filter(Boolean) });
   };
+
+  const saveEmail = async () => {
+    if (!pendingEmail.trim()) {
+      toast.error('Email is required');
+      return;
+    }
+    const { error } = await supabase.auth.updateUser({ email: pendingEmail.trim() });
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success('Email update requested');
+  };
+
+  const savePassword = async () => {
+    if (!pendingPassword.trim()) {
+      toast.error('Password is required');
+      return;
+    }
+    const { error } = await supabase.auth.updateUser({ password: pendingPassword });
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    setPendingPassword('');
+    toast.success('Password updated');
+  };
+
+  if (!isAdmin) {
+    return (
+      <div className="space-y-6 max-w-2xl">
+        <div>
+          <h2 className="text-2xl font-bold text-foreground">My Profile</h2>
+          <p className="text-sm text-muted-foreground mt-1">Personal account settings only.</p>
+        </div>
+
+        <div className="bg-card border rounded-lg p-5 space-y-4">
+          <div>
+            <Label className="text-xs">Email</Label>
+            <div className="flex gap-2 mt-1">
+              <Input className="input-blue" value={pendingEmail} onChange={e => setPendingEmail(e.target.value)} />
+              <Button variant="outline" onClick={() => void saveEmail()}>Update Email</Button>
+            </div>
+          </div>
+
+          <div>
+            <Label className="text-xs">Password</Label>
+            <div className="flex gap-2 mt-1">
+              <Input className="input-blue" type="password" value={pendingPassword} onChange={e => setPendingPassword(e.target.value)} placeholder="New password" />
+              <Button variant="outline" onClick={() => void savePassword()}>Update Password</Button>
+            </div>
+          </div>
+
+          <div>
+            <Label className="text-xs">Phone</Label>
+            <Input className="input-blue mt-1" value={profile.phone} onChange={e => void updateProfile({ phone: e.target.value })} />
+          </div>
+
+          <div>
+            <Label className="text-xs">Address</Label>
+            <Input className="input-blue mt-1" value={profile.address} onChange={e => void updateProfile({ address: e.target.value })} />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <Label className="text-xs">Receive email notifications</Label>
+            <Switch checked={profile.emailNotifications} onCheckedChange={value => void updateProfile({ emailNotifications: value })} />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <Label className="text-xs">Receive text notifications</Label>
+            <Switch checked={profile.smsNotifications} onCheckedChange={value => void updateProfile({ smsNotifications: value })} />
+          </div>
+
+          {isDealer && <DealerProfileSettings />}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 max-w-4xl">

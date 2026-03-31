@@ -67,7 +67,7 @@ function generateCostSavingTips(form: any, costData: CostFileData, quote: Quote 
 }
 
 export default function InternalQuoteBuilder() {
-  const { addQuote, deals, quotes } = useAppContext();
+  const { addQuote, deals, quotes, allocateJobId } = useAppContext();
   const { settings, getSalesReps } = useSettings();
 
   const getInitialForm = () => ({
@@ -768,7 +768,7 @@ export default function InternalQuoteBuilder() {
     }
   };
 
-  const generate = () => {
+  const generate = async () => {
     const w = parseFloat(form.width) || 0;
     const l = parseFloat(form.length) || 0;
     const h = parseFloat(form.height) || 14;
@@ -825,10 +825,13 @@ export default function InternalQuoteBuilder() {
     // Default job name to dimensions
     const jobName = form.jobName || getDefaultJobName();
 
+    const jobId = form.jobId || await allocateJobId();
+    if (!form.jobId) set('jobId', jobId);
+
     const q: Quote = {
       id: crypto.randomUUID(),
       date: new Date().toISOString().split('T')[0],
-      jobId: form.jobId || `CSB-${Date.now().toString(36).toUpperCase()}`,
+      jobId,
       jobName, clientName: form.clientName, clientId: form.clientId,
       salesRep: form.salesRep, estimator: form.estimator,
       province: form.province, city: form.city, address: form.address, postalCode: form.postalCode,
@@ -840,6 +843,15 @@ export default function InternalQuoteBuilder() {
       freight, combinedTotal, perSqft: combinedTotal / sqft, perLb: finalPerLb,
       contingencyPct: parseFloat(form.contingencyPct) || 0, contingency,
       gstHst, qst, grandTotal: totalPlusCont, status: 'Draft',
+      documentType: 'internal_quote',
+      workflowStatus: 'internal_quote_ready',
+      payload: {
+        notes,
+        buildings,
+        singleSlope,
+        leftEaveHeight,
+        rightEaveHeight,
+      },
     };
     setQuote(q);
 
@@ -860,7 +872,7 @@ export default function InternalQuoteBuilder() {
   const saveToLogAndNew = () => {
     if (!quote) return;
     addQuote(quote);
-    toast.success('Quote saved to Quote Log');
+    toast.success('Internal quote saved to Internal Quote Log');
     resetBuilder('Save is complete. Start a new quote and clear this screen?');
   };
 

@@ -1,4 +1,4 @@
-import type { Quote, Deal, InternalCost, PaymentEntry, ProductionRecord, FreightRecord, Client, Vendor, ManufacturerRFQ, ManufacturerBid, QuoteFileRecord, SteelCostEntry } from '@/types';
+import type { Quote, Deal, InternalCost, PaymentEntry, ProductionRecord, FreightRecord, Client, Vendor, ManufacturerRFQ, ManufacturerBid, QuoteFileRecord, SteelCostEntry, Estimate, UserProfileSettings } from '@/types';
 
 // --- Deal ---
 export function dealFromRow(r: any): Deal {
@@ -31,6 +31,8 @@ export function dealFromRow(r: any): Deal {
     productionStatus: r.production_status ?? 'Submitted',
     freightStatus: r.freight_status ?? 'Pending',
     insulationStatus: r.insulation_status ?? '',
+    cxPaymentStageOverride: r.cx_payment_stage_override ?? '',
+    factoryPaymentStageOverride: r.factory_payment_stage_override ?? '',
     deliveryDate: r.delivery_date ?? '',
     pickupDate: r.pickup_date ?? '',
     notes: r.notes ?? '',
@@ -46,6 +48,8 @@ export function dealToRow(d: Partial<Deal>): Record<string, any> {
     orderType: 'order_type', dateSigned: 'date_signed', dealStatus: 'deal_status',
     paymentStatus: 'payment_status', productionStatus: 'production_status',
     freightStatus: 'freight_status', insulationStatus: 'insulation_status',
+    cxPaymentStageOverride: 'cx_payment_stage_override',
+    factoryPaymentStageOverride: 'factory_payment_stage_override',
     deliveryDate: 'delivery_date', pickupDate: 'pickup_date', notes: 'notes',
     leftEaveHeight: 'left_eave_height', rightEaveHeight: 'right_eave_height', isSingleSlope: 'is_single_slope',
   };
@@ -101,6 +105,17 @@ export function quoteFromRow(r: any): Quote {
     qst: Number(r.qst) || 0,
     grandTotal: Number(r.grand_total) || 0,
     status: r.status ?? 'Draft',
+    documentType: r.document_type ?? 'external_quote',
+    workflowStatus: r.workflow_status ?? 'draft',
+    sourceDocumentId: r.source_document_id ?? null,
+    assignedEstimatorUserId: r.assigned_estimator_user_id ?? null,
+    assignedOperationsUserId: r.assigned_operations_user_id ?? null,
+    pdfStoragePath: r.pdf_storage_path ?? '',
+    pdfFileName: r.pdf_file_name ?? '',
+    payload: r.payload ?? {},
+    createdByUserId: r.created_by_user_id ?? null,
+    createdAt: r.created_at ?? '',
+    updatedAt: r.updated_at ?? '',
     isDeleted: r.is_deleted ?? false,
   };
 }
@@ -117,6 +132,12 @@ export function quoteToRow(q: Partial<Quote>): Record<string, any> {
     freight: 'freight', combinedTotal: 'combined_total', perSqft: 'per_sqft', perLb: 'per_lb',
     gstHst: 'gst_hst',
     qst: 'qst', grandTotal: 'grand_total', status: 'status',
+    documentType: 'document_type', workflowStatus: 'workflow_status',
+    sourceDocumentId: 'source_document_id',
+    assignedEstimatorUserId: 'assigned_estimator_user_id',
+    assignedOperationsUserId: 'assigned_operations_user_id',
+    pdfStoragePath: 'pdf_storage_path', pdfFileName: 'pdf_file_name',
+    payload: 'payload', createdByUserId: 'created_by_user_id', updatedAt: 'updated_at',
     leftEaveHeight: 'left_eave_height', rightEaveHeight: 'right_eave_height', isSingleSlope: 'is_single_slope', pitch: 'pitch',
     isDeleted: 'is_deleted',
   };
@@ -212,6 +233,7 @@ export function clientFromRow(r: any): Client {
     id: r.id ?? '',
     clientId: r.client_id ?? '',
     clientName: r.client_name ?? r.name ?? '',
+    name: r.client_name ?? r.name ?? '',
     jobIds: r.job_ids ?? [],
     contactEmail: r.contact_email ?? '',
     contactPhone: r.contact_phone ?? '',
@@ -222,7 +244,7 @@ export function clientFromRow(r: any): Client {
 
 export function clientToRow(c: Partial<Client>): Record<string, any> {
   const map: Record<string, string> = {
-    id: 'id', clientId: 'client_id', clientName: 'client_name',
+    id: 'id', clientId: 'client_id', clientName: 'client_name', name: 'name',
     jobIds: 'job_ids', contactEmail: 'contact_email',
     contactPhone: 'contact_phone', notes: 'notes',
   };
@@ -294,6 +316,7 @@ export function freightFromRow(r: any): FreightRecord {
     jobId: r.job_id ?? '',
     clientName: r.client_name ?? '',
     buildingSize: r.building_size ?? '',
+    province: r.province ?? '',
     weight: Number(r.weight) || 0,
     pickupAddress: r.pickup_address ?? '',
     deliveryAddress: r.delivery_address ?? '',
@@ -302,6 +325,7 @@ export function freightFromRow(r: any): FreightRecord {
     actualFreight: Number(r.actual_freight) || 0,
     paid: r.paid ?? false,
     carrier: r.carrier ?? '',
+    assignedFreightUserId: r.assigned_freight_user_id ?? null,
     status: r.status ?? 'Pending',
   };
 }
@@ -309,9 +333,9 @@ export function freightFromRow(r: any): FreightRecord {
 export function freightToRow(fr: Partial<FreightRecord>): Record<string, any> {
   const map: Record<string, string> = {
     jobId: 'job_id', clientName: 'client_name', buildingSize: 'building_size',
-    weight: 'weight', pickupAddress: 'pickup_address', deliveryAddress: 'delivery_address',
+    province: 'province', weight: 'weight', pickupAddress: 'pickup_address', deliveryAddress: 'delivery_address',
     estDistance: 'est_distance', estFreight: 'est_freight', actualFreight: 'actual_freight',
-    paid: 'paid', carrier: 'carrier', status: 'status',
+    paid: 'paid', carrier: 'carrier', assignedFreightUserId: 'assigned_freight_user_id', status: 'status',
   };
   const row: Record<string, any> = {};
   for (const [k, v] of Object.entries(fr)) {
@@ -394,12 +418,14 @@ export function manufacturerBidToRow(b: Partial<ManufacturerBid>): Record<string
 export function quoteFileFromRow(r: any): QuoteFileRecord {
   return {
     id: r.id ?? '',
+    documentId: r.document_id ?? null,
     jobId: r.job_id ?? '',
     clientName: r.client_name ?? '',
     clientId: r.client_id ?? '',
     fileName: r.file_name ?? '',
     fileSize: Number(r.file_size) || 0,
     fileType: r.file_type ?? 'unknown',
+    fileCategory: r.file_category ?? 'support_file',
     storagePath: r.storage_path ?? '',
     buildingLabel: r.building_label ?? '',
     extractionSource: r.extraction_source ?? 'unknown',
@@ -418,8 +444,9 @@ export function quoteFileFromRow(r: any): QuoteFileRecord {
 
 export function quoteFileToRow(qf: Partial<QuoteFileRecord>): Record<string, any> {
   const map: Record<string, string> = {
-    id: 'id', jobId: 'job_id', clientName: 'client_name', clientId: 'client_id',
+    id: 'id', documentId: 'document_id', jobId: 'job_id', clientName: 'client_name', clientId: 'client_id',
     fileName: 'file_name', fileSize: 'file_size', fileType: 'file_type',
+    fileCategory: 'file_category',
     storagePath: 'storage_path', buildingLabel: 'building_label',
     extractionSource: 'extraction_source', aiOutput: 'ai_output',
     reviewStatus: 'review_status', parseError: 'parse_error',
@@ -429,6 +456,78 @@ export function quoteFileToRow(qf: Partial<QuoteFileRecord>): Record<string, any
   };
   const row: Record<string, any> = {};
   for (const [k, v] of Object.entries(qf)) {
+    if (map[k]) row[map[k]] = v;
+  }
+  return row;
+}
+
+// --- Estimate ---
+export function estimateFromRow(r: any): Estimate {
+  return {
+    id: r.id ?? '',
+    label: r.label ?? '',
+    date: r.date ?? '',
+    clientName: r.client_name ?? '',
+    clientId: r.client_id ?? '',
+    salesRep: r.sales_rep ?? '',
+    width: Number(r.width) || 0,
+    length: Number(r.length) || 0,
+    height: Number(r.height) || 0,
+    pitch: Number(r.pitch) || 0,
+    province: r.province ?? 'ON',
+    grandTotal: Number(r.grand_total) || 0,
+    sqft: Number(r.sqft) || 0,
+    estimatedTotal: Number(r.estimated_total) || 0,
+    notes: r.notes ?? '',
+    auditNotes: Array.isArray(r.audit_notes) ? r.audit_notes : [],
+    payload: r.payload ?? {},
+    createdByUserId: r.created_by_user_id ?? null,
+    createdAt: r.created_at ?? '',
+    updatedAt: r.updated_at ?? '',
+  };
+}
+
+export function estimateToRow(e: Partial<Estimate>): Record<string, any> {
+  const map: Record<string, string> = {
+    id: 'id', label: 'label', date: 'date', clientName: 'client_name', clientId: 'client_id',
+    salesRep: 'sales_rep', width: 'width', length: 'length', height: 'height', pitch: 'pitch',
+    province: 'province', grandTotal: 'grand_total', sqft: 'sqft', estimatedTotal: 'estimated_total',
+    notes: 'notes', auditNotes: 'audit_notes', payload: 'payload', createdByUserId: 'created_by_user_id',
+    updatedAt: 'updated_at',
+  };
+  const row: Record<string, any> = {};
+  for (const [k, v] of Object.entries(e)) {
+    if (map[k]) row[map[k]] = v;
+  }
+  return row;
+}
+
+// --- UserProfileSettings ---
+export function userProfileFromRow(r: any): UserProfileSettings {
+  return {
+    userId: r.user_id ?? '',
+    phone: r.phone ?? '',
+    address: r.address ?? '',
+    emailNotifications: r.email_notifications ?? true,
+    smsNotifications: r.sms_notifications ?? false,
+    canViewAllFreightBoard: r.can_view_all_freight_board ?? false,
+    createdAt: r.created_at ?? '',
+    updatedAt: r.updated_at ?? '',
+  };
+}
+
+export function userProfileToRow(p: Partial<UserProfileSettings>): Record<string, any> {
+  const map: Record<string, string> = {
+    userId: 'user_id',
+    phone: 'phone',
+    address: 'address',
+    emailNotifications: 'email_notifications',
+    smsNotifications: 'sms_notifications',
+    canViewAllFreightBoard: 'can_view_all_freight_board',
+    updatedAt: 'updated_at',
+  };
+  const row: Record<string, any> = {};
+  for (const [k, v] of Object.entries(p)) {
     if (map[k]) row[map[k]] = v;
   }
   return row;

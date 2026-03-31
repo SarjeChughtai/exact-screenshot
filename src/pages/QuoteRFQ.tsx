@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,19 +8,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { JobIdSelect } from '@/components/JobIdSelect';
 import { Switch } from '@/components/ui/switch';
 import { useAppContext } from '@/context/AppContext';
-import { useSettings } from '@/context/SettingsContext';
 import { PROVINCES } from '@/lib/calculations';
 import { toast } from 'sonner';
 import { Plus, Trash2, Send, Printer } from 'lucide-react';
 import { PersonnelSelect } from '@/components/PersonnelSelect';
+import { ClientSelect } from '@/components/ClientSelect';
+import type { Estimate, Quote } from '@/types';
 
 type WallLocation = 'LEW' | 'REW' | 'FSW' | 'BSW';
-const WALL_LABELS: Record<WallLocation, string> = {
-  LEW: 'Left End Wall',
-  REW: 'Right End Wall',
-  FSW: 'Front Side Wall',
-  BSW: 'Back Side Wall',
-};
 
 interface Opening {
   id: string;
@@ -31,130 +26,246 @@ interface Opening {
   notes: string;
 }
 
+const WALL_LABELS: Record<WallLocation, string> = {
+  LEW: 'Left End Wall',
+  REW: 'Right End Wall',
+  FSW: 'Front Side Wall',
+  BSW: 'Back Side Wall',
+};
+
+const INITIAL_FORM = {
+  clientId: '',
+  jobId: '',
+  jobName: '',
+  clientName: '',
+  province: 'ON',
+  city: '',
+  address: '',
+  postalCode: '',
+  width: '',
+  length: '',
+  height: '',
+  roofPitch: '',
+  salesRep: '',
+  estimator: '',
+  gutters: false,
+  gutterNotes: '',
+  liners: false,
+  linerLocation: '' as '' | 'roof' | 'walls' | 'roof_walls',
+  linerNotes: '',
+  insulationRequired: false,
+  insulationRoofGrade: '',
+  insulationWallGrade: '',
+  notes: '',
+};
+
+function mapEstimateToForm(estimate: Estimate) {
+  return {
+    ...INITIAL_FORM,
+    clientId: estimate.clientId,
+    clientName: estimate.clientName,
+    jobName: `${estimate.width}x${estimate.length} steel building`,
+    province: estimate.province,
+    width: String(estimate.width),
+    length: String(estimate.length),
+    height: String(estimate.height),
+    roofPitch: `${estimate.pitch}:12`,
+    salesRep: estimate.salesRep,
+  };
+}
+
+function mapQuoteToForm(quote: Quote) {
+  const payload = (quote.payload || {}) as Record<string, any>;
+  return {
+    ...INITIAL_FORM,
+    clientId: quote.clientId,
+    jobId: quote.jobId,
+    jobName: quote.jobName,
+    clientName: quote.clientName,
+    province: quote.province,
+    city: quote.city,
+    address: quote.address,
+    postalCode: quote.postalCode,
+    width: String(quote.width || ''),
+    length: String(quote.length || ''),
+    height: String(quote.height || ''),
+    roofPitch: payload.roofPitch || '',
+    salesRep: quote.salesRep,
+    estimator: quote.estimator,
+    gutters: Boolean(payload.gutters),
+    gutterNotes: payload.gutterNotes || '',
+    liners: Boolean(payload.liners),
+    linerLocation: payload.linerLocation || '',
+    linerNotes: payload.linerNotes || '',
+    insulationRequired: Boolean(payload.insulationRequired),
+    insulationRoofGrade: payload.insulationRoofGrade || '',
+    insulationWallGrade: payload.insulationWallGrade || '',
+    notes: payload.notes || '',
+  };
+}
+
 export default function QuoteRFQ() {
-  const { deals } = useAppContext();
-  const { getSalesReps } = useSettings();
-  const salesReps = getSalesReps();
   const [searchParams] = useSearchParams();
-
-  const [form, setForm] = useState({
-    clientId: '',
-    jobId: '',
-    jobName: '',
-    clientName: '',
-    province: 'ON',
-    city: '',
-    address: '',
-    postalCode: '',
-    width: '',
-    length: '',
-    height: '',
-    roofPitch: '',
-    salesRep: '',
-    estimator: '',
-    gutters: false,
-    gutterNotes: '',
-    liners: false,
-    linerLocation: '' as '' | 'roof' | 'walls' | 'roof_walls',
-    linerNotes: '',
-    insulationRequired: false,
-    insulationRoofGrade: '',
-    insulationWallGrade: '',
-    notes: '',
-  });
-
-  // Auto-populate from URL params (from estimator)
-  useEffect(() => {
-    const jobId = searchParams.get('jobId');
-    if (jobId) {
-      setForm(f => ({
-        ...f,
-        jobId: searchParams.get('jobId') || f.jobId,
-        clientName: searchParams.get('clientName') || f.clientName,
-        clientId: searchParams.get('clientId') || f.clientId,
-        salesRep: searchParams.get('salesRep') || f.salesRep,
-        width: searchParams.get('width') || f.width,
-        length: searchParams.get('length') || f.length,
-        height: searchParams.get('height') || f.height,
-        roofPitch: searchParams.get('pitch') ? `${searchParams.get('pitch')}:12` : f.roofPitch,
-        province: searchParams.get('province') || f.province,
-        city: searchParams.get('city') || f.city,
-        postalCode: searchParams.get('postalCode') || f.postalCode,
-      }));
-    }
-  }, [searchParams]);
-
+  const { deals, quotes, estimates, addQuote, updateQuote, allocateJobId } = useAppContext();
+  const [form, setForm] = useState(INITIAL_FORM);
   const [openings, setOpenings] = useState<Opening[]>([]);
+  const [selectedEstimateId, setSelectedEstimateId] = useState(searchParams.get('estimateId') || '');
 
-  const set = (key: string, val: any) => setForm(f => ({ ...f, [key]: val }));
+  const editingQuoteId = searchParams.get('quoteId');
+  const existingQuote = useMemo(
+    () => quotes.find(quote => quote.id === editingQuoteId),
+    [editingQuoteId, quotes],
+  );
 
-  // Count openings per wall for auto-naming
-  const getNextNumber = (wall: WallLocation) => {
-    const wallOpenings = openings.filter(o => o.wall === wall);
-    return wallOpenings.length + 1;
+  const estimateOptions = useMemo(
+    () => estimates.map(estimate => ({ id: estimate.id, label: `${estimate.label} - ${estimate.clientName}` })),
+    [estimates],
+  );
+
+  useEffect(() => {
+    if (existingQuote) {
+      setForm(mapQuoteToForm(existingQuote));
+      const payload = (existingQuote.payload || {}) as Record<string, any>;
+      setOpenings(Array.isArray(payload.openings) ? payload.openings : []);
+      return;
+    }
+
+    const estimateId = searchParams.get('estimateId');
+    if (!estimateId) return;
+    const estimate = estimates.find(item => item.id === estimateId);
+    if (!estimate) return;
+    setForm(current => ({ ...current, ...mapEstimateToForm(estimate) }));
+    setSelectedEstimateId(estimateId);
+  }, [existingQuote, estimates, searchParams]);
+
+  const set = (key: keyof typeof INITIAL_FORM, value: string | boolean) => {
+    setForm(current => ({ ...current, [key]: value }));
+  };
+
+  const handleClientSelect = ({ clientId, clientName }: { clientId: string; clientName: string }) => {
+    setForm(current => ({ ...current, clientId, clientName }));
+  };
+
+  const handleEstimateImport = (estimateId: string) => {
+    setSelectedEstimateId(estimateId);
+    const estimate = estimates.find(item => item.id === estimateId);
+    if (!estimate) return;
+    setForm(current => ({ ...current, ...mapEstimateToForm(estimate) }));
+    toast.success(`Imported ${estimate.label}`);
   };
 
   const addOpening = (wall: WallLocation) => {
-    const num = getNextNumber(wall);
-    setOpenings(prev => [...prev, {
+    const countForWall = openings.filter(opening => opening.wall === wall).length + 1;
+    setOpenings(current => [...current, {
       id: crypto.randomUUID(),
       wall,
-      number: num,
+      number: countForWall,
       width: '',
       height: '',
       notes: '',
     }]);
   };
 
+  const updateOpening = (id: string, key: keyof Opening, value: string) => {
+    setOpenings(current => current.map(opening => opening.id === id ? { ...opening, [key]: value } : opening));
+  };
+
   const removeOpening = (id: string) => {
-    setOpenings(prev => {
-      const updated = prev.filter(o => o.id !== id);
-      // Renumber per wall
-      const renumbered = updated.map(o => {
-        const sameWall = updated.filter(x => x.wall === o.wall);
-        const idx = sameWall.indexOf(o);
-        return { ...o, number: idx + 1 };
-      });
-      return renumbered;
-    });
+    const next = openings.filter(opening => opening.id !== id);
+    const renumbered = next.map(opening => ({
+      ...opening,
+      number: next.filter(item => item.wall === opening.wall).findIndex(item => item.id === opening.id) + 1,
+    }));
+    setOpenings(renumbered);
   };
 
-  const updateOpening = (id: string, key: keyof Opening, val: string) => {
-    setOpenings(prev => prev.map(o => o.id === id ? { ...o, [key]: val } : o));
-  };
+  const getOpeningName = (opening: Opening) => `${opening.wall} #${opening.number}`;
 
-  const getOpeningName = (o: Opening) => `${o.wall} #${o.number}`;
-
-  // Auto-populate from existing deal when client ID is entered
-  const handleClientIdChange = (clientId: string) => {
-    set('clientId', clientId);
-    const deal = deals.find(d => d.clientId === clientId);
-    if (deal) {
-      setForm(f => ({
-        ...f,
-        clientId,
-        clientName: deal.clientName,
-        salesRep: deal.salesRep,
-        estimator: deal.estimator,
-      }));
-      toast.info(`Client found: ${deal.clientName}`);
-    }
-  };
-
-  const generateJobId = () => `CSB-${Date.now().toString(36).toUpperCase()}`;
-
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!form.clientId.trim()) {
       toast.error('Client ID is required');
       return;
     }
 
-    const jobId = form.jobId.trim() || generateJobId();
+    const width = parseFloat(form.width) || 0;
+    const length = parseFloat(form.length) || 0;
+    const height = parseFloat(form.height) || 0;
+    if (!width || !length || !height) {
+      toast.error('Building dimensions are required');
+      return;
+    }
 
-    // Quote saved without auto-creating deal — convert from Quote Log
+    const jobId = form.jobId || await allocateJobId();
+    if (!form.jobId) set('jobId', jobId);
 
-    setForm(f => ({ ...f, jobId: jobId }));
-    toast.success('Quote RFQ submitted');
+    const payload = {
+      roofPitch: form.roofPitch,
+      openings,
+      gutters: form.gutters,
+      gutterNotes: form.gutterNotes,
+      liners: form.liners,
+      linerLocation: form.linerLocation,
+      linerNotes: form.linerNotes,
+      insulationRequired: form.insulationRequired,
+      insulationRoofGrade: form.insulationRoofGrade,
+      insulationWallGrade: form.insulationWallGrade,
+      notes: form.notes,
+      importedEstimateId: selectedEstimateId || null,
+    };
+
+    const document: Quote = {
+      id: existingQuote?.id || crypto.randomUUID(),
+      date: existingQuote?.date || new Date().toISOString().split('T')[0],
+      jobId,
+      jobName: form.jobName || `${width}x${length} steel building`,
+      clientName: form.clientName,
+      clientId: form.clientId,
+      salesRep: form.salesRep,
+      estimator: form.estimator,
+      province: form.province,
+      city: form.city,
+      address: form.address,
+      postalCode: form.postalCode,
+      width,
+      length,
+      height,
+      sqft: width * length,
+      weight: existingQuote?.weight || 0,
+      baseSteelCost: existingQuote?.baseSteelCost || 0,
+      steelAfter12: existingQuote?.steelAfter12 || 0,
+      markup: existingQuote?.markup || 0,
+      adjustedSteel: existingQuote?.adjustedSteel || 0,
+      engineering: existingQuote?.engineering || 0,
+      foundation: existingQuote?.foundation || 0,
+      foundationType: existingQuote?.foundationType || 'slab',
+      gutters: existingQuote?.gutters || 0,
+      liners: existingQuote?.liners || 0,
+      insulation: existingQuote?.insulation || 0,
+      insulationGrade: existingQuote?.insulationGrade || '',
+      freight: existingQuote?.freight || 0,
+      combinedTotal: existingQuote?.combinedTotal || 0,
+      perSqft: existingQuote?.perSqft || 0,
+      perLb: existingQuote?.perLb || 0,
+      contingencyPct: existingQuote?.contingencyPct || 0,
+      contingency: existingQuote?.contingency || 0,
+      gstHst: existingQuote?.gstHst || 0,
+      qst: existingQuote?.qst || 0,
+      grandTotal: existingQuote?.grandTotal || 0,
+      status: 'Sent',
+      documentType: existingQuote?.documentType === 'dealer_rfq' ? 'dealer_rfq' : 'rfq',
+      workflowStatus: 'estimate_needed',
+      sourceDocumentId: existingQuote?.sourceDocumentId || null,
+      payload,
+    };
+
+    if (existingQuote) {
+      await updateQuote(existingQuote.id, document);
+      toast.success('RFQ updated');
+      return;
+    }
+
+    await addQuote(document);
+    toast.success('RFQ submitted');
   };
 
   const printRFQ = () => {
@@ -162,67 +273,33 @@ export default function QuoteRFQ() {
     const win = window.open('', '_blank');
     if (!win) return;
 
-    const openingsByWall = (['LEW', 'REW', 'FSW', 'BSW'] as WallLocation[]).map(wall => ({
-      wall,
-      label: WALL_LABELS[wall],
-      items: openings.filter(o => o.wall === wall),
-    }));
-
-    win.document.write(`<html><head><title>Quote RFQ - ${jobId}</title><style>
-      body{font-family:monospace;font-size:12px;padding:20px;max-width:700px;margin:0 auto;}
+    win.document.write(`<html><head><title>RFQ - ${jobId}</title><style>
+      body{font-family:monospace;font-size:12px;padding:20px;max-width:800px;margin:0 auto;}
       .header{text-align:center;margin-bottom:16px;border-bottom:2px solid #000;padding-bottom:10px;}
       .section{margin-top:16px;border-top:1px solid #ccc;padding-top:10px;}
       .section h3{font-size:13px;margin:0 0 8px 0;text-transform:uppercase;}
       .row{display:flex;justify-content:space-between;margin:4px 0;}
-      .label{color:#444;min-width:140px;}
       .opening{border:1px solid #ddd;padding:6px;margin:4px 0;border-radius:4px;}
-      .opening-name{font-weight:bold;}
     </style></head><body>`);
-
-    win.document.write(`<div class="header"><h2>QUOTE REQUEST FOR QUOTATION</h2><p>Job ID: ${jobId} | Client: ${form.clientName} (${form.clientId})</p></div>`);
-
+    win.document.write(`<div class="header"><h2>REQUEST FOR QUOTE</h2><p>Job ID: ${jobId} | Client: ${form.clientName} (${form.clientId})</p></div>`);
     win.document.write(`<div class="section"><h3>Project Details</h3>
-      <div class="row"><span class="label">Client ID:</span><span>${form.clientId}</span></div>
-      <div class="row"><span class="label">Client Name:</span><span>${form.clientName}</span></div>
-      <div class="row"><span class="label">Job Name:</span><span>${form.jobName}</span></div>
-      <div class="row"><span class="label">Location:</span><span>${form.city}, ${form.province} ${form.postalCode}</span></div>
-      <div class="row"><span class="label">Sales Rep:</span><span>${form.salesRep}</span></div>
-      <div class="row"><span class="label">Estimator:</span><span>${form.estimator}</span></div>
+      <div class="row"><span>Client:</span><span>${form.clientName}</span></div>
+      <div class="row"><span>Client ID:</span><span>${form.clientId}</span></div>
+      <div class="row"><span>Job Name:</span><span>${form.jobName}</span></div>
+      <div class="row"><span>Location:</span><span>${form.city}, ${form.province} ${form.postalCode}</span></div>
+      <div class="row"><span>Sales Rep:</span><span>${form.salesRep}</span></div>
+      <div class="row"><span>Estimator:</span><span>${form.estimator}</span></div>
     </div>`);
-
-    win.document.write(`<div class="section"><h3>Building Dimensions</h3>
-      <div class="row"><span class="label">Width:</span><span>${form.width} ft</span></div>
-      <div class="row"><span class="label">Length:</span><span>${form.length} ft</span></div>
-      <div class="row"><span class="label">Height:</span><span>${form.height} ft</span></div>
-      <div class="row"><span class="label">Roof Pitch:</span><span>${form.roofPitch}</span></div>
+    win.document.write(`<div class="section"><h3>Building</h3>
+      <div class="row"><span>Dimensions:</span><span>${form.width} x ${form.length} x ${form.height}</span></div>
+      <div class="row"><span>Roof Pitch:</span><span>${form.roofPitch || 'Not set'}</span></div>
     </div>`);
-
-    win.document.write(`<div class="section"><h3>Openings</h3>`);
-    for (const group of openingsByWall) {
-      if (group.items.length === 0) continue;
-      win.document.write(`<div style="margin:8px 0;"><strong>${group.label}</strong>`);
-      for (const o of group.items) {
-        win.document.write(`<div class="opening"><span class="opening-name">${getOpeningName(o)}</span> — ${o.width}' W × ${o.height}' H${o.notes ? ` — ${o.notes}` : ''}</div>`);
-      }
-      win.document.write(`</div>`);
-    }
-    win.document.write(`</div>`);
-
-    win.document.write(`<div class="section"><h3>Accessories</h3>
-      <div class="row"><span class="label">Gutters:</span><span>${form.gutters ? 'Yes' : 'No'}${form.gutterNotes ? ' — ' + form.gutterNotes : ''}</span></div>
-      <div class="row"><span class="label">Liners:</span><span>${form.liners ? `Yes (${form.linerLocation || 'TBD'})` : 'No'}${form.linerNotes ? ' — ' + form.linerNotes : ''}</span></div>
-    </div>`);
-
-    win.document.write(`<div class="section"><h3>Insulation</h3>
-      <div class="row"><span class="label">Required:</span><span>${form.insulationRequired ? 'Yes' : 'No'}</span></div>
-      ${form.insulationRequired ? `<div class="row"><span class="label">Roof Grade:</span><span>${form.insulationRoofGrade}</span></div>
-      <div class="row"><span class="label">Wall Grade:</span><span>${form.insulationWallGrade}</span></div>` : ''}
-    </div>`);
-
-    if (form.notes) {
-      win.document.write(`<div class="section"><h3>Notes</h3><p style="white-space:pre-wrap;">${form.notes}</p></div>`);
-    }
-
+    win.document.write('<div class="section"><h3>Openings</h3>');
+    openings.forEach(opening => {
+      win.document.write(`<div class="opening">${getOpeningName(opening)} - ${opening.width} x ${opening.height}${opening.notes ? ` - ${opening.notes}` : ''}</div>`);
+    });
+    if (openings.length === 0) win.document.write('<p>No openings added</p>');
+    win.document.write('</div>');
     win.document.write('</body></html>');
     win.document.close();
     win.print();
@@ -232,214 +309,171 @@ export default function QuoteRFQ() {
     <div className="max-w-5xl space-y-6">
       <div>
         <h2 className="text-2xl font-bold text-foreground">Quote RFQ</h2>
-        <p className="text-sm text-muted-foreground mt-1">Submit a request for quotation with building specs, openings, and accessories</p>
+        <p className="text-sm text-muted-foreground mt-1">Submit RFQs as tracked documents without creating deals up front.</p>
       </div>
 
       <div className="grid lg:grid-cols-2 gap-6">
-        {/* Left Column */}
         <div className="space-y-5">
-          {/* Client & Job Info */}
+          <div className="bg-card border rounded-lg p-5 space-y-4">
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Import Source</h3>
+            <div>
+              <Label className="text-xs">Saved Estimate</Label>
+              <Select value={selectedEstimateId} onValueChange={handleEstimateImport}>
+                <SelectTrigger className="input-blue mt-1"><SelectValue placeholder="Import an estimate" /></SelectTrigger>
+                <SelectContent>
+                  {estimateOptions.map(option => <SelectItem key={option.id} value={option.id}>{option.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
           <div className="bg-card border rounded-lg p-5 space-y-4">
             <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Client & Job Info</h3>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label className="text-xs">Client ID <span className="text-destructive">*Required</span></Label>
-                <Input className="input-blue mt-1" value={form.clientId} onChange={e => handleClientIdChange(e.target.value)} placeholder="6+ digit client ID" />
-              </div>
-              <div>
                 <Label className="text-xs">Client Name</Label>
-                <Input className="input-blue mt-1" value={form.clientName} onChange={e => set('clientName', e.target.value)} />
+                <ClientSelect mode="name" valueId={form.clientId} valueName={form.clientName} onSelect={handleClientSelect} className="mt-1" />
               </div>
               <div>
-                <Label className="text-xs">Job ID <span className="text-muted-foreground">(auto-gen if empty)</span></Label>
-                <JobIdSelect value={form.jobId} onValueChange={v => set('jobId', v)} deals={deals} placeholder="Auto-generated" />
+                <Label className="text-xs">Client ID</Label>
+                <ClientSelect mode="id" valueId={form.clientId} valueName={form.clientName} onSelect={handleClientSelect} className="mt-1" />
+              </div>
+              <div>
+                <Label className="text-xs">Job ID</Label>
+                <JobIdSelect value={form.jobId} onValueChange={value => set('jobId', value)} deals={deals} placeholder="Auto-generated" />
               </div>
               <div>
                 <Label className="text-xs">Job Name</Label>
-                <Input className="input-blue mt-1" value={form.jobName} onChange={e => set('jobName', e.target.value)} />
+                <Input className="input-blue mt-1" value={form.jobName} onChange={event => set('jobName', event.target.value)} />
               </div>
               <div>
                 <Label className="text-xs">Sales Rep</Label>
-                <PersonnelSelect value={form.salesRep} onValueChange={v => set('salesRep', v)} role="sales_rep" className="mt-1" />
+                <PersonnelSelect value={form.salesRep} onValueChange={value => set('salesRep', value)} role="sales_rep" className="mt-1" />
               </div>
               <div>
                 <Label className="text-xs">Estimator</Label>
-                <PersonnelSelect value={form.estimator} onValueChange={v => set('estimator', v)} role="estimator" className="mt-1" />
+                <PersonnelSelect value={form.estimator} onValueChange={value => set('estimator', value)} role="estimator" className="mt-1" />
               </div>
             </div>
           </div>
 
-          {/* Location */}
           <div className="bg-card border rounded-lg p-5 space-y-4">
             <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Location</h3>
             <div className="grid grid-cols-3 gap-3">
               <div>
                 <Label className="text-xs">Province</Label>
-                <Select value={form.province} onValueChange={v => set('province', v)}>
+                <Select value={form.province} onValueChange={value => set('province', value)}>
                   <SelectTrigger className="input-blue mt-1"><SelectValue /></SelectTrigger>
-                  <SelectContent>{PROVINCES.map(p => <SelectItem key={p.code} value={p.code}>{p.code}</SelectItem>)}</SelectContent>
+                  <SelectContent>{PROVINCES.map(province => <SelectItem key={province.code} value={province.code}>{province.code}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
-              <div><Label className="text-xs">City</Label><Input className="input-blue mt-1" value={form.city} onChange={e => set('city', e.target.value)} /></div>
-              <div><Label className="text-xs">Postal Code</Label><Input className="input-blue mt-1" value={form.postalCode} onChange={e => set('postalCode', e.target.value)} /></div>
+              <div><Label className="text-xs">City</Label><Input className="input-blue mt-1" value={form.city} onChange={event => set('city', event.target.value)} /></div>
+              <div><Label className="text-xs">Postal Code</Label><Input className="input-blue mt-1" value={form.postalCode} onChange={event => set('postalCode', event.target.value)} /></div>
             </div>
-            <div className="col-span-3">
+            <div>
               <Label className="text-xs">Address</Label>
-              <Input className="input-blue mt-1" value={form.address} onChange={e => set('address', e.target.value)} />
+              <Input className="input-blue mt-1" value={form.address} onChange={event => set('address', event.target.value)} />
             </div>
           </div>
 
-          {/* Building Dimensions */}
           <div className="bg-card border rounded-lg p-5 space-y-4">
             <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Building Dimensions</h3>
             <div className="grid grid-cols-4 gap-3">
-              <div><Label className="text-xs">Width (ft)</Label><Input className="input-blue mt-1" type="number" value={form.width} onChange={e => set('width', e.target.value)} /></div>
-              <div><Label className="text-xs">Length (ft)</Label><Input className="input-blue mt-1" type="number" value={form.length} onChange={e => set('length', e.target.value)} /></div>
-              <div><Label className="text-xs">Height (ft)</Label><Input className="input-blue mt-1" type="number" value={form.height} onChange={e => set('height', e.target.value)} /></div>
-              <div><Label className="text-xs">Roof Pitch</Label><Input className="input-blue mt-1" value={form.roofPitch} onChange={e => set('roofPitch', e.target.value)} placeholder="e.g. 1:12" /></div>
+              <div><Label className="text-xs">Width</Label><Input className="input-blue mt-1" type="number" value={form.width} onChange={event => set('width', event.target.value)} /></div>
+              <div><Label className="text-xs">Length</Label><Input className="input-blue mt-1" type="number" value={form.length} onChange={event => set('length', event.target.value)} /></div>
+              <div><Label className="text-xs">Height</Label><Input className="input-blue mt-1" type="number" value={form.height} onChange={event => set('height', event.target.value)} /></div>
+              <div><Label className="text-xs">Roof Pitch</Label><Input className="input-blue mt-1" value={form.roofPitch} onChange={event => set('roofPitch', event.target.value)} placeholder="e.g. 1:12" /></div>
             </div>
           </div>
 
-          {/* Openings */}
           <div className="bg-card border rounded-lg p-5 space-y-4">
             <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Openings</h3>
-
             {(['LEW', 'REW', 'FSW', 'BSW'] as WallLocation[]).map(wall => {
-              const wallOpenings = openings.filter(o => o.wall === wall);
+              const wallOpenings = openings.filter(opening => opening.wall === wall);
               return (
                 <div key={wall} className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <Label className="text-xs font-semibold">{WALL_LABELS[wall]} ({wall})</Label>
+                    <Label className="text-xs font-semibold">{WALL_LABELS[wall]}</Label>
                     <Button variant="outline" size="sm" onClick={() => addOpening(wall)} className="h-6 text-xs px-2">
                       <Plus className="h-3 w-3 mr-1" />Add Opening
                     </Button>
                   </div>
-                  {wallOpenings.map(o => (
-                    <div key={o.id} className="bg-muted rounded-md p-3 space-y-2">
+                  {wallOpenings.map(opening => (
+                    <div key={opening.id} className="bg-muted rounded-md p-3 space-y-2">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-semibold text-primary">{getOpeningName(o)}</span>
-                        <Button variant="ghost" size="sm" onClick={() => removeOpening(o.id)} className="h-6 w-6 p-0 text-destructive hover:text-destructive">
+                        <span className="text-xs font-semibold text-primary">{getOpeningName(opening)}</span>
+                        <Button variant="ghost" size="sm" onClick={() => removeOpening(opening.id)} className="h-6 w-6 p-0 text-destructive">
                           <Trash2 className="h-3 w-3" />
                         </Button>
                       </div>
                       <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <Label className="text-[10px]">Width (ft)</Label>
-                          <Input className="h-7 text-xs" type="number" value={o.width} onChange={e => updateOpening(o.id, 'width', e.target.value)} />
-                        </div>
-                        <div>
-                          <Label className="text-[10px]">Height (ft)</Label>
-                          <Input className="h-7 text-xs" type="number" value={o.height} onChange={e => updateOpening(o.id, 'height', e.target.value)} />
-                        </div>
+                        <div><Label className="text-[10px]">Width</Label><Input className="h-7 text-xs" type="number" value={opening.width} onChange={event => updateOpening(opening.id, 'width', event.target.value)} /></div>
+                        <div><Label className="text-[10px]">Height</Label><Input className="h-7 text-xs" type="number" value={opening.height} onChange={event => updateOpening(opening.id, 'height', event.target.value)} /></div>
                       </div>
-                      <div>
-                        <Label className="text-[10px]">Notes / Description</Label>
-                        <Textarea className="text-xs h-14 mt-0.5" value={o.notes} onChange={e => updateOpening(o.id, 'notes', e.target.value)} placeholder={`Details for ${getOpeningName(o)}...`} />
-                      </div>
+                      <div><Label className="text-[10px]">Notes</Label><Textarea className="text-xs h-14 mt-0.5" value={opening.notes} onChange={event => updateOpening(opening.id, 'notes', event.target.value)} /></div>
                     </div>
                   ))}
-                  {wallOpenings.length === 0 && <p className="text-[10px] text-muted-foreground ml-1">No openings added</p>}
                 </div>
               );
             })}
           </div>
         </div>
 
-        {/* Right Column */}
         <div className="space-y-5">
-          {/* Gutters & Liners */}
           <div className="bg-card border rounded-lg p-5 space-y-4">
-            <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Gutters & Liners</h3>
-
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Accessories & Notes</h3>
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <Label className="text-xs">Gutters</Label>
-                <Switch checked={form.gutters} onCheckedChange={v => set('gutters', v)} />
+                <Switch checked={form.gutters} onCheckedChange={value => set('gutters', value)} />
               </div>
-              {form.gutters && (
-                <div>
-                  <Label className="text-[10px]">Gutter specifics</Label>
-                  <Textarea className="text-xs h-16" value={form.gutterNotes} onChange={e => set('gutterNotes', e.target.value)} placeholder="Gutter specifications if required..." />
-                </div>
-              )}
-            </div>
-
-            <div className="space-y-3">
+              {form.gutters && <div><Label className="text-xs">Gutter Notes</Label><Textarea className="text-xs mt-1" value={form.gutterNotes} onChange={event => set('gutterNotes', event.target.value)} /></div>}
               <div className="flex items-center justify-between">
                 <Label className="text-xs">Liners</Label>
-                <Switch checked={form.liners} onCheckedChange={v => set('liners', v)} />
+                <Switch checked={form.liners} onCheckedChange={value => set('liners', value)} />
               </div>
               {form.liners && (
                 <>
-                   <div>
-                    <Label className="text-[10px]">Location</Label>
-                    <Select value={form.linerLocation} onValueChange={v => set('linerLocation', v)}>
-                      <SelectTrigger className="input-blue mt-1 h-8 text-xs"><SelectValue placeholder="Select..." /></SelectTrigger>
+                  <div>
+                    <Label className="text-xs">Liner Location</Label>
+                    <Select value={form.linerLocation} onValueChange={value => set('linerLocation', value)}>
+                      <SelectTrigger className="input-blue mt-1"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="roof">Roof</SelectItem>
                         <SelectItem value="walls">Walls</SelectItem>
-                        <SelectItem value="roof_walls">Roof & Walls</SelectItem>
+                        <SelectItem value="roof_walls">Roof + Walls</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
-                  <div>
-                    <Label className="text-[10px]">Liner specifics</Label>
-                    <Textarea className="text-xs h-16" value={form.linerNotes} onChange={e => set('linerNotes', e.target.value)} placeholder="Liner specifications if required..." />
-                  </div>
+                  <div><Label className="text-xs">Liner Notes</Label><Textarea className="text-xs mt-1" value={form.linerNotes} onChange={event => set('linerNotes', event.target.value)} /></div>
                 </>
               )}
-            </div>
-          </div>
-
-          {/* Insulation */}
-          <div className="bg-card border rounded-lg p-5 space-y-4">
-            <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Insulation</h3>
-            <div className="flex items-center justify-between">
-              <Label className="text-xs">Insulation Required</Label>
-              <Switch checked={form.insulationRequired} onCheckedChange={v => set('insulationRequired', v)} />
-            </div>
-            {form.insulationRequired && (
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label className="text-xs">Roof R-Value</Label>
-                  <Input className="input-blue mt-1" value={form.insulationRoofGrade} onChange={e => set('insulationRoofGrade', e.target.value)} placeholder="e.g. R20" />
-                </div>
-                <div>
-                  <Label className="text-xs">Wall R-Value</Label>
-                  <Input className="input-blue mt-1" value={form.insulationWallGrade} onChange={e => set('insulationWallGrade', e.target.value)} placeholder="e.g. R20" />
-                </div>
+              <div className="flex items-center justify-between">
+                <Label className="text-xs">Insulation Required</Label>
+                <Switch checked={form.insulationRequired} onCheckedChange={value => set('insulationRequired', value)} />
               </div>
-            )}
+              {form.insulationRequired && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div><Label className="text-xs">Roof Grade</Label><Input className="input-blue mt-1" value={form.insulationRoofGrade} onChange={event => set('insulationRoofGrade', event.target.value)} /></div>
+                  <div><Label className="text-xs">Wall Grade</Label><Input className="input-blue mt-1" value={form.insulationWallGrade} onChange={event => set('insulationWallGrade', event.target.value)} /></div>
+                </div>
+              )}
+              <div>
+                <Label className="text-xs">Notes</Label>
+                <Textarea className="text-xs min-h-[120px] mt-1" value={form.notes} onChange={event => set('notes', event.target.value)} />
+              </div>
+            </div>
           </div>
 
-          {/* Notes */}
-          <div className="bg-card border rounded-lg p-5 space-y-4">
-            <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Quote Details / Notes</h3>
-            <Textarea className="text-xs min-h-[120px]" value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Additional details, special requirements, notes for estimator..." />
-          </div>
-
-          {/* Actions */}
-          <div className="flex gap-3">
-            <Button variant="outline" onClick={printRFQ} className="flex-1">
+          <div className="bg-card border rounded-lg p-5 space-y-3">
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Actions</h3>
+            <Button onClick={() => void handleSubmit()} className="w-full">
+              <Send className="h-4 w-4 mr-2" />{existingQuote ? 'Update RFQ' : 'Submit RFQ'}
+            </Button>
+            <Button variant="outline" onClick={printRFQ} className="w-full">
               <Printer className="h-4 w-4 mr-2" />Print RFQ
             </Button>
-            <Button onClick={handleSubmit} className="flex-1">
-              <Send className="h-4 w-4 mr-2" />Submit RFQ
-            </Button>
           </div>
-
-          {/* Summary */}
-          {openings.length > 0 && (
-            <div className="bg-muted rounded-md p-3 text-xs space-y-1">
-              <p className="font-semibold text-muted-foreground">Opening Summary</p>
-              {openings.map(o => (
-                <div key={o.id} className="flex justify-between">
-                  <span className="font-mono">{getOpeningName(o)}</span>
-                  <span>{o.width}' × {o.height}'{o.notes ? ` — ${o.notes.substring(0, 30)}...` : ''}</span>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       </div>
     </div>

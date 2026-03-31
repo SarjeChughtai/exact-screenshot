@@ -20,49 +20,10 @@ import { useAppContext } from '@/context/AppContext';
 import { useRoles } from '@/context/RoleContext';
 import { useAuth } from '@/context/AuthContext';
 import { toast } from 'sonner';
-import type { Quote } from '@/types';
+import type { Estimate } from '@/types';
 import { PersonnelSelect } from '@/components/PersonnelSelect';
 import { ClientSelect } from '@/components/ClientSelect';
 import { SimilarJobs } from '@/components/SimilarJobs';
-
-interface SavedEstimate {
-  id: string;
-  label: string;
-  date: string;
-  clientName: string;
-  clientId: string;
-  salesRep: string;
-  width: number;
-  length: number;
-  height: number;
-  pitch: number;
-  province: string;
-  grandTotal: number;
-  sqft: number;
-  estimatedTotal: number;
-  notes: string;
-  auditNotes: string[];
-  allData: Record<string, any>;
-}
-
-function getEstimates(): SavedEstimate[] {
-  try {
-    return JSON.parse(localStorage.getItem('csb_estimates') || '[]');
-  } catch { return []; }
-}
-
-function saveEstimates(estimates: SavedEstimate[]) {
-  localStorage.setItem('csb_estimates', JSON.stringify(estimates));
-}
-
-function getNextEstLabel(): string {
-  const estimates = getEstimates();
-  const maxNum = estimates.reduce((max, e) => {
-    const m = e.label.match(/EST-(\d+)/);
-    return m ? Math.max(max, parseInt(m[1])) : max;
-  }, 0);
-  return `EST-${String(maxNum + 1).padStart(3, '0')}`;
-}
 
 interface EstimateResult {
   sqft: number; weight: number;
@@ -80,7 +41,7 @@ interface EstimateResult {
 
 export default function QuickEstimator() {
   const navigate = useNavigate();
-  const { addQuote } = useAppContext();
+  const { addEstimate, estimates } = useAppContext();
   const { currentUser, hasAnyRole } = useRoles();
   const { user } = useAuth();
   const isAdminOwner = hasAnyRole('admin', 'owner');
@@ -231,10 +192,18 @@ export default function QuickEstimator() {
     setCostSavingTips(tips);
   };
 
-  const saveEstimate = () => {
+  const getNextEstimateLabel = () => {
+    const maxNum = estimates.reduce((max, estimate) => {
+      const match = estimate.label.match(/EST-(\d+)/);
+      return match ? Math.max(max, parseInt(match[1], 10)) : max;
+    }, 0);
+    return `EST-${String(maxNum + 1).padStart(3, '0')}`;
+  };
+
+  const saveEstimate = async (): Promise<Estimate | null> => {
     if (!result) {
       toast.error('Calculate an estimate first.');
-      return;
+      return null;
     }
     const w = parseFloat(width) || 0;
     const l = parseFloat(length) || 0;
@@ -249,8 +218,8 @@ export default function QuickEstimator() {
       `Engineering factors: ${selectedFactors.join(', ')}`,
     ];
 
-    const label = getNextEstLabel();
-    const estimate: SavedEstimate = {
+    const label = getNextEstimateLabel();
+    const estimate: Estimate = {
       id: crypto.randomUUID(),
       label,
       date: new Date().toISOString().split('T')[0],
@@ -264,7 +233,7 @@ export default function QuickEstimator() {
       estimatedTotal: result.estimatedTotal,
       notes: '',
       auditNotes,
-      allData: {
+      payload: {
         distance, remoteLevel, foundationType, contingencyPct,
         includeInsulation, insulationGrade, includeGutters, linerOption,
         locationInput, useFlat, flatMarkupPct,
@@ -272,10 +241,9 @@ export default function QuickEstimator() {
       },
     };
 
-    const estimates = getEstimates();
-    estimates.push(estimate);
-    saveEstimates(estimates);
+    await addEstimate(estimate);
     toast.success(`Estimate ${label} saved`);
+    return estimate;
   };
 
   const convertToRFQ = async () => {
@@ -293,77 +261,14 @@ export default function QuickEstimator() {
     }
 
     // Auto-save estimate first
-    saveEstimate();
+    const savedEstimate = await saveEstimate();
+    if (!savedEstimate) return;
 
-    const date = new Date().toISOString().split('T')[0];
-    const jobId = `CSB-${Date.now().toString(36).toUpperCase()}`;
-    const rep = salesRep || currentUser.name || user?.email || '';
-
-    const location = locationInput.trim();
-    const postalMatch = location.match(/([A-Za-z])\d[A-Za-z]\s?\d[A-Za-z]\d/);
-    const postalCode = postalMatch ? location.toUpperCase() : '';
-    const city = postalMatch ? '' : location;
-
-    const prov = getProvinceTax(province);
-    const steelAfter12 = result.steelCost;
-    const baseSteelCost = steelAfter12 / 1.12;
-
-    const quote: Quote = {
-      id: crypto.randomUUID(),
-      date,
-      jobId,
-      jobName: `RFQ ${w}x${l} (Quick Estimator)`,
-      clientName: clientName || 'Client TBD',
-      clientId,
-      salesRep: rep,
-      estimator: currentUser.name,
-      province,
-      city,
-      address: '',
-      postalCode,
-      width: w, length: l, height: h,
-      sqft: result.sqft, weight: result.weight,
-      baseSteelCost,
-      steelAfter12,
-      markup: result.internalMargin,
-      adjustedSteel: result.steelWithMargin,
-      engineering: result.engineering,
-      foundation: result.foundation,
-      foundationType,
-      gutters: result.gutters,
-      liners: result.liners,
-      insulation: result.insulation,
-      insulationGrade,
-      freight: result.freight,
-      combinedTotal: result.subtotal,
-      perSqft: result.subtotal / result.sqft,
-      perLb: result.steelWithMargin / result.weight,
-      contingencyPct: parseFloat(contingencyPct) || 0,
-      contingency: result.contingency,
-      gstHst: result.gstHst,
-      qst: result.qst,
-      grandTotal: result.grandTotal,
-      status: 'Sent',
-    };
-
-    await addQuote(quote);
+    toast.success('Estimate imported into RFQ builder');
+    navigate(`/quote-rfq?estimateId=${savedEstimate.id}`);
+    return;
     toast.success('Quote created & saved — navigating to RFQ');
 
-    // Navigate to Quote RFQ with params
-    const params = new URLSearchParams({
-      jobId,
-      clientName: clientName || '',
-      clientId,
-      salesRep: rep,
-      width: String(w),
-      length: String(l),
-      height: String(h),
-      pitch: pitch,
-      province,
-      city,
-      postalCode,
-    });
-    navigate(`/quote-rfq?${params.toString()}`);
   };
 
   // Build compliance/audit notes for admin/owner
@@ -587,7 +492,7 @@ export default function QuickEstimator() {
 
               <div className="pt-2 space-y-2">
                 <Button onClick={saveEstimate} variant="outline" className="w-full">
-                  <Save className="h-4 w-4 mr-2" />Save Estimate ({getNextEstLabel()})
+                  <Save className="h-4 w-4 mr-2" />Save Estimate ({getNextEstimateLabel()})
                 </Button>
                 <Button onClick={() => void convertToRFQ()} className="w-full">
                   Convert to RFQ (Stage 1)

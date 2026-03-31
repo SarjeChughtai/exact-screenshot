@@ -13,11 +13,33 @@ const ROLE_LABELS: Record<string, string> = {
   accounting: 'Accounting',
   operations: 'Operations',
   sales_rep: 'Sales Rep',
+  estimator: 'Estimator',
   freight: 'Freight',
   dealer: 'Dealer',
 };
 
-const ASSIGNABLE_ROLES = ['accounting', 'operations', 'sales_rep', 'freight', 'dealer'];
+const ASSIGNABLE_ROLES = ['accounting', 'operations', 'sales_rep', 'estimator', 'freight', 'dealer'];
+
+function isPlaceholderDisplayName(value: string | null | undefined) {
+  if (!value) return true;
+  const normalized = value.trim();
+  if (!normalized) return true;
+
+  return /^user[\s_-]*[a-z0-9-]{6,}$/i.test(normalized);
+}
+
+function resolveDisplayName(name: string | undefined, email: string | undefined) {
+  const normalizedName = name?.trim() || '';
+  if (normalizedName && !isPlaceholderDisplayName(normalizedName)) {
+    return normalizedName;
+  }
+
+  if (email) {
+    return email;
+  }
+
+  return normalizedName;
+}
 
 interface AccessRequest {
   id: string;
@@ -107,7 +129,7 @@ export function UserManagement() {
       const userList: UserWithRoles[] = Object.entries(grouped).map(([userId, roles]) => ({
         userId,
         email: allEmails[userId] || '(email not found)',
-        name: allNames[userId] || '',
+        name: resolveDisplayName(allNames[userId], allEmails[userId]),
         roles,
       }));
       setUsers(userList);

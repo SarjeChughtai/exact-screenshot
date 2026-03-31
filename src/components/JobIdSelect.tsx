@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { CreateJobDialog } from '@/components/CreateJobDialog';
 import { Plus } from 'lucide-react';
 import type { Deal } from '@/types';
+import { useAppContext } from '@/context/AppContext';
 
 const CREATE_NEW_VALUE = '__CREATE_NEW_JOB__';
 
@@ -24,17 +25,25 @@ export function JobIdSelect({
   triggerClassName = 'input-blue mt-1',
 }: JobIdSelectProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
+  const { quotes } = useAppContext();
 
-  const handleValueChange = (v: string) => {
-    if (v === CREATE_NEW_VALUE) {
+  const jobs = useMemo(() => {
+    return Array.from(new Map([
+      ...deals
+        .filter(deal => Boolean(deal.jobId))
+        .map(deal => [deal.jobId, { jobId: deal.jobId, clientName: deal.clientName }]),
+      ...quotes
+        .filter(quote => Boolean(quote.jobId))
+        .map(quote => [quote.jobId, { jobId: quote.jobId, clientName: quote.clientName }]),
+    ]).values()).sort((a, b) => a.jobId.localeCompare(b.jobId, undefined, { numeric: true }));
+  }, [deals, quotes]);
+
+  const handleValueChange = (nextValue: string) => {
+    if (nextValue === CREATE_NEW_VALUE) {
       setDialogOpen(true);
       return;
     }
-    onValueChange(v);
-  };
-
-  const handleJobCreated = (jobId: string) => {
-    onValueChange(jobId);
+    onValueChange(nextValue);
   };
 
   return (
@@ -50,17 +59,18 @@ export function JobIdSelect({
               Create New Job ID
             </span>
           </SelectItem>
-          {deals.map(d => (
-            <SelectItem key={d.jobId} value={d.jobId}>
-              {d.jobId} — {d.clientName}
+          {jobs.map(job => (
+            <SelectItem key={job.jobId} value={job.jobId}>
+              {job.jobId} - {job.clientName || 'Unassigned'}
             </SelectItem>
           ))}
         </SelectContent>
       </Select>
+
       <CreateJobDialog
         open={dialogOpen}
         onOpenChange={setDialogOpen}
-        onJobCreated={handleJobCreated}
+        onJobCreated={onValueChange}
       />
     </div>
   );

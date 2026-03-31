@@ -54,7 +54,10 @@ export default function Dashboard() {
     : quotes;
 
   const activeDeals = visibleDeals.filter(d => d.dealStatus !== 'Cancelled' && d.dealStatus !== 'Complete');
-  const activeQuotes = visibleQuotes.filter(q => q.status === 'Sent' || q.status === 'Follow Up' || q.status === 'Draft');
+  const activeQuotes = visibleQuotes.filter(q =>
+    q.documentType !== 'internal_quote' &&
+    (q.status === 'Sent' || q.status === 'Follow Up' || q.status === 'Draft')
+  );
   const wonQuotes = visibleQuotes.filter(q => q.status === 'Won').length;
   const totalQuotes = visibleQuotes.length;
 

@@ -1,11 +1,12 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
-import { Quote, Deal, InternalCost, PaymentEntry, ProductionRecord, FreightRecord, RFQ, Client, Vendor } from '@/types';
+import { Quote, Deal, InternalCost, PaymentEntry, ProductionRecord, FreightRecord, RFQ, Client, Vendor, Estimate } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
 import { useRoles } from '@/context/RoleContext';
 import { logAudit } from '@/lib/auditLog';
 import {
   dealFromRow, dealToRow,
   quoteFromRow, quoteToRow,
+  estimateFromRow, estimateToRow,
   internalCostFromRow, internalCostToRow,
   paymentFromRow, paymentToRow,
   productionFromRow, productionToRow,
@@ -26,6 +27,7 @@ interface AppState {
   rfqs: RFQ[];
   clients: Client[];
   vendors: Vendor[];
+  estimates: Estimate[];
   loading: boolean;
 }
 
@@ -55,6 +57,10 @@ interface AppContextType extends AppState {
   addVendor: (v: Vendor) => void;
   updateVendor: (id: string, updates: Partial<Vendor>) => void;
   deleteVendor: (id: string) => void;
+  addEstimate: (estimate: Estimate) => void;
+  updateEstimate: (id: string, updates: Partial<Estimate>) => void;
+  deleteEstimate: (id: string) => void;
+  allocateJobId: () => Promise<string>;
   quickAddClient: (clientId: string, clientName: string) => Promise<Client | null>;
   refreshData: () => Promise<void>;
 }
@@ -64,12 +70,12 @@ const AppContext = createContext<AppContextType | null>(null);
 export function AppProvider({ children }: { children: ReactNode }) {
   const { currentUser } = useRoles();
   const [state, setState] = useState<AppState>({
-    quotes: [], deals: [], internalCosts: [], payments: [], production: [], freight: [], rfqs: [], clients: [], vendors: [], loading: true,
+    quotes: [], deals: [], internalCosts: [], payments: [], production: [], freight: [], rfqs: [], clients: [], vendors: [], estimates: [], loading: true,
   });
 
   const fetchAll = useCallback(async () => {
     try {
-      const [quotesRes, dealsRes, costsRes, paymentsRes, prodRes, freightRes, clientsRes, vendorsRes] = await Promise.all([
+      const [quotesRes, dealsRes, costsRes, paymentsRes, prodRes, freightRes, clientsRes, vendorsRes, estimatesRes] = await Promise.all([
         supabase.from('quotes').select('*'),
         supabase.from('deals').select('*'),
         supabase.from('internal_costs').select('*'),
@@ -78,6 +84,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         supabase.from('freight').select('*'),
         supabase.from('clients').select('*'),
         supabase.from('vendors').select('*'),
+        (supabase.from as any)('estimates').select('*'),
       ]);
 
       // Log fetch results for debugging
@@ -90,6 +97,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         freight: freightRes.data?.length, freightErr: freightRes.error,
         clients: clientsRes.data?.length, clientsErr: clientsRes.error,
         vendors: vendorsRes.data?.length, vendorsErr: vendorsRes.error,
+        estimates: estimatesRes.data?.length, estimatesErr: estimatesRes.error,
       });
 
       // Check if any core query had an error (e.g. RLS blocking unauthenticated)
@@ -109,6 +117,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const freight = (freightRes.data || []).map(freightFromRow);
       const clients = (clientsRes.data || []).map(clientFromRow);
       const vendors = (vendorsRes.data || []).map(vendorFromRow);
+      const estimates = (estimatesRes.data || []).map(estimateFromRow);
 
       // If all Supabase tables are empty, try migrating from localStorage
       const allEmpty = quotes.length === 0 && deals.length === 0 && payments.length === 0;
@@ -124,7 +133,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      setState({ quotes, deals, internalCosts, payments, production, freight, rfqs: state.rfqs, clients, vendors, loading: false });
+      setState({ quotes, deals, internalCosts, payments, production, freight, rfqs: state.rfqs, clients, vendors, estimates, loading: false });
     } catch (err) {
       console.error('Supabase fetch error, falling back to localStorage', err);
       loadFromLocalStorage();
@@ -146,6 +155,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           rfqs: data.rfqs || [],
           clients: data.clients || [],
           vendors: data.vendors || [],
+          estimates: data.estimates || [],
           loading: false,
         });
       } else {
@@ -240,12 +250,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         console.warn('[Data] Supabase insert returned 0 rows — using SEED_DEALS in-memory');
         setState(prev => ({ ...prev, deals: SEED_DEALS, loading: false }));
         // Also save to localStorage so it persists
-        const currentState = { quotes: [], deals: SEED_DEALS, internalCosts: [], payments: [], production: [], freight: [], rfqs: [], manufacturerRFQs: [], manufacturerBids: [] };
+        const currentState = { quotes: [], deals: SEED_DEALS, internalCosts: [], payments: [], production: [], freight: [], rfqs: [], clients: [], vendors: [], estimates: [] };
         localStorage.setItem('canada_steel_state', JSON.stringify(currentState));
       }
     } catch {
       setState(prev => ({ ...prev, deals: SEED_DEALS, loading: false }));
-      const currentState = { quotes: [], deals: SEED_DEALS, internalCosts: [], payments: [], production: [], freight: [], rfqs: [], manufacturerRFQs: [], manufacturerBids: [] };
+      const currentState = { quotes: [], deals: SEED_DEALS, internalCosts: [], payments: [], production: [], freight: [], rfqs: [], clients: [], vendors: [], estimates: [] };
       localStorage.setItem('canada_steel_state', JSON.stringify(currentState));
     }
   }, []);
@@ -268,6 +278,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       await supabase.from('quotes').insert(row as any).select().single();
     } catch {}
   }, [currentUser]);
+
+  const allocateJobId = useCallback(async (): Promise<string> => {
+    const { data, error } = await (supabase.rpc as any)('allocate_job_id');
+    if (error) throw error;
+    return data as string;
+  }, []);
 
   const updateQuote = useCallback(async (id: string, updates: Partial<Quote>) => {
     setState(prev => {
@@ -609,6 +625,42 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } catch {}
   }, [currentUser]);
 
+  // --- Estimates ---
+  const addEstimate = useCallback(async (estimate: Estimate) => {
+    setState(prev => ({ ...prev, estimates: [...prev.estimates, estimate] }));
+    logAudit(currentUser?.name || 'System', 'CREATE', 'Estimate', estimate.id, estimate);
+    try {
+      const row = estimateToRow(estimate);
+      await (supabase.from as any)('estimates').insert(row).select().single();
+    } catch {}
+  }, [currentUser]);
+
+  const updateEstimate = useCallback(async (id: string, updates: Partial<Estimate>) => {
+    setState(prev => {
+      const existing = prev.estimates.find(estimate => estimate.id === id);
+      if (existing) logAudit(currentUser?.name || 'System', 'UPDATE', 'Estimate', id, updates, existing);
+      return {
+        ...prev,
+        estimates: prev.estimates.map(estimate => estimate.id === id ? { ...estimate, ...updates } : estimate),
+      };
+    });
+    try {
+      const row = estimateToRow(updates);
+      await (supabase.from as any)('estimates').update(row).eq('id', id);
+    } catch {}
+  }, [currentUser]);
+
+  const deleteEstimate = useCallback(async (id: string) => {
+    setState(prev => {
+      const existing = prev.estimates.find(estimate => estimate.id === id);
+      if (existing) logAudit(currentUser?.name || 'System', 'DELETE', 'Estimate', id, { id }, existing);
+      return { ...prev, estimates: prev.estimates.filter(estimate => estimate.id !== id) };
+    });
+    try {
+      await (supabase.from as any)('estimates').delete().eq('id', id);
+    } catch {}
+  }, [currentUser]);
+
   return (
     <AppContext.Provider value={{
       ...state, addQuote, updateQuote, deleteQuote, restoreQuote, addDeal, updateDeal, deleteDeal,
@@ -617,6 +669,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addRFQ, updateRFQ, deleteRFQ,
       quickAddClient, addClient, updateClient, deleteClient,
       addVendor, updateVendor, deleteVendor,
+      addEstimate, updateEstimate, deleteEstimate, allocateJobId,
       refreshData: fetchAll,
     }}>
       {children}
