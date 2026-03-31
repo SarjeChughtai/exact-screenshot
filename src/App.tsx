@@ -18,6 +18,7 @@ import Dashboard from "@/pages/Dashboard";
 import QuickEstimator from "@/pages/QuickEstimator";
 import QuoteBuilder from "@/pages/QuoteBuilder";
 import InternalQuoteBuilder from "@/pages/InternalQuoteBuilder";
+import InternalQuoteLog from "@/pages/InternalQuoteLog";
 import QuoteLog from "@/pages/QuoteLog";
 import EstimatesLog from "@/pages/EstimatesLog";
 import MasterDeals from "@/pages/MasterDeals";
@@ -77,6 +78,7 @@ const App = () => (
                           <Route path="/" element={<Dashboard />} />
                           <Route path="/estimator" element={<QuickEstimator />} />
                           <Route path="/internal-quote-builder" element={<InternalQuoteBuilder />} />
+                          <Route path="/internal-quote-log" element={<InternalQuoteLog />} />
                           <Route path="/quote-builder" element={<QuoteBuilder />} />
                           <Route path="/quote-log" element={<QuoteLog />} />
                           <Route path="/estimates-log" element={<EstimatesLog />} />

@@ -1,0 +1,28 @@
+# AI Context Persistence Rules
+
+This file defines the standards for AI coding tools (Antigravity, Cursor, etc.) working on the Canada Steel Platform.
+
+## 1. Documentation Requirements
+- **Session Logs**: After every major task, summarize the changes in `docs/ai_context/session_logs.md`.
+- **Decision Logic**: If a non-obvious architecture or logic choice is made, document it in `docs/ai_context/decision_log.md`.
+- **Current State**: Keep `docs/ai_context/current_state.md` updated with the primary tech stack and data flow summary.
+
+## 2. Coding Standards
+- **Component Hierarchy**: Follow the Atomic Design pattern within `src/components`.
+- **Internationalization (i18n)**: Never use hardcoded UI strings. Always use `t()` keys and update `en.json`/`fr.json`.
+- **Role Scoping**: Always verify user roles (`dealer`, `admin`, etc.) before rendering sensitive UI or redirection logic.
+
+## 3. Commit Message Format
+- Use detailed commit messages:
+  ```text
+  feat: [Short Summary]
+
+  - Detailed point 1
+  - Detailed point 2
+  - Rationale: Why this was done...
+  ```
+
+## 4. Contextual Awareness
+- Before starting a new task, read all files in `docs/ai_context/` to understand the evolution of the platform and any existing "gotchas."
+- Respect the existing dealer onboarding flow: do not force redirects unless explicitly asked.
+- Reference existing artifacts (walkthroughs/tasks) to see what was recently completed.

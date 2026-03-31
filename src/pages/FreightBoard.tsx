@@ -2,11 +2,16 @@ import { useAppContext } from '@/context/AppContext';
 import { formatCurrency, formatNumber } from '@/lib/calculations';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import type { FreightStatus } from '@/types';
+import { useRoles } from '@/context/RoleContext';
+import { useSettings } from '@/context/SettingsContext';
 
 const FREIGHT_STATUSES: FreightStatus[] = ['Pending', 'Booked', 'In Transit', 'Delivered'];
 
 export default function FreightBoard() {
   const { deals, freight, updateFreight, internalCosts, payments } = useAppContext();
+  const { currentUser, hasAnyRole } = useRoles();
+  const { profile } = useSettings();
+  const isRestrictedFreightUser = hasAnyRole('freight') && !hasAnyRole('admin', 'owner', 'operations') && !profile.canViewAllFreightBoard;
 
   // Build freight data from deals + freight records
   const rows = deals.map(d => {
@@ -22,6 +27,10 @@ export default function FreightBoard() {
       deal: d, estFreight, actualFreight, activeFreight, variance,
       paid: freightPaid > 0, carrier: fr?.carrier || '', status: fr?.status || 'Pending' as FreightStatus,
     };
+  }).filter(row => {
+    if (!isRestrictedFreightUser) return true;
+    const freightRecord = freight.find(item => item.jobId === row.deal.jobId);
+    return freightRecord?.assignedFreightUserId === currentUser.id;
   });
 
   return (

@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { Check, X, Plus, Trash2, RefreshCw } from 'lucide-react';
+import { Check, X, Plus, RefreshCw } from 'lucide-react';
 
 const ROLE_LABELS: Record<string, string> = {
   admin: 'Admin',
@@ -13,11 +13,33 @@ const ROLE_LABELS: Record<string, string> = {
   accounting: 'Accounting',
   operations: 'Operations',
   sales_rep: 'Sales Rep',
+  estimator: 'Estimator',
   freight: 'Freight',
   dealer: 'Dealer',
 };
 
-const ASSIGNABLE_ROLES = ['accounting', 'operations', 'sales_rep', 'freight', 'dealer'];
+const ASSIGNABLE_ROLES = ['accounting', 'operations', 'sales_rep', 'estimator', 'freight', 'dealer'];
+
+function isPlaceholderDisplayName(value: string | null | undefined) {
+  if (!value) return true;
+  const normalized = value.trim();
+  if (!normalized) return true;
+
+  return /^user[\s_-]*[a-z0-9-]{6,}$/i.test(normalized);
+}
+
+function resolveDisplayName(name: string | undefined, email: string | undefined) {
+  const normalizedName = name?.trim() || '';
+  if (normalizedName && !isPlaceholderDisplayName(normalizedName)) {
+    return normalizedName;
+  }
+
+  if (email) {
+    return email;
+  }
+
+  return normalizedName;
+}
 
 interface AccessRequest {
   id: string;
@@ -42,7 +64,15 @@ interface UserWithRoles {
   roles: UserRole[];
 }
 
-export function UserManagement() {
+interface UserManagementProps {
+  managedRoles?: string[];
+  hidePendingRequests?: boolean;
+}
+
+export function UserManagement({
+  managedRoles,
+  hidePendingRequests = false,
+}: UserManagementProps = {}) {
   const { user, hasAnyRole } = useAuth();
   const isOwner = hasAnyRole(['owner']);
   const isAdmin = hasAnyRole(['admin', 'owner']);
@@ -81,7 +111,7 @@ export function UserManagement() {
       const allEmails: Record<string, string> = {};
       const allNames: Record<string, string> = {};
 
-      const { data: displayInfo } = await supabase.rpc('get_user_display_info', {
+      const { data: displayInfo } = await (supabase.rpc as any)('get_user_directory', {
         user_ids: userIds,
       });
 
@@ -92,24 +122,31 @@ export function UserManagement() {
         });
       }
 
-      // Fallback: also check access_requests for any users not resolved above
-      const unresolvedIds = userIds.filter(id => !allEmails[id]);
+      // Fill missing names/emails from access requests, and prefer request names over synthetic auth placeholders.
+      const unresolvedIds = userIds.filter(id => !allEmails[id] || isPlaceholderDisplayName(allNames[id]));
       if (unresolvedIds.length > 0) {
         const { data: allReqs } = await supabase
           .from('access_requests')
-          .select('user_id, email, name');
+          .select('user_id, email, name, created_at')
+          .order('created_at', { ascending: false });
         allReqs?.forEach((r: any) => {
           if (!allEmails[r.user_id]) allEmails[r.user_id] = r.email;
-          if (!allNames[r.user_id] && r.name) allNames[r.user_id] = r.name;
+          if ((isPlaceholderDisplayName(allNames[r.user_id]) || !allNames[r.user_id]) && r.name) {
+            allNames[r.user_id] = r.name;
+          }
         });
       }
 
       const userList: UserWithRoles[] = Object.entries(grouped).map(([userId, roles]) => ({
         userId,
         email: allEmails[userId] || '(email not found)',
-        name: allNames[userId] || '',
+        name: resolveDisplayName(allNames[userId], allEmails[userId]),
         roles,
-      }));
+      })).sort((a, b) => {
+        const left = a.name || a.email;
+        const right = b.name || b.email;
+        return left.localeCompare(right);
+      });
       setUsers(userList);
     }
 
@@ -222,58 +259,71 @@ export function UserManagement() {
   const availableRoles = isOwner
     ? ['admin', 'owner', ...ASSIGNABLE_ROLES]
     : ASSIGNABLE_ROLES; // admins can only assign non-admin, non-owner roles
+  const filteredAvailableRoles = managedRoles
+    ? availableRoles.filter(role => managedRoles.includes(role))
+    : availableRoles;
 
   return (
     <div className="space-y-6">
-      {/* Pending Access Requests */}
+      {!hidePendingRequests && (
+        <div className="bg-card border rounded-lg p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-card-foreground">Pending Access Requests</h3>
+            <Button variant="ghost" size="sm" onClick={fetchData} disabled={loading}>
+              <RefreshCw className={`h-3 w-3 mr-1 ${loading ? 'animate-spin' : ''}`} />Refresh
+            </Button>
+          </div>
+          {requests.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No pending requests</p>
+          ) : (
+            <div className="space-y-2">
+              {requests.map(req => (
+                <div key={req.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-md">
+                  <div>
+                    {req.name && req.name !== req.email ? (
+                      <>
+                        <p className="text-sm font-medium">{req.name}</p>
+                        <p className="text-xs text-muted-foreground">{req.email}</p>
+                      </>
+                    ) : (
+                      <p className="text-sm font-medium">{req.email}</p>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      Requesting: <Badge variant="outline" className="ml-1">{ROLE_LABELS[req.requested_role] || req.requested_role}</Badge>
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {new Date(req.created_at).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="default" onClick={() => approveRequest(req)}>
+                      <Check className="h-3 w-3 mr-1" />Approve
+                    </Button>
+                    <Button size="sm" variant="destructive" onClick={() => denyRequest(req)}>
+                      <X className="h-3 w-3 mr-1" />Deny
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* User Roles Management */}
       <div className="bg-card border rounded-lg p-5 space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-card-foreground">Pending Access Requests</h3>
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="text-sm font-semibold text-card-foreground">
+            {managedRoles ? 'Personnel Access' : 'User Roles'}
+          </h3>
           <Button variant="ghost" size="sm" onClick={fetchData} disabled={loading}>
             <RefreshCw className={`h-3 w-3 mr-1 ${loading ? 'animate-spin' : ''}`} />Refresh
           </Button>
         </div>
-        {requests.length === 0 ? (
-          <p className="text-xs text-muted-foreground">No pending requests</p>
-        ) : (
-          <div className="space-y-2">
-            {requests.map(req => (
-              <div key={req.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-md">
-                <div>
-                  {req.name && req.name !== req.email ? (
-                    <>
-                      <p className="text-sm font-medium">{req.name}</p>
-                      <p className="text-xs text-muted-foreground">{req.email}</p>
-                    </>
-                  ) : (
-                    <p className="text-sm font-medium">{req.email}</p>
-                  )}
-                  <p className="text-xs text-muted-foreground">
-                    Requesting: <Badge variant="outline" className="ml-1">{ROLE_LABELS[req.requested_role] || req.requested_role}</Badge>
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {new Date(req.created_at).toLocaleDateString()}
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  <Button size="sm" variant="default" onClick={() => approveRequest(req)}>
-                    <Check className="h-3 w-3 mr-1" />Approve
-                  </Button>
-                  <Button size="sm" variant="destructive" onClick={() => denyRequest(req)}>
-                    <X className="h-3 w-3 mr-1" />Deny
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* User Roles Management */}
-      <div className="bg-card border rounded-lg p-5 space-y-4">
-        <h3 className="text-sm font-semibold text-card-foreground">User Roles</h3>
         {users.length === 0 ? (
-          <p className="text-xs text-muted-foreground">No users found</p>
+          <p className="text-xs text-muted-foreground">
+            {managedRoles ? 'No personnel found' : 'No users found'}
+          </p>
         ) : (
           <div className="space-y-3">
             {users.map(u => (
@@ -292,7 +342,9 @@ export function UserManagement() {
 
                 </div>
                 <div className="flex flex-wrap gap-1.5">
-                  {u.roles.map(r => (
+                  {u.roles
+                    .filter(r => !managedRoles || managedRoles.includes(r.role))
+                    .map(r => (
                     <Badge key={r.id} variant="secondary" className="text-xs flex items-center gap-1">
                       {ROLE_LABELS[r.role] || r.role}
                       <button
@@ -304,6 +356,9 @@ export function UserManagement() {
                       </button>
                     </Badge>
                   ))}
+                  {managedRoles && !u.roles.some(r => managedRoles.includes(r.role)) && (
+                    <span className="text-xs text-muted-foreground">No personnel access</span>
+                  )}
                 </div>
                 <div className="flex gap-2 items-center">
                   <Select
@@ -312,7 +367,7 @@ export function UserManagement() {
                   >
                     <SelectTrigger className="h-7 w-40 text-xs"><SelectValue placeholder="Add role..." /></SelectTrigger>
                     <SelectContent>
-                      {availableRoles
+                      {filteredAvailableRoles
                         .filter(r => !u.roles.some(ur => ur.role === r))
                         .map(r => (
                           <SelectItem key={r} value={r}>{ROLE_LABELS[r] || r}</SelectItem>

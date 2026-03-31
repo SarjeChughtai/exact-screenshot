@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, ReactNode, useCallback, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 
-export type UserRole = 'admin' | 'owner' | 'accounting' | 'operations' | 'sales_rep' | 'freight' | 'dealer' | 'manufacturer' | 'construction';
+export type UserRole = 'admin' | 'owner' | 'accounting' | 'operations' | 'sales_rep' | 'estimator' | 'freight' | 'dealer' | 'manufacturer' | 'construction';
 
 export interface UserProfile {
   id: string;
@@ -24,10 +24,10 @@ interface RoleContextType {
 
 const MODULE_ACCESS: Record<string, UserRole[]> = {
   dashboard: ['admin', 'owner', 'accounting', 'operations', 'sales_rep', 'freight'],
-  estimator: ['admin', 'owner', 'sales_rep'],
+  estimator: ['admin', 'owner', 'sales_rep', 'estimator'],
   'quote-builder': ['admin', 'owner', 'sales_rep'],
-  'internal-quote-builder': ['admin', 'owner'],
-  'quote-log': ['admin', 'owner', 'sales_rep'],
+  'internal-quote-builder': ['admin', 'owner', 'operations'],
+  'quote-log': ['admin', 'owner', 'sales_rep', 'operations', 'estimator', 'dealer'],
   deals: ['admin', 'owner', 'operations', 'sales_rep'],
   'deal-pl': ['admin', 'owner', 'accounting'],
   'commission': ['admin', 'owner'],
@@ -41,10 +41,11 @@ const MODULE_ACCESS: Record<string, UserRole[]> = {
   'commission-statement': ['admin', 'owner', 'accounting'],
   freight: ['admin', 'owner', 'freight', 'operations'],
   rfq: ['admin', 'owner', 'freight', 'operations'],
-  settings: ['admin', 'owner', 'accounting', 'operations', 'sales_rep', 'freight', 'manufacturer', 'dealer'],
+  settings: ['admin', 'owner', 'accounting', 'operations', 'sales_rep', 'estimator', 'freight', 'manufacturer', 'dealer'],
   'dealer-rfq': ['admin', 'owner', 'dealer'],
   'dealer-log': ['admin', 'owner', 'dealer'],
   'draft-log': ['admin', 'owner'],
+  'internal-quote-log': ['admin', 'owner', 'operations', 'sales_rep', 'estimator'],
   'master-data': ['owner'],
   'vendor-board': ['admin', 'owner', 'operations', 'freight', 'manufacturer', 'construction'],
 };
@@ -109,10 +110,11 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   accounting: 'Accounting',
   operations: 'Operations',
   sales_rep: 'Sales Rep',
+  estimator: 'Estimator',
   freight: 'Freight Carrier',
   dealer: 'Dealer',
   manufacturer: 'Steel Manufacturer',
   construction: 'Construction',
 };
 
-export const ALL_ROLES: UserRole[] = ['admin', 'owner', 'accounting', 'operations', 'sales_rep', 'freight', 'dealer', 'manufacturer', 'construction'];
+export const ALL_ROLES: UserRole[] = ['admin', 'owner', 'accounting', 'operations', 'sales_rep', 'estimator', 'freight', 'dealer', 'manufacturer', 'construction'];
