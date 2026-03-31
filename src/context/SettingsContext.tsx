@@ -170,7 +170,6 @@ function resolvePersonnelName(options: {
 
   return `User ${options.userId.slice(0, 8)}`;
 }
-
 function mergeSettingsRows(rows: { key: string; value: any }[], personnel: PersonnelEntry[]): AppSettings {
   const next = { ...DEFAULT_SETTINGS, personnel };
   const byKey = new Map(rows.map(row => [row.key, row.value]));

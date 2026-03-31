@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { Check, X, Plus, Trash2, RefreshCw } from 'lucide-react';
+import { Check, X, Plus, RefreshCw } from 'lucide-react';
 
 const ROLE_LABELS: Record<string, string> = {
   admin: 'Admin',
@@ -114,15 +114,18 @@ export function UserManagement() {
         });
       }
 
-      // Fallback: also check access_requests for any users not resolved above
-      const unresolvedIds = userIds.filter(id => !allEmails[id]);
+      // Fill missing names/emails from access requests, and prefer request names over synthetic auth placeholders.
+      const unresolvedIds = userIds.filter(id => !allEmails[id] || isPlaceholderDisplayName(allNames[id]));
       if (unresolvedIds.length > 0) {
         const { data: allReqs } = await supabase
           .from('access_requests')
-          .select('user_id, email, name');
+          .select('user_id, email, name, created_at')
+          .order('created_at', { ascending: false });
         allReqs?.forEach((r: any) => {
           if (!allEmails[r.user_id]) allEmails[r.user_id] = r.email;
-          if (!allNames[r.user_id] && r.name) allNames[r.user_id] = r.name;
+          if ((isPlaceholderDisplayName(allNames[r.user_id]) || !allNames[r.user_id]) && r.name) {
+            allNames[r.user_id] = r.name;
+          }
         });
       }
 
@@ -131,7 +134,11 @@ export function UserManagement() {
         email: allEmails[userId] || '(email not found)',
         name: resolveDisplayName(allNames[userId], allEmails[userId]),
         roles,
-      }));
+      })).sort((a, b) => {
+        const left = a.name || a.email;
+        const right = b.name || b.email;
+        return left.localeCompare(right);
+      });
       setUsers(userList);
     }
 
