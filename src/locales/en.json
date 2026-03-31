@@ -50,6 +50,7 @@
   "sidebar": {
     "overview": "Overview",
     "dashboard": "Dashboard",
+    "messages": "Messages",
     "quotes": "Quotes",
     "quickEstimator": "Quick Estimator",
     "estimatesLog": "Estimates Log",
@@ -326,6 +327,7 @@
     "noDealers": "No dealer profiles found."
   },
   "layout": {
-    "costData": "Cost Data"
+    "costData": "Cost Data",
+    "messages": "Messages"
   }
 }

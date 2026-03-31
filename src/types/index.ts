@@ -325,8 +325,65 @@ export interface UserProfileSettings {
   emailNotifications: boolean;
   smsNotifications: boolean;
   canViewAllFreightBoard: boolean;
+  canUseMessaging: boolean;
+  lastSeenAt?: string | null;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export type MessagingConversationKind = 'direct' | 'group' | 'team' | 'deal';
+export type MessagingMembershipSource = 'manual' | 'direct' | 'auto_team' | 'auto_deal';
+export type TeamConversationKey = 'leadership' | 'sales' | 'operations' | 'estimating' | 'accounting' | 'freight';
+
+export interface MessagingDirectoryUser {
+  id: string;
+  email: string;
+  displayName: string;
+  roles: string[];
+  canUseMessaging: boolean;
+  lastSeenAt?: string | null;
+}
+
+export interface MessagingConversationMember {
+  conversationId: string;
+  userId: string;
+  joinedAt: string;
+  lastReadAt?: string | null;
+  isAdmin: boolean;
+  notificationsMuted: boolean;
+  membershipSource: MessagingMembershipSource;
+}
+
+export interface MessagingMessage {
+  id: string;
+  conversationId: string;
+  senderUserId: string;
+  body: string;
+  createdAt: string;
+  editedAt?: string | null;
+  deletedAt?: string | null;
+}
+
+export interface MessagingConversation {
+  id: string;
+  kind: MessagingConversationKind;
+  title: string;
+  jobId?: string | null;
+  teamKey?: TeamConversationKey | null;
+  directKey?: string | null;
+  createdBy?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  lastMessageAt?: string | null;
+  members: MessagingConversationMember[];
+  latestMessage?: MessagingMessage | null;
+  unreadCount: number;
+}
+
+export interface PresenceState {
+  userId: string;
+  isOnline: boolean;
+  lastSeenAt?: string | null;
 }
 
 export interface SteelCostEntry {

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAppContext } from '@/context/AppContext';
 import { useRoles } from '@/context/RoleContext';
 import { useSettings } from '@/context/SettingsContext';
@@ -9,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { ChevronDown, ChevronRight, Edit, Trash2, Plus, EyeOff, Eye } from 'lucide-react';
+import { ChevronDown, ChevronRight, Edit, Trash2, Plus, EyeOff, Eye, MessageSquare } from 'lucide-react';
 import type { Deal, DealStatus } from '@/types';
 
 const DEAL_STATUS_LABELS: Record<string, string> = {
@@ -25,6 +26,7 @@ const EMPTY_DEAL: Partial<Deal> = {
 };
 
 export default function MasterDeals() {
+  const navigate = useNavigate();
   const { deals, updateDeal, deleteDeal, addDeal, payments, internalCosts } = useAppContext();
   const { currentUser, hasAnyRole } = useRoles();
   const { settings } = useSettings();
@@ -348,6 +350,16 @@ export default function MasterDeals() {
                           </div>
                         </div>
                         <div className="mt-3">
+                          <div className="mb-3 flex justify-end">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => navigate(`/messages?dealJobId=${d.jobId}`)}
+                            >
+                              <MessageSquare className="h-3.5 w-3.5 mr-1.5" />
+                              Open Deal Chat
+                            </Button>
+                          </div>
                           <p className="text-xs font-semibold text-muted-foreground mb-1">Notes</p>
                           <Textarea className="text-xs h-16" value={d.notes} onChange={e => updateDeal(d.jobId, { notes: e.target.value })} placeholder="Add notes..." />
                         </div>

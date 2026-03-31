@@ -1,11 +1,14 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/context/AuthContext';
+import { useSettings } from '@/context/SettingsContext';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
-import { Check, X, Plus, RefreshCw } from 'lucide-react';
+import { Check, X, Plus, RefreshCw, MessageSquare } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 const ROLE_LABELS: Record<string, string> = {
   admin: 'Admin',
@@ -62,6 +65,8 @@ interface UserWithRoles {
   email: string;
   name: string;
   roles: UserRole[];
+  messagingEnabled: boolean;
+  lastSeenAt: string | null;
 }
 
 interface UserManagementProps {
@@ -74,6 +79,8 @@ export function UserManagement({
   hidePendingRequests = false,
 }: UserManagementProps = {}) {
   const { user, hasAnyRole } = useAuth();
+  const { profile, updateProfile } = useSettings();
+  const navigate = useNavigate();
   const isOwner = hasAnyRole(['owner']);
   const isAdmin = hasAnyRole(['admin', 'owner']);
   const [requests, setRequests] = useState<AccessRequest[]>([]);
@@ -106,6 +113,12 @@ export function UserManagement({
       });
 
       const userIds = Object.keys(grouped);
+      const { data: profileRows } = await (supabase.from as any)('user_profiles')
+        .select('user_id, can_use_messaging, last_seen_at')
+        .in('user_id', userIds);
+      const profileMap = new Map(
+        ((profileRows || []) as any[]).map(row => [row.user_id, row]),
+      );
 
       // Fetch display info directly from auth.users via SECURITY DEFINER function
       const allEmails: Record<string, string> = {};
@@ -142,6 +155,8 @@ export function UserManagement({
         email: allEmails[userId] || '(email not found)',
         name: resolveDisplayName(allNames[userId], allEmails[userId]),
         roles,
+        messagingEnabled: Boolean(profileMap.get(userId)?.can_use_messaging),
+        lastSeenAt: profileMap.get(userId)?.last_seen_at ?? null,
       })).sort((a, b) => {
         const left = a.name || a.email;
         const right = b.name || b.email;
@@ -254,6 +269,30 @@ export function UserManagement({
     fetchData();
   };
 
+  const updateMessagingAccess = async (userId: string, enabled: boolean) => {
+    const { error } = await (supabase.from as any)('user_profiles').upsert({
+      user_id: userId,
+      can_use_messaging: enabled,
+      updated_at: new Date().toISOString(),
+    });
+
+    if (error) {
+      toast.error('Failed to update messaging access: ' + error.message);
+      return;
+    }
+
+    setUsers(prev => prev.map(existing => existing.userId === userId
+      ? { ...existing, messagingEnabled: enabled }
+      : existing));
+
+    if (userId === user?.id) {
+      await updateProfile({ canUseMessaging: enabled });
+    }
+
+    toast.success(enabled ? 'Messaging enabled' : 'Messaging disabled');
+    fetchData();
+  };
+
   if (!isAdmin) return null;
 
   const availableRoles = isOwner
@@ -339,7 +378,27 @@ export function UserManagement({
                       <p className="text-sm font-medium">{u.email}</p>
                     )}
                   </div>
-
+                  <div className="flex items-center gap-2">
+                    <div className="text-right">
+                      <p className="text-[11px] font-medium">
+                        {u.messagingEnabled ? 'Messaging on' : 'Messaging off'}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground">
+                        {u.lastSeenAt ? `Last seen ${new Date(u.lastSeenAt).toLocaleString()}` : 'No recent presence'}
+                      </p>
+                    </div>
+                    {profile.canUseMessaging && u.userId !== user?.id && u.messagingEnabled && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 px-2"
+                        onClick={() => navigate(`/messages?directUserId=${u.userId}`)}
+                      >
+                        <MessageSquare className="h-3.5 w-3.5 mr-1" />
+                        Message
+                      </Button>
+                    )}
+                  </div>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {u.roles
@@ -359,6 +418,16 @@ export function UserManagement({
                   {managedRoles && !u.roles.some(r => managedRoles.includes(r.role)) && (
                     <span className="text-xs text-muted-foreground">No personnel access</span>
                   )}
+                </div>
+                <div className="flex items-center justify-between rounded-md border bg-background/70 px-3 py-2">
+                  <div>
+                    <p className="text-xs font-medium">Messaging Access</p>
+                    <p className="text-[11px] text-muted-foreground">Enable real-time chat and online presence for this user.</p>
+                  </div>
+                  <Switch
+                    checked={u.messagingEnabled}
+                    onCheckedChange={value => void updateMessagingAccess(u.userId, value)}
+                  />
                 </div>
                 <div className="flex gap-2 items-center">
                   <Select

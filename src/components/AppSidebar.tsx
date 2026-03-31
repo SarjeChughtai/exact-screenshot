@@ -2,7 +2,7 @@ import {
   Calculator, FileText, ClipboardList, Briefcase, DollarSign,
   BarChart3, CreditCard, Users, Truck, Factory, Award, FileSpreadsheet,
   Receipt, TrendingUp, Building2, ChevronDown, FileInput,
-  Shield, User, Settings as SettingsIcon, Send, LogOut, List, Store, Eye, EyeOff, Database, UserCircle, Package
+  Shield, User, Settings as SettingsIcon, Send, LogOut, List, Store, Eye, EyeOff, Database, UserCircle, Package, MessageSquare
 } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import { useLocation } from 'react-router-dom';
@@ -21,6 +21,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { useSettings } from '@/context/SettingsContext';
 
 interface MenuItem {
   path: string;
@@ -39,6 +40,7 @@ const menuGroups: MenuGroup[] = [
     label: 'sidebar.overview',
     items: [
       { path: '/', label: 'sidebar.dashboard', icon: BarChart3, module: 'dashboard' },
+      { path: '/messages', label: 'sidebar.messages', icon: MessageSquare, module: 'messages' },
     ],
   },
   {
@@ -116,11 +118,15 @@ export function AppSidebar() {
   const location = useLocation();
   const { canAccess, viewAsRole, setViewAsRole, isImpersonating, actualRoles } = useRoles();
   const { user, userRoles, signOut } = useAuth();
+  const { profile } = useSettings();
   const { t } = useTranslation();
   const canImpersonate = actualRoles.includes('admin') || actualRoles.includes('owner');
 
   const filteredGroups = menuGroups
-    .map(g => ({ ...g, items: g.items.filter(item => canAccess(item.module)) }))
+    .map(g => ({
+      ...g,
+      items: g.items.filter(item => canAccess(item.module) && (item.module !== 'messages' || profile.canUseMessaging)),
+    }))
     .filter(g => g.items.length > 0);
 
   const isGroupActive = (group: MenuGroup) =>
