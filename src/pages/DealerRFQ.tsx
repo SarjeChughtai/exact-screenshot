@@ -14,7 +14,8 @@ import { useAppContext } from '@/context/AppContext';
 import { useTranslation } from 'react-i18next';
 import { saveDocumentPdf } from '@/lib/documentPdf';
 import { notifyUsers } from '@/lib/workflowNotifications';
-import { WALL_LABELS, createOpening, renumberOpenings, type RFQOpening, type WallLocation } from '@/lib/rfqShared';
+import { RFQOpeningsSection } from '@/components/rfq/RFQOpeningsSection';
+import { createOpening, renumberOpenings, type RFQOpening, type WallLocation } from '@/lib/rfqShared';
 
 const INITIAL_FORM = {
   clientName: '',
@@ -292,57 +293,15 @@ export default function DealerRFQ() {
           )}
         </div>
 
-        <div className="bg-card border rounded-lg p-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Wall Openings</h3>
-            <p className="text-xs text-muted-foreground">Track framed openings by wall for design reference.</p>
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            {(['LEW', 'REW', 'FSW', 'BSW'] as WallLocation[]).map(wall => (
-              <div key={wall} className="rounded-md border p-3">
-                <div className="mb-3 flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium">{WALL_LABELS[wall]}</p>
-                    <p className="text-xs text-muted-foreground">{openings.filter(opening => opening.wall === wall).length} openings</p>
-                  </div>
-                  <Button type="button" size="sm" variant="outline" onClick={() => addOpening(wall)}>
-                    Add Opening
-                  </Button>
-                </div>
-
-                <div className="space-y-3">
-                  {openings.filter(opening => opening.wall === wall).length === 0 ? (
-                    <p className="text-xs text-muted-foreground">No openings added.</p>
-                  ) : openings.filter(opening => opening.wall === wall).map(opening => (
-                    <div key={opening.id} className="rounded-md bg-muted/30 p-3 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <p className="text-xs font-medium">{opening.wall} #{opening.number}</p>
-                        <Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => removeOpening(opening.id)}>
-                          Remove
-                        </Button>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <Label className="text-xs">Width</Label>
-                          <Input className="input-blue mt-1 h-8" value={opening.width} onChange={event => updateOpening(opening.id, 'width', event.target.value)} />
-                        </div>
-                        <div>
-                          <Label className="text-xs">Height</Label>
-                          <Input className="input-blue mt-1 h-8" value={opening.height} onChange={event => updateOpening(opening.id, 'height', event.target.value)} />
-                        </div>
-                      </div>
-                      <div>
-                        <Label className="text-xs">Notes</Label>
-                        <Input className="input-blue mt-1 h-8" value={opening.notes} onChange={event => updateOpening(opening.id, 'notes', event.target.value)} placeholder="Door, window, framed opening..." />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+        <RFQOpeningsSection
+          title="Wall Openings"
+          subtitle="Track framed openings by wall for design reference."
+          openings={openings}
+          onAddOpening={addOpening}
+          onUpdateOpening={updateOpening}
+          onRemoveOpening={removeOpening}
+          notesPlaceholder="Door, window, framed opening..."
+        />
 
         <div className="bg-card border rounded-lg p-5 space-y-4">
           <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">{t('dealerRfq.notes')}</h3>

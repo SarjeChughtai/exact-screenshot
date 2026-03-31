@@ -12,12 +12,13 @@ import { useSettings } from '@/context/SettingsContext';
 import { PROVINCES } from '@/lib/calculations';
 import { notifyUsers } from '@/lib/workflowNotifications';
 import { toast } from 'sonner';
-import { Plus, Trash2, Send, Printer } from 'lucide-react';
+import { Send, Printer } from 'lucide-react';
 import { PersonnelSelect } from '@/components/PersonnelSelect';
 import { ClientSelect } from '@/components/ClientSelect';
+import { RFQOpeningsSection } from '@/components/rfq/RFQOpeningsSection';
 import type { Estimate, Quote } from '@/types';
 import { saveDocumentPdf } from '@/lib/documentPdf';
-import { WALL_LABELS, createOpening, renumberOpenings, type RFQOpening, type WallLocation } from '@/lib/rfqShared';
+import { createOpening, renumberOpenings, type RFQOpening, type WallLocation } from '@/lib/rfqShared';
 
 const INITIAL_FORM = {
   clientId: '',
@@ -384,37 +385,13 @@ export default function QuoteRFQ() {
             </div>
           </div>
 
-          <div className="bg-card border rounded-lg p-5 space-y-4">
-            <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Openings</h3>
-            {(['LEW', 'REW', 'FSW', 'BSW'] as WallLocation[]).map(wall => {
-              const wallOpenings = openings.filter(opening => opening.wall === wall);
-              return (
-                <div key={wall} className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-xs font-semibold">{WALL_LABELS[wall]}</Label>
-                    <Button variant="outline" size="sm" onClick={() => addOpening(wall)} className="h-6 text-xs px-2">
-                      <Plus className="h-3 w-3 mr-1" />Add Opening
-                    </Button>
-                  </div>
-                  {wallOpenings.map(opening => (
-                    <div key={opening.id} className="bg-muted rounded-md p-3 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-semibold text-primary">{getOpeningName(opening)}</span>
-                        <Button variant="ghost" size="sm" onClick={() => removeOpening(opening.id)} className="h-6 w-6 p-0 text-destructive">
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div><Label className="text-[10px]">Width</Label><Input className="h-7 text-xs" type="number" value={opening.width} onChange={event => updateOpening(opening.id, 'width', event.target.value)} /></div>
-                        <div><Label className="text-[10px]">Height</Label><Input className="h-7 text-xs" type="number" value={opening.height} onChange={event => updateOpening(opening.id, 'height', event.target.value)} /></div>
-                      </div>
-                      <div><Label className="text-[10px]">Notes</Label><Textarea className="text-xs h-14 mt-0.5" value={opening.notes} onChange={event => updateOpening(opening.id, 'notes', event.target.value)} /></div>
-                    </div>
-                  ))}
-                </div>
-              );
-            })}
-          </div>
+          <RFQOpeningsSection
+            title="Openings"
+            openings={openings}
+            onAddOpening={addOpening}
+            onUpdateOpening={updateOpening}
+            onRemoveOpening={removeOpening}
+          />
         </div>
 
         <div className="space-y-5">
