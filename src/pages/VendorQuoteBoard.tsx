@@ -12,6 +12,9 @@ import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/calculations';
 import { Loader2, Calendar, FileText, Send, Building2, Pencil, Ban, Plus, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { JobIdSelect } from '@/components/JobIdSelect';
+import { manufacturerBidFromRow, manufacturerBidToRow, manufacturerRFQFromRow, manufacturerRFQToRow } from '@/lib/supabaseMappers';
+import type { ManufacturerBid, ManufacturerRFQ } from '@/types';
 
 type BidStatus = 'submitted' | 'updated' | 'cancelled' | 'awarded' | 'rejected';
 type BidLineItemDraft = {
@@ -25,6 +28,29 @@ const createEmptyLineItem = (): BidLineItemDraft => ({
   name: '',
   quantity: '',
   unit: '',
+  notes: '',
+});
+
+const createEmptyManufacturerRFQ = () => ({
+  jobId: '',
+  title: '',
+  buildingSpec: '',
+  width: '',
+  length: '',
+  height: '',
+  weight: '',
+  province: '',
+  city: '',
+  deliveryAddress: '',
+  requiredByDate: '',
+  closingDate: '',
+  notes: '',
+});
+
+const createEmptyManufacturerBid = () => ({
+  pricePerLb: '',
+  totalPrice: '',
+  leadTimeDays: '',
   notes: '',
 });
 
@@ -43,9 +69,11 @@ export default function VendorQuoteBoard() {
   const queryClient = useQueryClient();
   const primaryRole = ['freight', 'manufacturer', 'construction'].find(role => currentUser.roles.includes(role as any)) || 'vendor';
   const canManageBidBoard = currentUser.roles.some(role => ['admin', 'owner', 'operations'].includes(role));
+  const isManufacturerView = primaryRole === 'manufacturer';
 
   const { data: jobs, isLoading: isJobsLoading } = useQuery({
     queryKey: ['vendor_jobs', primaryRole],
+    enabled: !isManufacturerView,
     queryFn: async () => {
       const { data, error } = await (supabase.from as any)('vendor_jobs')
         .select('*')
@@ -57,6 +85,7 @@ export default function VendorQuoteBoard() {
 
   const { data: bids, isLoading: isBidsLoading } = useQuery({
     queryKey: ['vendor_bids', currentUser.id],
+    enabled: !isManufacturerView,
     queryFn: async () => {
       const { data, error } = await (supabase.from as any)('vendor_bids')
         .select('*')
@@ -68,13 +97,43 @@ export default function VendorQuoteBoard() {
 
   const { data: allBids } = useQuery({
     queryKey: ['vendor_bids_all', canManageBidBoard],
-    enabled: canManageBidBoard,
+    enabled: canManageBidBoard && !isManufacturerView,
     queryFn: async () => {
       const { data, error } = await (supabase.from as any)('vendor_bids')
         .select('*')
         .order('updated_at', { ascending: false });
       if (error) throw error;
       return data || [];
+    },
+  });
+
+  const { data: manufacturerRFQs = [], isLoading: isManufacturerRFQsLoading } = useQuery({
+    queryKey: ['manufacturer_rfqs', currentUser.id, canManageBidBoard],
+    enabled: isManufacturerView || canManageBidBoard,
+    queryFn: async () => {
+      const { data, error } = await (supabase.from as any)('manufacturer_rfqs')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return (data || []).map(manufacturerRFQFromRow) as ManufacturerRFQ[];
+    },
+  });
+
+  const { data: manufacturerBids = [], isLoading: isManufacturerBidsLoading } = useQuery({
+    queryKey: ['manufacturer_bids', currentUser.id, canManageBidBoard],
+    enabled: isManufacturerView || canManageBidBoard,
+    queryFn: async () => {
+      let query = (supabase.from as any)('manufacturer_bids')
+        .select('*')
+        .order('submitted_at', { ascending: false });
+
+      if (!canManageBidBoard) {
+        query = query.eq('manufacturer_id', currentUser.id);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+      return (data || []).map(manufacturerBidFromRow) as ManufacturerBid[];
     },
   });
 
@@ -108,10 +167,30 @@ export default function VendorQuoteBoard() {
     closingDate: '',
     lineItems: [createEmptyLineItem()],
   });
+  const [manufacturerRFQDraft, setManufacturerRFQDraft] = useState(createEmptyManufacturerRFQ);
+  const [manufacturerBidRFQId, setManufacturerBidRFQId] = useState<string | null>(null);
+  const [manufacturerBidDraft, setManufacturerBidDraft] = useState(createEmptyManufacturerBid);
 
   const bidsByJobId = useMemo(
     () => new Map((bids || []).map((bid: any) => [bid.job_id, bid])),
     [bids],
+  );
+
+  const myManufacturerBidsByRFQId = useMemo(
+    () => new Map(
+      manufacturerBids
+        .filter((bid) => bid.manufacturerId === currentUser.id)
+        .map((bid) => [bid.rfqId, bid]),
+    ),
+    [currentUser.id, manufacturerBids],
+  );
+
+  const manufacturerBidsByRFQId = useMemo(
+    () => manufacturerBids.reduce<Record<string, ManufacturerBid[]>>((accumulator, bid) => {
+      accumulator[bid.rfqId] = [...(accumulator[bid.rfqId] || []), bid];
+      return accumulator;
+    }, {}),
+    [manufacturerBids],
   );
 
   const activeBidRows = useMemo(() => {
@@ -202,6 +281,118 @@ export default function VendorQuoteBoard() {
     },
     onError: (error: any) => {
       toast({ title: 'Failed to create bid request', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  const createManufacturerRFQMutation = useMutation({
+    mutationFn: async () => {
+      if (!manufacturerRFQDraft.title.trim()) {
+        throw new Error('RFQ title is required');
+      }
+
+      const draft = manufacturerRFQDraft;
+      const record = manufacturerRFQToRow({
+        jobId: draft.jobId.trim(),
+        title: draft.title.trim(),
+        buildingSpec: draft.buildingSpec.trim(),
+        width: Number(draft.width) || 0,
+        length: Number(draft.length) || 0,
+        height: Number(draft.height) || 0,
+        weight: Number(draft.weight) || 0,
+        province: draft.province.trim(),
+        city: draft.city.trim(),
+        deliveryAddress: draft.deliveryAddress.trim(),
+        requiredByDate: draft.requiredByDate || '',
+        closingDate: draft.closingDate || '',
+        notes: draft.notes.trim(),
+        status: 'Open',
+        createdBy: currentUser.name || currentUser.email || '',
+      });
+
+      const { error } = await (supabase.from as any)('manufacturer_rfqs').insert(record);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast({ title: 'Manufacturer RFQ created' });
+      setManufacturerRFQDraft(createEmptyManufacturerRFQ());
+      queryClient.invalidateQueries({ queryKey: ['manufacturer_rfqs'] });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Failed to create manufacturer RFQ', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  const submitManufacturerBidMutation = useMutation({
+    mutationFn: async (rfq: ManufacturerRFQ) => {
+      if (!manufacturerBidDraft.totalPrice) throw new Error('Total price is required');
+      if (!manufacturerBidDraft.leadTimeDays) throw new Error('Lead time is required');
+
+      const existingBid = myManufacturerBidsByRFQId.get(rfq.id);
+      const bidRow = manufacturerBidToRow({
+        rfqId: rfq.id,
+        manufacturerId: currentUser.id,
+        manufacturerName: currentUser.name || currentUser.email || '',
+        pricePerLb: Number(manufacturerBidDraft.pricePerLb) || 0,
+        totalPrice: Number(manufacturerBidDraft.totalPrice) || 0,
+        leadTimeDays: Number(manufacturerBidDraft.leadTimeDays) || 0,
+        notes: manufacturerBidDraft.notes.trim(),
+        status: existingBid ? existingBid.status : 'Submitted',
+      });
+
+      if (existingBid) {
+        const { error } = await (supabase.from as any)('manufacturer_bids')
+          .update(bidRow)
+          .eq('id', existingBid.id);
+        if (error) throw error;
+        return;
+      }
+
+      const { error } = await (supabase.from as any)('manufacturer_bids').insert(bidRow);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast({ title: 'Manufacturer bid saved' });
+      setManufacturerBidRFQId(null);
+      setManufacturerBidDraft(createEmptyManufacturerBid());
+      queryClient.invalidateQueries({ queryKey: ['manufacturer_bids'] });
+      queryClient.invalidateQueries({ queryKey: ['manufacturer_rfqs'] });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Failed to save manufacturer bid', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  const updateManufacturerRFQStatusMutation = useMutation({
+    mutationFn: async ({ rfqId, status, awardedBidId }: { rfqId: string; status: ManufacturerRFQ['status']; awardedBidId?: string }) => {
+      const { error } = await (supabase.from as any)('manufacturer_rfqs')
+        .update({
+          status,
+          awarded_bid_id: awardedBidId || '',
+        })
+        .eq('id', rfqId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['manufacturer_rfqs'] });
+      queryClient.invalidateQueries({ queryKey: ['manufacturer_bids'] });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Failed to update manufacturer RFQ', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  const updateManufacturerBidStatusMutation = useMutation({
+    mutationFn: async ({ bidId, status }: { bidId: string; status: ManufacturerBid['status'] }) => {
+      const { error } = await (supabase.from as any)('manufacturer_bids')
+        .update({ status: status })
+        .eq('id', bidId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['manufacturer_bids'] });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Failed to update manufacturer bid', description: error.message, variant: 'destructive' });
     },
   });
 
@@ -296,10 +487,197 @@ export default function VendorQuoteBoard() {
     }));
   };
 
-  if (isJobsLoading || isBidsLoading) {
+  if ((isJobsLoading || isBidsLoading) && !isManufacturerView) {
     return (
       <div className="flex items-center justify-center p-12">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if ((isManufacturerRFQsLoading || isManufacturerBidsLoading) && (isManufacturerView || canManageBidBoard)) {
+    return (
+      <div className="flex items-center justify-center p-12">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (isManufacturerView) {
+    return (
+      <div className="space-y-6 max-w-6xl mx-auto">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Manufacturer RFQ Board</h1>
+          <p className="text-muted-foreground mt-2">Open steel package requests and your submitted bids.</p>
+        </div>
+
+        <div className="space-y-4">
+          {manufacturerRFQs.length === 0 ? (
+            <Card>
+              <CardContent className="py-12 text-center text-muted-foreground">
+                No manufacturer RFQs are available right now.
+              </CardContent>
+            </Card>
+          ) : manufacturerRFQs.map((rfq) => {
+            const myBid = myManufacturerBidsByRFQId.get(rfq.id);
+            const isBidFormOpen = manufacturerBidRFQId === rfq.id;
+            const relatedBids = manufacturerBidsByRFQId[rfq.id] || [];
+
+            return (
+              <Card key={rfq.id}>
+                <CardHeader>
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <CardTitle>{rfq.title}</CardTitle>
+                      <CardDescription>
+                        {rfq.jobId || 'No shared job ID'} · {rfq.buildingSpec || `${rfq.width} x ${rfq.length} x ${rfq.height}`} · {formatCurrency(Number(rfq.weight) || 0).replace('.00', '')} lbs
+                      </CardDescription>
+                    </div>
+                    <Badge variant="outline">{rfq.status}</Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4 text-sm">
+                    <div><span className="text-muted-foreground">Location:</span> {rfq.city || '-'}, {rfq.province || '-'}</div>
+                    <div><span className="text-muted-foreground">Required By:</span> {rfq.requiredByDate || '-'}</div>
+                    <div><span className="text-muted-foreground">Closing:</span> {rfq.closingDate || '-'}</div>
+                    <div><span className="text-muted-foreground">Delivery:</span> {rfq.deliveryAddress || '-'}</div>
+                  </div>
+
+                  {rfq.notes && (
+                    <div className="rounded-md border bg-muted/20 p-3 text-sm whitespace-pre-wrap">
+                      {rfq.notes}
+                    </div>
+                  )}
+
+                  {myBid ? (
+                    <div className="rounded-md border bg-muted/20 p-4 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <p className="font-medium">Your Bid</p>
+                        <Badge variant="secondary">{myBid.status}</Badge>
+                      </div>
+                      <div className="grid gap-2 md:grid-cols-3 text-sm">
+                        <div><span className="text-muted-foreground">Price/lb:</span> {formatCurrency(myBid.pricePerLb)}</div>
+                        <div><span className="text-muted-foreground">Total:</span> {formatCurrency(myBid.totalPrice)}</div>
+                        <div><span className="text-muted-foreground">Lead Time:</span> {myBid.leadTimeDays} days</div>
+                      </div>
+                      {myBid.notes && <p className="text-sm text-muted-foreground">{myBid.notes}</p>}
+                      {rfq.status === 'Open' && (
+                        <div className="flex gap-2">
+                          <Button type="button" variant="outline" onClick={() => {
+                            setManufacturerBidRFQId(rfq.id);
+                            setManufacturerBidDraft({
+                              pricePerLb: String(myBid.pricePerLb || ''),
+                              totalPrice: String(myBid.totalPrice || ''),
+                              leadTimeDays: String(myBid.leadTimeDays || ''),
+                              notes: myBid.notes || '',
+                            });
+                          }}>
+                            Update Bid
+                          </Button>
+                          {myBid.status !== 'Withdrawn' && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => updateManufacturerBidStatusMutation.mutate({ bidId: myBid.id, status: 'Withdrawn' })}
+                            >
+                              Withdraw Bid
+                            </Button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ) : null}
+
+                  {rfq.status === 'Open' && !myBid && !isBidFormOpen && (
+                    <Button type="button" variant="outline" onClick={() => {
+                      setManufacturerBidRFQId(rfq.id);
+                      setManufacturerBidDraft(createEmptyManufacturerBid());
+                    }}>
+                      Submit Bid
+                    </Button>
+                  )}
+
+                  {isBidFormOpen && (
+                    <div className="rounded-md border p-4 space-y-3">
+                      <div className="grid gap-3 md:grid-cols-3">
+                        <div className="space-y-1">
+                          <Label>Price per lb</Label>
+                          <Input type="number" min="0" step="0.01" value={manufacturerBidDraft.pricePerLb} onChange={(event) => setManufacturerBidDraft((current) => ({ ...current, pricePerLb: event.target.value }))} />
+                        </div>
+                        <div className="space-y-1">
+                          <Label>Total price</Label>
+                          <Input type="number" min="0" step="0.01" value={manufacturerBidDraft.totalPrice} onChange={(event) => setManufacturerBidDraft((current) => ({ ...current, totalPrice: event.target.value }))} />
+                        </div>
+                        <div className="space-y-1">
+                          <Label>Lead time (days)</Label>
+                          <Input type="number" min="0" step="1" value={manufacturerBidDraft.leadTimeDays} onChange={(event) => setManufacturerBidDraft((current) => ({ ...current, leadTimeDays: event.target.value }))} />
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <Label>Notes</Label>
+                        <Textarea value={manufacturerBidDraft.notes} onChange={(event) => setManufacturerBidDraft((current) => ({ ...current, notes: event.target.value }))} />
+                      </div>
+                      <div className="flex gap-2">
+                        <Button type="button" onClick={() => submitManufacturerBidMutation.mutate(rfq)} disabled={submitManufacturerBidMutation.isPending}>
+                          Submit Bid
+                        </Button>
+                        <Button type="button" variant="ghost" onClick={() => setManufacturerBidRFQId(null)}>
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {canManageBidBoard && relatedBids.length > 0 && (
+                    <div className="space-y-3 border-t pt-4">
+                      <div className="flex items-center justify-between">
+                        <p className="font-medium">Submitted Bids</p>
+                        <div className="flex gap-2">
+                          {rfq.status === 'Open' && (
+                            <Button type="button" variant="outline" size="sm" onClick={() => updateManufacturerRFQStatusMutation.mutate({ rfqId: rfq.id, status: 'Closed' })}>
+                              Close RFQ
+                            </Button>
+                          )}
+                          {rfq.status !== 'Cancelled' && (
+                            <Button type="button" variant="outline" size="sm" onClick={() => updateManufacturerRFQStatusMutation.mutate({ rfqId: rfq.id, status: 'Cancelled' })}>
+                              Cancel RFQ
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                      {relatedBids.map((bid) => (
+                        <div key={bid.id} className="rounded-md border bg-muted/10 p-3">
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                              <p className="font-medium">{bid.manufacturerName || bid.manufacturerId}</p>
+                              <p className="text-sm text-muted-foreground">{bid.notes || 'No notes provided'}</p>
+                            </div>
+                            <div className="text-right text-sm">
+                              <p>{formatCurrency(bid.totalPrice)}</p>
+                              <p className="text-muted-foreground">{bid.leadTimeDays} days · {formatCurrency(bid.pricePerLb)}/lb</p>
+                            </div>
+                          </div>
+                          <div className="mt-3 flex gap-2">
+                            <Button type="button" size="sm" onClick={() => updateManufacturerRFQStatusMutation.mutate({ rfqId: rfq.id, status: 'Awarded', awardedBidId: bid.id })}>
+                              Award
+                            </Button>
+                            <Button type="button" size="sm" variant="outline" onClick={() => updateManufacturerBidStatusMutation.mutate({ bidId: bid.id, status: 'Accepted' })}>
+                              Accept Bid
+                            </Button>
+                            <Button type="button" size="sm" variant="outline" onClick={() => updateManufacturerBidStatusMutation.mutate({ bidId: bid.id, status: 'Rejected' })}>
+                              Reject Bid
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
       </div>
     );
   }
@@ -321,17 +699,14 @@ export default function VendorQuoteBoard() {
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               <div className="space-y-1">
                 <Label>Import Existing Job</Label>
-                <Input
-                  list="bid-board-job-ids"
-                  placeholder="Enter job ID"
+                <JobIdSelect
                   value={jobDraft.sourceJobId}
-                  onChange={event => setJobDraft(current => ({ ...current, sourceJobId: event.target.value }))}
+                  onValueChange={(jobId) => setJobDraft(current => ({ ...current, sourceJobId: jobId }))}
+                  allowedStates={['deal']}
+                  placeholder="Select a deal job"
+                  searchPlaceholder="Search deal jobs by job ID, client, or job name..."
+                  triggerClassName="input-blue mt-1"
                 />
-                <datalist id="bid-board-job-ids">
-                  {deals.map(deal => (
-                    <option key={deal.jobId} value={deal.jobId}>{deal.clientName} - {deal.jobName}</option>
-                  ))}
-                </datalist>
                 <Button type="button" variant="outline" size="sm" onClick={() => importDealIntoBidDraft(jobDraft.sourceJobId)}>
                   Import Job Details
                 </Button>
@@ -571,6 +946,98 @@ export default function VendorQuoteBoard() {
                 );
               })
             )}
+          </CardContent>
+        </Card>
+      )}
+
+      {canManageBidBoard && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Create Manufacturer RFQ</CardTitle>
+            <CardDescription>Publish steel-package requests for manufacturer users to bid on.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <div className="space-y-1">
+                <Label>Shared Job ID</Label>
+                <JobIdSelect
+                  value={manufacturerRFQDraft.jobId}
+                  onValueChange={(jobId) => {
+                    const sourceDeal = deals.find((deal) => deal.jobId === jobId);
+                    setManufacturerRFQDraft((current) => ({
+                      ...current,
+                      jobId,
+                      title: current.title || sourceDeal?.jobName || '',
+                      province: current.province || sourceDeal?.province || '',
+                      city: current.city || sourceDeal?.city || '',
+                      deliveryAddress: current.deliveryAddress || sourceDeal?.address || '',
+                      width: current.width || String(sourceDeal?.width || ''),
+                      length: current.length || String(sourceDeal?.length || ''),
+                      height: current.height || String(sourceDeal?.height || ''),
+                      weight: current.weight || String(sourceDeal?.weight || ''),
+                    }));
+                  }}
+                  allowedStates={['deal']}
+                  includeCreateNew={false}
+                  placeholder="Select a deal job"
+                  searchPlaceholder="Search deal jobs by job ID, client, or job name..."
+                  triggerClassName="input-blue mt-1"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>RFQ Title</Label>
+                <Input value={manufacturerRFQDraft.title} onChange={(event) => setManufacturerRFQDraft((current) => ({ ...current, title: event.target.value }))} />
+              </div>
+              <div className="space-y-1">
+                <Label>Building Spec</Label>
+                <Input value={manufacturerRFQDraft.buildingSpec} onChange={(event) => setManufacturerRFQDraft((current) => ({ ...current, buildingSpec: event.target.value }))} placeholder="80x120x24 single slope" />
+              </div>
+              <div className="space-y-1">
+                <Label>Width</Label>
+                <Input type="number" value={manufacturerRFQDraft.width} onChange={(event) => setManufacturerRFQDraft((current) => ({ ...current, width: event.target.value }))} />
+              </div>
+              <div className="space-y-1">
+                <Label>Length</Label>
+                <Input type="number" value={manufacturerRFQDraft.length} onChange={(event) => setManufacturerRFQDraft((current) => ({ ...current, length: event.target.value }))} />
+              </div>
+              <div className="space-y-1">
+                <Label>Height</Label>
+                <Input type="number" value={manufacturerRFQDraft.height} onChange={(event) => setManufacturerRFQDraft((current) => ({ ...current, height: event.target.value }))} />
+              </div>
+              <div className="space-y-1">
+                <Label>Weight (lbs)</Label>
+                <Input type="number" value={manufacturerRFQDraft.weight} onChange={(event) => setManufacturerRFQDraft((current) => ({ ...current, weight: event.target.value }))} />
+              </div>
+              <div className="space-y-1">
+                <Label>Province</Label>
+                <Input value={manufacturerRFQDraft.province} onChange={(event) => setManufacturerRFQDraft((current) => ({ ...current, province: event.target.value }))} />
+              </div>
+              <div className="space-y-1">
+                <Label>City</Label>
+                <Input value={manufacturerRFQDraft.city} onChange={(event) => setManufacturerRFQDraft((current) => ({ ...current, city: event.target.value }))} />
+              </div>
+              <div className="space-y-1">
+                <Label>Required By</Label>
+                <Input type="date" value={manufacturerRFQDraft.requiredByDate} onChange={(event) => setManufacturerRFQDraft((current) => ({ ...current, requiredByDate: event.target.value }))} />
+              </div>
+              <div className="space-y-1">
+                <Label>Closing Date</Label>
+                <Input type="date" value={manufacturerRFQDraft.closingDate} onChange={(event) => setManufacturerRFQDraft((current) => ({ ...current, closingDate: event.target.value }))} />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label>Delivery Address</Label>
+              <Input value={manufacturerRFQDraft.deliveryAddress} onChange={(event) => setManufacturerRFQDraft((current) => ({ ...current, deliveryAddress: event.target.value }))} />
+            </div>
+            <div className="space-y-1">
+              <Label>Notes</Label>
+              <Textarea value={manufacturerRFQDraft.notes} onChange={(event) => setManufacturerRFQDraft((current) => ({ ...current, notes: event.target.value }))} />
+            </div>
+            <div className="flex justify-end">
+              <Button type="button" onClick={() => createManufacturerRFQMutation.mutate()} disabled={createManufacturerRFQMutation.isPending}>
+                Create Manufacturer RFQ
+              </Button>
+            </div>
           </CardContent>
         </Card>
       )}

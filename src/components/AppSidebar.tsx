@@ -116,16 +116,21 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === 'collapsed';
   const location = useLocation();
-  const { canAccess, viewAsRole, setViewAsRole, isImpersonating, actualRoles } = useRoles();
+  const { canAccess, viewAsRole, setViewAsRole, isImpersonating, actualRoles, currentUser } = useRoles();
   const { user, userRoles, signOut } = useAuth();
   const { profile } = useSettings();
   const { t } = useTranslation();
   const canImpersonate = actualRoles.includes('admin') || actualRoles.includes('owner');
+  const vendorBoardLabelKey = currentUser.roles.includes('manufacturer')
+    ? 'sidebar.manufacturerBoard'
+    : 'sidebar.vendorBoard';
 
   const filteredGroups = menuGroups
     .map(g => ({
       ...g,
-      items: g.items.filter(item => canAccess(item.module) && (item.module !== 'messages' || profile.canUseMessaging)),
+      items: g.items
+        .filter(item => canAccess(item.module) && (item.module !== 'messages' || profile.canUseMessaging))
+        .map(item => item.path === '/vendor-board' ? { ...item, label: vendorBoardLabelKey } : item),
     }))
     .filter(g => g.items.length > 0);
 

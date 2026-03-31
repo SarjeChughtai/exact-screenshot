@@ -7,6 +7,7 @@ import { LanguageToggle } from '@/components/LanguageToggle';
 import { ChevronRight } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import DealerOnboardingPrompt from './DealerOnboardingPrompt';
+import { useRoles } from '@/context/RoleContext';
 
 const routeLabelKeys: Record<string, string> = {
   '/': 'layout.dashboard',
@@ -78,17 +79,32 @@ const routeLabelFallbacks: Record<string, string> = {
   '/master-data': 'Master Data',
 };
 
-const getRouteTitle = (pathname: string, t: (key: string) => string) => {
-  const key = routeLabelKeys[pathname] || 'layout.dashboard';
+const getRouteTitle = (
+  pathname: string,
+  t: (key: string) => string,
+  {
+    isManufacturerView,
+  }: {
+    isManufacturerView: boolean;
+  },
+) => {
+  const key = pathname === '/vendor-board' && isManufacturerView
+    ? 'layout.manufacturerBoard'
+    : (routeLabelKeys[pathname] || 'layout.dashboard');
   const translated = t(key);
 
   if (translated !== key) return translated;
+  if (pathname === '/vendor-board' && isManufacturerView) {
+    return 'Manufacturer Board';
+  }
   return routeLabelFallbacks[pathname] || routeLabelFallbacks['/'];
 };
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const { t } = useTranslation();
+  const { currentUser } = useRoles();
+  const isManufacturerView = currentUser.roles.includes('manufacturer');
 
   return (
     <SidebarProvider>
@@ -100,7 +116,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <div className="flex items-center gap-2 text-primary-foreground flex-1">
               <ChevronRight className="h-4 w-4 opacity-50" />
               <span className="text-sm font-medium">
-                {getRouteTitle(location.pathname, t)}
+                {getRouteTitle(location.pathname, t, { isManufacturerView })}
               </span>
             </div>
             <div className="flex items-center gap-2">
