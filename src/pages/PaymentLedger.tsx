@@ -12,6 +12,7 @@ import { JobIdSelect } from '@/components/JobIdSelect';
 import { ClientSelect } from '@/components/ClientSelect';
 import { VendorSelect } from '@/components/VendorSelect';
 import { formatCurrency, getProvinceTax, PROVINCES } from '@/lib/calculations';
+import { useSharedJobs } from '@/lib/sharedJobs';
 import { supabase } from '@/integrations/supabase/client';
 import type { PaymentEntry, PaymentDirection, PaymentType } from '@/types';
 import { toast } from 'sonner';
@@ -55,6 +56,7 @@ function computeTax(amount: number, province: string, taxOverride: boolean, taxO
 
 export default function PaymentLedger() {
   const { payments, deals, clients, vendors, addPayment, updatePayment, refreshData, deletePayment } = useAppContext();
+  const { visibleJobs, visibleJobIds } = useSharedJobs({ allowedStates: ['deal'] });
   const [showForm, setShowForm] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncSummary, setSyncSummary] = useState('');
@@ -100,9 +102,9 @@ export default function PaymentLedger() {
   const resolveProvince = (f: typeof BLANK_FORM, jobId: string) => {
     if (!isClientDirection(f.direction)) {
       return f.vendorProvinceOverride || vendors.find(v => v.id === f.vendorId)?.province
-        || deals.find(d => d.jobId === jobId)?.province || 'ON';
+        || visibleDeals.find(d => d.jobId === jobId)?.province || 'ON';
     }
-    return deals.find(d => d.jobId === jobId)?.province || 'ON';
+    return visibleDeals.find(d => d.jobId === jobId)?.province || 'ON';
   };
 
   const save = () => {
@@ -190,7 +192,7 @@ export default function PaymentLedger() {
     setSyncSummary('');
     try {
       const existingKeys = new Set(
-        payments.map(p => `${p.jobId}|${p.date}|${p.direction}|${p.type}|${p.amountExclTax}|${p.referenceNumber}`)
+        visiblePayments.map(p => `${p.jobId}|${p.date}|${p.direction}|${p.type}|${p.amountExclTax}|${p.referenceNumber}`)
       );
       const { data, error } = await supabase.functions.invoke('qbo-sync', { body: { action: 'sync' } });
       if (error) throw new Error(error.message);
@@ -207,7 +209,7 @@ export default function PaymentLedger() {
           const clientVendorName = (item.clientVendorName ?? item.client_vendor_name ?? '') as string;
           const amountExclTax = Number(item.amountExclTax ?? item.amount_excl_tax ?? 0);
           if (!direction || !type || !Number.isFinite(amountExclTax) || amountExclTax <= 0) { skipped++; continue; }
-          const deal = deals.find(d => d.jobId === jobId);
+          const deal = visibleDeals.find(d => d.jobId === jobId);
           const province = (item.province ?? deal?.province ?? 'ON') as string;
           const prov = getProvinceTax(province);
           const taxAmount = typeof item.taxAmount === 'number' ? item.taxAmount : amountExclTax * prov.order_rate;
@@ -247,7 +249,7 @@ export default function PaymentLedger() {
   };
 
   const sortedPayments = useMemo(() => {
-    return [...payments].sort((a, b) => {
+    return [...visiblePayments].sort((a, b) => {
       if (sortCol === 'amountExclTax' || sortCol === 'taxAmount' || sortCol === 'totalInclTax') {
         const av = a[sortCol] ?? 0;
         const bv = b[sortCol] ?? 0;
@@ -257,7 +259,7 @@ export default function PaymentLedger() {
       const bv = String(b[sortCol] ?? '');
       return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
     });
-  }, [payments, sortCol, sortDir]);
+  }, [sortCol, sortDir, visiblePayments]);
 
   const SortIcon = ({ col }: { col: SortCol }) => {
     if (sortCol !== col) return <ArrowUpDown className="h-3 w-3 ml-1 inline opacity-40" />;
@@ -295,7 +297,7 @@ export default function PaymentLedger() {
             </div>
             <div>
               <Label className="text-xs">Job ID</Label>
-              <JobIdSelect value={form.jobId} onValueChange={v => set('jobId', v)} deals={deals} />
+          <JobIdSelect value={form.jobId} onValueChange={v => set('jobId', v)} deals={visibleDeals} allowedStates={['deal']} />
             </div>
             <div>
               <Label className="text-xs">Direction</Label>
@@ -477,8 +479,8 @@ export default function PaymentLedger() {
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Payment Details</DialogTitle></DialogHeader>
           {viewingPayment && (() => {
-            const deal = deals.find(d => d.jobId === viewingPayment.jobId);
-            const jobPayments = payments.filter(p => p.jobId === viewingPayment.jobId);
+            const deal = visibleDeals.find(d => d.jobId === viewingPayment.jobId);
+            const jobPayments = visiblePayments.filter(p => p.jobId === viewingPayment.jobId);
             const totalIn = jobPayments.filter(p => p.direction === 'Client Payment IN' || p.direction === 'Refund IN').reduce((s, p) => s + p.totalInclTax, 0);
             const totalOut = jobPayments.filter(p => p.direction === 'Vendor Payment OUT' || p.direction === 'Refund OUT').reduce((s, p) => s + p.totalInclTax, 0);
             const linkedClient = clients.find(c => c.id === viewingPayment.clientId);
@@ -582,7 +584,7 @@ export default function PaymentLedger() {
                   </div>
                   <div>
                     <Label className="text-xs">Job ID</Label>
-                    <JobIdSelect value={editForm.jobId} onValueChange={v => setEdit('jobId', v)} deals={deals} />
+                    <JobIdSelect value={editForm.jobId} onValueChange={v => setEdit('jobId', v)} deals={visibleDeals} allowedStates={['deal']} />
                   </div>
                   <div>
                     <Label className="text-xs">Direction</Label>
@@ -708,3 +710,12 @@ export default function PaymentLedger() {
     </div>
   );
 }
+  const visibleDeals = useMemo(
+    () => deals.filter(deal => visibleJobIds.has(deal.jobId)),
+    [deals, visibleJobIds],
+  );
+
+  const visiblePayments = useMemo(
+    () => payments.filter(payment => visibleJobIds.has(payment.jobId)),
+    [payments, visibleJobIds],
+  );

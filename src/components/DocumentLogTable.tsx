@@ -4,9 +4,10 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { formatCurrency, formatNumber, getProvinceTax } from '@/lib/calculations';
 import { useAppContext } from '@/context/AppContext';
+import { useSharedJobs } from '@/lib/sharedJobs';
 import { supabase } from '@/integrations/supabase/client';
 import { quoteFileFromRow } from '@/lib/supabaseMappers';
-import type { Deal, DocumentType, Quote, QuoteFileRecord, QuoteStatus } from '@/types';
+import type { Deal, DocumentType, Quote, QuoteFileRecord, QuoteStatus, SharedJobState } from '@/types';
 import { toast } from 'sonner';
 import { Archive, ChevronDown, ChevronRight, Download, Pencil, RotateCcw, Trash2 } from 'lucide-react';
 import { getQuoteFileUrl } from '@/lib/quoteFileStorage';
@@ -30,14 +31,24 @@ interface DocumentLogTableProps {
 export function DocumentLogTable({ title, subtitle, filterDocumentTypes, filterWorkflowStatuses }: DocumentLogTableProps) {
   const navigate = useNavigate();
   const { quotes, deals, updateQuote, deleteQuote, restoreQuote, addDeal, updateDeal } = useAppContext();
+  const { visibleJobIds, stateByJobId } = useSharedJobs();
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showTrash, setShowTrash] = useState(false);
   const [filesByDocumentId, setFilesByDocumentId] = useState<Record<string, QuoteFileRecord[]>>({});
 
-  const visibleQuotes = quotes.filter(quote =>
-    filterDocumentTypes.includes(quote.documentType) &&
-    (!filterWorkflowStatuses || filterWorkflowStatuses.includes(quote.workflowStatus))
-  );
+  const expectedStateByType: Record<DocumentType, SharedJobState> = {
+    rfq: 'rfq',
+    dealer_rfq: 'rfq',
+    internal_quote: 'internal_quote',
+    external_quote: 'external_quote',
+  };
+
+  const visibleQuotes = quotes.filter(quote => {
+    if (!filterDocumentTypes.includes(quote.documentType)) return false;
+    if (filterWorkflowStatuses && !filterWorkflowStatuses.includes(quote.workflowStatus)) return false;
+    if (!visibleJobIds.has(quote.jobId)) return false;
+    return stateByJobId[quote.jobId] === expectedStateByType[quote.documentType];
+  });
   const activeQuotes = visibleQuotes.filter(quote => !quote.isDeleted);
   const deletedQuotes = visibleQuotes.filter(quote => quote.isDeleted);
 

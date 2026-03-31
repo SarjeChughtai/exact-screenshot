@@ -288,7 +288,7 @@ export default function QuoteBuilder() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label className="text-xs">Job ID</Label>
-              <JobIdSelect value={form.jobId} onValueChange={value => set('jobId', value)} deals={deals} placeholder="Auto-generated" />
+              <JobIdSelect value={form.jobId} onValueChange={value => set('jobId', value)} deals={deals} allowedStates={['internal_quote', 'external_quote']} placeholder="Auto-generated" />
             </div>
             <div>
               <Label className="text-xs">Job Name</Label>

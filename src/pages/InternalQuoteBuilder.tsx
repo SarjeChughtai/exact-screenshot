@@ -1230,7 +1230,7 @@ export default function InternalQuoteBuilder() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label className="text-xs">Job ID</Label>
-                <JobIdSelect value={form.jobId} onValueChange={handleJobIdChange} deals={deals} placeholder="Auto / type to search" />
+                <JobIdSelect value={form.jobId} onValueChange={handleJobIdChange} deals={deals} allowedStates={['rfq', 'internal_quote']} placeholder="Auto / type to search" />
               </div>
               <div>
                 <Label className="text-xs">Job Name</Label>

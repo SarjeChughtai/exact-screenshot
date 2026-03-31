@@ -326,6 +326,37 @@
     "noDealers": "Aucun profil de concessionnaire trouvé."
   },
   "layout": {
-    "costData": "Données de coût"
+    "dashboard": "Tableau de bord",
+    "quickEstimator": "Estimateur rapide",
+    "estimatesLog": "Journal des estimations",
+    "internalQuoteBuilder": "Générateur de devis interne",
+    "internalQuoteLog": "Journal des devis internes",
+    "salesQuoteBuilder": "Générateur de devis client",
+    "quoteLog": "Journal des devis",
+    "quoteRfq": "Demande de devis",
+    "masterDeals": "Dossiers maîtres",
+    "dealPl": "P&L du dossier",
+    "commissionProfit": "Profit de commission",
+    "productionStatus": "État de production",
+    "internalCosts": "Coûts internes",
+    "paymentLedger": "Grand livre des paiements",
+    "clients": "Clients",
+    "vendors": "Fournisseurs",
+    "clientPayments": "Paiements clients",
+    "vendorPayments": "Paiements fournisseurs",
+    "projectedFinancials": "Prévisions financières",
+    "monthlyHst": "TVH mensuelle",
+    "commissionStatement": "Relevé de commission",
+    "freightBoard": "Tableau du fret",
+    "rfqBoard": "Tableau RFQ",
+    "dealerRfq": "RFQ concessionnaire",
+    "dealerLog": "Journal concessionnaire",
+    "vendorBoard": "Tableau fournisseur",
+    "auditLog": "Journal d'audit",
+    "importReview": "Révision d'import",
+    "settings": "Paramètres",
+    "masterData": "Données maîtres",
+    "costData": "Données de coût",
+    "messages": "Messages"
   }
 }

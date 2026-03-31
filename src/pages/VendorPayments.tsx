@@ -1,13 +1,15 @@
 import { useState } from 'react';
 import { useAppContext } from '@/context/AppContext';
 import { formatCurrency } from '@/lib/calculations';
+import { useSharedJobs } from '@/lib/sharedJobs';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 
 export default function VendorPayments() {
   const { deals, payments, internalCosts } = useAppContext();
+  const { visibleJobIds } = useSharedJobs({ allowedStates: ['deal'] });
   const [expandedJob, setExpandedJob] = useState<string | null>(null);
 
-  const rows = deals.map(d => {
+  const rows = deals.filter(deal => visibleJobIds.has(deal.jobId)).map(d => {
     const ic = internalCosts.find(c => c.jobId === d.jobId);
     const tscContract = ic?.trueMaterial || 0;
     const pmt15 = tscContract * 0.15;

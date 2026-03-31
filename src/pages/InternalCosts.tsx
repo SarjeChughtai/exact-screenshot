@@ -5,13 +5,16 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { JobIdSelect } from '@/components/JobIdSelect';
+import { useSharedJobs } from '@/lib/sharedJobs';
 import type { InternalCost } from '@/types';
 import { toast } from 'sonner';
 
 export default function InternalCosts() {
   const { deals, internalCosts, addInternalCost, updateInternalCost } = useAppContext();
+  const { visibleJobIds } = useSharedJobs({ allowedStates: ['deal'] });
 
-  const dealsWithoutCosts = deals.filter(d => !internalCosts.find(ic => ic.jobId === d.jobId));
+  const visibleDeals = deals.filter(deal => visibleJobIds.has(deal.jobId));
+  const dealsWithoutCosts = visibleDeals.filter(d => !internalCosts.find(ic => ic.jobId === d.jobId));
 
   const initCost = (jobId: string) => {
     if (internalCosts.find(ic => ic.jobId === jobId)) return;
@@ -37,8 +40,10 @@ export default function InternalCosts() {
     { label: 'Insulation', trueKey: 'trueInsulation', repKey: 'repInsulation' },
   ] as const;
 
-  const rows = internalCosts.map(ic => {
-    const deal = deals.find(d => d.jobId === ic.jobId);
+  const rows = internalCosts
+    .filter(internalCost => visibleJobIds.has(internalCost.jobId))
+    .map(ic => {
+    const deal = visibleDeals.find(d => d.jobId === ic.jobId);
     const trueTotal = ic.trueMaterial + ic.trueStructuralDrawing + ic.trueFoundationDrawing + ic.trueFreight + ic.trueInsulation;
     const repTotal = ic.repMaterial + ic.repStructuralDrawing + ic.repFoundationDrawing + ic.repFreight + ic.repInsulation;
     const trueGP = ic.salePrice - trueTotal;
@@ -53,7 +58,7 @@ export default function InternalCosts() {
           <h2 className="text-2xl font-bold text-foreground">Internal Costs</h2>
           <p className="text-sm text-muted-foreground mt-1">True vs. Rep-visible costs per deal — all fields editable inline</p>
         </div>
-        <JobIdSelect onValueChange={initCost} deals={dealsWithoutCosts} placeholder="+ Initialize costs for..." triggerClassName="w-56" />
+        <JobIdSelect onValueChange={initCost} deals={dealsWithoutCosts} allowedStates={['deal']} placeholder="+ Initialize costs for..." triggerClassName="w-56" />
       </div>
 
       <div className="bg-card border rounded-lg overflow-x-auto">

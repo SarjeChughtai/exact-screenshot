@@ -14,24 +14,7 @@ import { useAppContext } from '@/context/AppContext';
 import { useTranslation } from 'react-i18next';
 import { saveDocumentPdf } from '@/lib/documentPdf';
 import { notifyUsers } from '@/lib/workflowNotifications';
-
-type WallLocation = 'LEW' | 'REW' | 'FSW' | 'BSW';
-
-interface Opening {
-  id: string;
-  wall: WallLocation;
-  number: number;
-  width: string;
-  height: string;
-  notes: string;
-}
-
-const WALL_LABELS: Record<WallLocation, string> = {
-  LEW: 'Left End Wall',
-  REW: 'Right End Wall',
-  FSW: 'Front Side Wall',
-  BSW: 'Back Side Wall',
-};
+import { WALL_LABELS, createOpening, renumberOpenings, type RFQOpening, type WallLocation } from '@/lib/rfqShared';
 
 const INITIAL_FORM = {
   clientName: '',
@@ -70,7 +53,7 @@ export default function DealerRFQ() {
     contactEmail: dealerProfile?.contactEmail || user?.email || '',
     contactPhone: dealerProfile?.contactPhone || '',
   });
-  const [openings, setOpenings] = useState<Opening[]>([]);
+  const [openings, setOpenings] = useState<RFQOpening[]>([]);
 
   useEffect(() => {
     if (!dealerProfile) return;
@@ -97,15 +80,7 @@ export default function DealerRFQ() {
   };
 
   const addOpening = (wall: WallLocation) => {
-    const number = openings.filter(opening => opening.wall === wall).length + 1;
-    setOpenings(current => [...current, {
-      id: crypto.randomUUID(),
-      wall,
-      number,
-      width: '',
-      height: '',
-      notes: '',
-    }]);
+    setOpenings(current => [...current, createOpening(wall, current)]);
   };
 
   const updateOpening = (id: string, key: keyof Opening, value: string) => {
@@ -113,12 +88,7 @@ export default function DealerRFQ() {
   };
 
   const removeOpening = (id: string) => {
-    const remaining = openings.filter(opening => opening.id !== id);
-    const renumbered = remaining.map(opening => ({
-      ...opening,
-      number: remaining.filter(item => item.wall === opening.wall).findIndex(item => item.id === opening.id) + 1,
-    }));
-    setOpenings(renumbered);
+    setOpenings(current => renumberOpenings(current.filter(opening => opening.id !== id)));
   };
 
   const handleSubmit = async () => {

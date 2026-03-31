@@ -1,14 +1,16 @@
 import { useState } from 'react';
 import { useAppContext } from '@/context/AppContext';
 import { formatCurrency } from '@/lib/calculations';
+import { useSharedJobs } from '@/lib/sharedJobs';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 
 export default function DealPL() {
   const { deals, payments } = useAppContext();
+  const { visibleJobIds } = useSharedJobs({ allowedStates: ['deal'] });
   const [expandedJob, setExpandedJob] = useState<string | null>(null);
 
   // Only show actual deals, not quotes
-  const rows = deals.map(d => {
+  const rows = deals.filter(deal => visibleJobIds.has(deal.jobId)).map(d => {
     const clientIn = payments.filter(p => p.jobId === d.jobId && (p.direction === 'Client Payment IN' || p.direction === 'Refund IN')).reduce((s, p) => s + p.amountExclTax, 0);
     const vendorOut = payments.filter(p => p.jobId === d.jobId && (p.direction === 'Vendor Payment OUT' || p.direction === 'Refund OUT')).reduce((s, p) => s + p.amountExclTax, 0);
     const netCash = clientIn - vendorOut;

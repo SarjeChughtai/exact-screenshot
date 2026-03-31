@@ -3,6 +3,7 @@ import { useAppContext } from '@/context/AppContext';
 import { useRoles } from '@/context/RoleContext';
 import { formatCurrency, formatNumber } from '@/lib/calculations';
 import { exportToCSV, csvCurrency } from '@/lib/csvExport';
+import { useSharedJobs } from '@/lib/sharedJobs';
 import { PageActions } from '@/components/PageActions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,6 +18,7 @@ const STATUSES: RFQStatus[] = ['Draft', 'Sent', 'Quoted', 'Accepted', 'Declined'
 export default function RFQWorkflow() {
   const { rfqs, addRFQ, updateRFQ, deleteRFQ, deals, freight, updateFreight, addFreight } = useAppContext();
   const { hasAnyRole } = useRoles();
+  const { visibleJobIds } = useSharedJobs({ allowedStates: ['deal'] });
   const [showForm, setShowForm] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -147,11 +149,18 @@ export default function RFQWorkflow() {
     exportToCSV('freight_rfq_log', headers, rows);
   };
 
-  const sortedRFQs = useMemo(() => {
-    return [...rfqs].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [rfqs]);
+  const visibleDeals = useMemo(
+    () => deals.filter(deal => visibleJobIds.has(deal.jobId)),
+    [deals, visibleJobIds],
+  );
 
-  const activeDeals = deals.filter(d => d.dealStatus !== 'Cancelled' && d.dealStatus !== 'Complete');
+  const sortedRFQs = useMemo(() => {
+    return [...rfqs]
+      .filter(rfq => visibleJobIds.has(rfq.jobId))
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }, [rfqs, visibleJobIds]);
+
+  const activeDeals = visibleDeals.filter(d => d.dealStatus !== 'Cancelled' && d.dealStatus !== 'Complete');
 
   return (
     <div className="space-y-6">
@@ -179,7 +188,7 @@ export default function RFQWorkflow() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
               <label className="text-xs font-medium mb-1 block">Job ID</label>
-              <JobIdSelect value={form.jobId} onValueChange={handleJobSelect} deals={activeDeals} placeholder="Select Deal" triggerClassName="input-blue h-9" />
+              <JobIdSelect value={form.jobId} onValueChange={handleJobSelect} deals={activeDeals} allowedStates={['deal']} placeholder="Select Deal" triggerClassName="input-blue h-9" />
             </div>
             <div>
               <label className="text-xs font-medium mb-1 block">Building Size</label>

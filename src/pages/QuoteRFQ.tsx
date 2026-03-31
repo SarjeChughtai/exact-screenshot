@@ -17,24 +17,7 @@ import { PersonnelSelect } from '@/components/PersonnelSelect';
 import { ClientSelect } from '@/components/ClientSelect';
 import type { Estimate, Quote } from '@/types';
 import { saveDocumentPdf } from '@/lib/documentPdf';
-
-type WallLocation = 'LEW' | 'REW' | 'FSW' | 'BSW';
-
-interface Opening {
-  id: string;
-  wall: WallLocation;
-  number: number;
-  width: string;
-  height: string;
-  notes: string;
-}
-
-const WALL_LABELS: Record<WallLocation, string> = {
-  LEW: 'Left End Wall',
-  REW: 'Right End Wall',
-  FSW: 'Front Side Wall',
-  BSW: 'Back Side Wall',
-};
+import { WALL_LABELS, createOpening, renumberOpenings, type RFQOpening, type WallLocation } from '@/lib/rfqShared';
 
 const INITIAL_FORM = {
   clientId: '',
@@ -112,7 +95,7 @@ export default function QuoteRFQ() {
   const { deals, quotes, estimates, addQuote, updateQuote, allocateJobId } = useAppContext();
   const { settings } = useSettings();
   const [form, setForm] = useState(INITIAL_FORM);
-  const [openings, setOpenings] = useState<Opening[]>([]);
+  const [openings, setOpenings] = useState<RFQOpening[]>([]);
   const [selectedEstimateId, setSelectedEstimateId] = useState(searchParams.get('estimateId') || '');
 
   const editingQuoteId = searchParams.get('quoteId');
@@ -159,15 +142,7 @@ export default function QuoteRFQ() {
   };
 
   const addOpening = (wall: WallLocation) => {
-    const countForWall = openings.filter(opening => opening.wall === wall).length + 1;
-    setOpenings(current => [...current, {
-      id: crypto.randomUUID(),
-      wall,
-      number: countForWall,
-      width: '',
-      height: '',
-      notes: '',
-    }]);
+    setOpenings(current => [...current, createOpening(wall, current)]);
   };
 
   const updateOpening = (id: string, key: keyof Opening, value: string) => {
@@ -175,12 +150,7 @@ export default function QuoteRFQ() {
   };
 
   const removeOpening = (id: string) => {
-    const next = openings.filter(opening => opening.id !== id);
-    const renumbered = next.map(opening => ({
-      ...opening,
-      number: next.filter(item => item.wall === opening.wall).findIndex(item => item.id === opening.id) + 1,
-    }));
-    setOpenings(renumbered);
+    setOpenings(current => renumberOpenings(current.filter(opening => opening.id !== id)));
   };
 
   const getOpeningName = (opening: Opening) => `${opening.wall} #${opening.number}`;
@@ -368,7 +338,7 @@ export default function QuoteRFQ() {
               </div>
               <div>
                 <Label className="text-xs">Job ID</Label>
-                <JobIdSelect value={form.jobId} onValueChange={value => set('jobId', value)} deals={deals} placeholder="Auto-generated" />
+                <JobIdSelect value={form.jobId} onValueChange={value => set('jobId', value)} deals={deals} allowedStates={['rfq']} placeholder="Auto-generated" />
               </div>
               <div>
                 <Label className="text-xs">Job Name</Label>

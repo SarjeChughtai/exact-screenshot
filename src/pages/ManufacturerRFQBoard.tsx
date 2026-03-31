@@ -154,7 +154,7 @@ export default function ManufacturerRFQBoard() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label className="text-xs">Link to Deal (optional)</Label>
-              <JobIdSelect value={form.jobId || ''} onChange={handleJobSelect} />
+              <JobIdSelect value={form.jobId || ''} onChange={handleJobSelect} deals={deals} allowedStates={['deal']} />
             </div>
             <div>
               <Label className="text-xs">Title *</Label>
