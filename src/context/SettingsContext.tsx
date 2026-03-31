@@ -47,6 +47,7 @@ export interface AppSettings {
   insulationStatuses: string[];
   freightStatuses: string[];
   personnel: PersonnelEntry[];
+  externalPersonnel: PersonnelEntry[];
   clients: ClientEntry[];
   dealers: DealerProfile[];
 }
@@ -78,6 +79,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   insulationStatuses: ['Requested', 'Ordered', 'Delivered', 'N/A'],
   freightStatuses: ['RFQ', 'Quoted', 'Booked', 'Delivered'],
   personnel: [],
+  externalPersonnel: [],
   clients: [],
   dealers: [],
 };
@@ -124,6 +126,7 @@ const SETTINGS_KEY_MAP: Record<keyof AppSettings, string | null> = {
   insulationStatuses: 'insulation_statuses',
   freightStatuses: 'freight_statuses',
   personnel: null,
+  externalPersonnel: 'manual_personnel',
   clients: 'clients',
   dealers: 'dealers',
 };
@@ -170,8 +173,34 @@ function resolvePersonnelName(options: {
 
   return `User ${options.userId.slice(0, 8)}`;
 }
+
+function isManualPersonnelEntry(entry: PersonnelEntry) {
+  return entry.id.startsWith('manual:');
+}
+
+function normalizeManualPersonnelEntry(entry: any, index: number): PersonnelEntry {
+  const roles = Array.isArray(entry?.roles) && entry.roles.length
+    ? entry.roles.filter((role: string) => ['sales_rep', 'estimator', 'team_lead'].includes(role))
+    : [entry?.role || 'sales_rep'];
+  const normalizedRoles = (roles.length ? roles : ['sales_rep']) as PersonnelRole[];
+
+  return {
+    id: String(entry?.id || `manual:${index}`),
+    name: String(entry?.name || '').trim(),
+    email: String(entry?.email || '').trim(),
+    role: normalizedRoles[0],
+    roles: normalizedRoles,
+  };
+}
+
+function mergePersonnelLists(platformPersonnel: PersonnelEntry[], externalPersonnel: PersonnelEntry[]) {
+  return [...platformPersonnel, ...externalPersonnel]
+    .filter(entry => entry.name || entry.email)
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
 function mergeSettingsRows(rows: { key: string; value: any }[], personnel: PersonnelEntry[]): AppSettings {
-  const next = { ...DEFAULT_SETTINGS, personnel };
+  const next = { ...DEFAULT_SETTINGS, personnel: [], externalPersonnel: [] };
   const byKey = new Map(rows.map(row => [row.key, row.value]));
 
   const pricing = byKey.get('pricing') || {};
@@ -214,6 +243,15 @@ function mergeSettingsRows(rows: { key: string; value: any }[], personnel: Perso
     }
   }
 
+  const manualPersonnel = byKey.get('manual_personnel');
+  if (Array.isArray(manualPersonnel)) {
+    next.externalPersonnel = manualPersonnel
+      .map(normalizeManualPersonnelEntry)
+      .filter(entry => entry.name || entry.email);
+  }
+
+  next.personnel = mergePersonnelLists(personnel, next.externalPersonnel);
+
   return next;
 }
 
@@ -231,7 +269,7 @@ async function fetchPersonnel(): Promise<PersonnelEntry[]> {
   if (!ids.length) return [];
 
   let displayInfo: any[] = [];
-  const { data: rpcData, error: rpcError } = await (supabase.rpc as any)('get_personnel_display_info', { user_ids: ids });
+  const { data: rpcData, error: rpcError } = await (supabase.rpc as any)('get_user_directory', { user_ids: ids });
   if (!rpcError && Array.isArray(rpcData)) {
     displayInfo = rpcData;
   }
@@ -369,6 +407,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
   const updateSettings = useCallback(async (updates: Partial<AppSettings>) => {
     const next = { ...settings, ...updates };
+    if (updates.externalPersonnel) {
+      const platformPersonnel = settings.personnel.filter(entry => !isManualPersonnelEntry(entry));
+      next.personnel = mergePersonnelLists(platformPersonnel, updates.externalPersonnel);
+    }
     setSettings(next);
     await persistSettings(next, updates);
     if ('personnel' in updates) {

@@ -64,7 +64,15 @@ interface UserWithRoles {
   roles: UserRole[];
 }
 
-export function UserManagement() {
+interface UserManagementProps {
+  managedRoles?: string[];
+  hidePendingRequests?: boolean;
+}
+
+export function UserManagement({
+  managedRoles,
+  hidePendingRequests = false,
+}: UserManagementProps = {}) {
   const { user, hasAnyRole } = useAuth();
   const isOwner = hasAnyRole(['owner']);
   const isAdmin = hasAnyRole(['admin', 'owner']);
@@ -103,7 +111,7 @@ export function UserManagement() {
       const allEmails: Record<string, string> = {};
       const allNames: Record<string, string> = {};
 
-      const { data: displayInfo } = await supabase.rpc('get_user_display_info', {
+      const { data: displayInfo } = await (supabase.rpc as any)('get_user_directory', {
         user_ids: userIds,
       });
 
@@ -251,58 +259,71 @@ export function UserManagement() {
   const availableRoles = isOwner
     ? ['admin', 'owner', ...ASSIGNABLE_ROLES]
     : ASSIGNABLE_ROLES; // admins can only assign non-admin, non-owner roles
+  const filteredAvailableRoles = managedRoles
+    ? availableRoles.filter(role => managedRoles.includes(role))
+    : availableRoles;
 
   return (
     <div className="space-y-6">
-      {/* Pending Access Requests */}
+      {!hidePendingRequests && (
+        <div className="bg-card border rounded-lg p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-card-foreground">Pending Access Requests</h3>
+            <Button variant="ghost" size="sm" onClick={fetchData} disabled={loading}>
+              <RefreshCw className={`h-3 w-3 mr-1 ${loading ? 'animate-spin' : ''}`} />Refresh
+            </Button>
+          </div>
+          {requests.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No pending requests</p>
+          ) : (
+            <div className="space-y-2">
+              {requests.map(req => (
+                <div key={req.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-md">
+                  <div>
+                    {req.name && req.name !== req.email ? (
+                      <>
+                        <p className="text-sm font-medium">{req.name}</p>
+                        <p className="text-xs text-muted-foreground">{req.email}</p>
+                      </>
+                    ) : (
+                      <p className="text-sm font-medium">{req.email}</p>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      Requesting: <Badge variant="outline" className="ml-1">{ROLE_LABELS[req.requested_role] || req.requested_role}</Badge>
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {new Date(req.created_at).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="default" onClick={() => approveRequest(req)}>
+                      <Check className="h-3 w-3 mr-1" />Approve
+                    </Button>
+                    <Button size="sm" variant="destructive" onClick={() => denyRequest(req)}>
+                      <X className="h-3 w-3 mr-1" />Deny
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* User Roles Management */}
       <div className="bg-card border rounded-lg p-5 space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-card-foreground">Pending Access Requests</h3>
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="text-sm font-semibold text-card-foreground">
+            {managedRoles ? 'Personnel Access' : 'User Roles'}
+          </h3>
           <Button variant="ghost" size="sm" onClick={fetchData} disabled={loading}>
             <RefreshCw className={`h-3 w-3 mr-1 ${loading ? 'animate-spin' : ''}`} />Refresh
           </Button>
         </div>
-        {requests.length === 0 ? (
-          <p className="text-xs text-muted-foreground">No pending requests</p>
-        ) : (
-          <div className="space-y-2">
-            {requests.map(req => (
-              <div key={req.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-md">
-                <div>
-                  {req.name && req.name !== req.email ? (
-                    <>
-                      <p className="text-sm font-medium">{req.name}</p>
-                      <p className="text-xs text-muted-foreground">{req.email}</p>
-                    </>
-                  ) : (
-                    <p className="text-sm font-medium">{req.email}</p>
-                  )}
-                  <p className="text-xs text-muted-foreground">
-                    Requesting: <Badge variant="outline" className="ml-1">{ROLE_LABELS[req.requested_role] || req.requested_role}</Badge>
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {new Date(req.created_at).toLocaleDateString()}
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  <Button size="sm" variant="default" onClick={() => approveRequest(req)}>
-                    <Check className="h-3 w-3 mr-1" />Approve
-                  </Button>
-                  <Button size="sm" variant="destructive" onClick={() => denyRequest(req)}>
-                    <X className="h-3 w-3 mr-1" />Deny
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* User Roles Management */}
-      <div className="bg-card border rounded-lg p-5 space-y-4">
-        <h3 className="text-sm font-semibold text-card-foreground">User Roles</h3>
         {users.length === 0 ? (
-          <p className="text-xs text-muted-foreground">No users found</p>
+          <p className="text-xs text-muted-foreground">
+            {managedRoles ? 'No personnel found' : 'No users found'}
+          </p>
         ) : (
           <div className="space-y-3">
             {users.map(u => (
@@ -321,7 +342,9 @@ export function UserManagement() {
 
                 </div>
                 <div className="flex flex-wrap gap-1.5">
-                  {u.roles.map(r => (
+                  {u.roles
+                    .filter(r => !managedRoles || managedRoles.includes(r.role))
+                    .map(r => (
                     <Badge key={r.id} variant="secondary" className="text-xs flex items-center gap-1">
                       {ROLE_LABELS[r.role] || r.role}
                       <button
@@ -333,6 +356,9 @@ export function UserManagement() {
                       </button>
                     </Badge>
                   ))}
+                  {managedRoles && !u.roles.some(r => managedRoles.includes(r.role)) && (
+                    <span className="text-xs text-muted-foreground">No personnel access</span>
+                  )}
                 </div>
                 <div className="flex gap-2 items-center">
                   <Select
@@ -341,7 +367,7 @@ export function UserManagement() {
                   >
                     <SelectTrigger className="h-7 w-40 text-xs"><SelectValue placeholder="Add role..." /></SelectTrigger>
                     <SelectContent>
-                      {availableRoles
+                      {filteredAvailableRoles
                         .filter(r => !u.roles.some(ur => ur.role === r))
                         .map(r => (
                           <SelectItem key={r} value={r}>{ROLE_LABELS[r] || r}</SelectItem>

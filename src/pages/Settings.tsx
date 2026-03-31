@@ -8,9 +8,8 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { Download, Upload, Plus, Trash2 } from 'lucide-react';
+import { Download, Upload } from 'lucide-react';
 import { UserManagement } from '@/components/UserManagement';
 import CRMSettings from '@/components/CRMSettings';
 import QBOSettings from '@/components/QBOSettings';
@@ -30,29 +29,51 @@ export default function Settings() {
   const isDealer = hasAnyRole('dealer');
   const [pendingEmail, setPendingEmail] = useState(user?.email || '');
   const [pendingPassword, setPendingPassword] = useState('');
+  const [newExternalPerson, setNewExternalPerson] = useState({
+    name: '',
+    email: '',
+    roles: ['sales_rep'] as PersonnelEntry['roles'],
+  });
 
-  const [newPerson, setNewPerson] = useState({ name: '', email: '', roles: ['sales_rep'] as PersonnelEntry['roles'] });
-
-  const toggleNewRole = (role: PersonnelEntry['roles'][number]) => {
-    setNewPerson(p => ({
-      ...p,
-      roles: p.roles.includes(role) ? p.roles.filter(r => r !== role) : [...p.roles, role],
+  const toggleExternalRole = (role: PersonnelEntry['roles'][number]) => {
+    setNewExternalPerson(current => ({
+      ...current,
+      roles: current.roles.includes(role)
+        ? current.roles.filter(item => item !== role)
+        : [...current.roles, role],
     }));
   };
 
-  const addPerson = () => {
-    if (!newPerson.name || newPerson.roles.length === 0) { 
-      toast.error(t('settings.personnel.toast.required')); 
-      return; 
+  const addExternalPerson = async () => {
+    if (!newExternalPerson.name.trim() || newExternalPerson.roles.length === 0) {
+      toast.error(t('settings.personnel.toast.required'));
+      return;
     }
-    const entry: PersonnelEntry = { id: crypto.randomUUID(), name: newPerson.name, email: newPerson.email, role: newPerson.roles[0], roles: newPerson.roles };
-    updateSettings({ personnel: [...settings.personnel, entry] });
-    setNewPerson({ name: '', email: '', roles: ['sales_rep'] });
+
+    const nextEntry: PersonnelEntry = {
+      id: `manual:${crypto.randomUUID()}`,
+      name: newExternalPerson.name.trim(),
+      email: newExternalPerson.email.trim(),
+      role: newExternalPerson.roles[0],
+      roles: newExternalPerson.roles,
+    };
+
+    await updateSettings({
+      externalPersonnel: [...settings.externalPersonnel, nextEntry],
+    });
+
+    setNewExternalPerson({
+      name: '',
+      email: '',
+      roles: ['sales_rep'],
+    });
     toast.success(t('settings.personnel.toast.added'));
   };
 
-  const removePerson = (id: string) => {
-    updateSettings({ personnel: settings.personnel.filter(p => p.id !== id) });
+  const removeExternalPerson = async (id: string) => {
+    await updateSettings({
+      externalPersonnel: settings.externalPersonnel.filter(person => person.id !== id),
+    });
   };
 
   const exportAllData = () => {
@@ -309,6 +330,9 @@ export default function Settings() {
         <TabsContent value="personnel" className="space-y-4">
           <div className="bg-card border rounded-lg p-5 space-y-4">
             <h3 className="text-sm font-semibold text-card-foreground">{t('settings.personnel.title')}</h3>
+            <p className="text-xs text-muted-foreground">
+              Personnel is now driven by user access roles. Add or remove `Sales Rep` and `Estimator` access here and the personnel list will update automatically.
+            </p>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -327,9 +351,11 @@ export default function Settings() {
                       <td className="py-2 text-xs capitalize">{(p.roles || [p.role]).map(r => r.replace('_', ' ')).join(', ')}</td>
                       {isAdmin && (
                         <td className="py-2">
-                          <Button variant="ghost" size="sm" onClick={() => removePerson(p.id)}>
-                            <Trash2 className="h-3 w-3 text-destructive" />
-                          </Button>
+                          {p.id.startsWith('manual:') && (
+                            <Button variant="ghost" size="sm" onClick={() => void removeExternalPerson(p.id)}>
+                              Remove
+                            </Button>
+                          )}
                         </td>
                       )}
                     </tr>
@@ -338,23 +364,57 @@ export default function Settings() {
               </table>
             </div>
             {isAdmin && (
-              <div className="flex flex-wrap gap-2 items-end">
-                <div><Label className="text-xs">{t('settings.personnel.headers.name')}</Label><Input className="input-blue mt-1 h-8" value={newPerson.name} onChange={e => setNewPerson(p => ({ ...p, name: e.target.value }))} /></div>
-                <div><Label className="text-xs">{t('settings.personnel.headers.email')}</Label><Input className="input-blue mt-1 h-8" value={newPerson.email} onChange={e => setNewPerson(p => ({ ...p, email: e.target.value }))} /></div>
+              <div className="border rounded-lg p-4 space-y-3">
                 <div>
-                  <Label className="text-xs">{t('settings.personnel.headers.role')}</Label>
-                  <div className="flex gap-2 mt-1">
-                    {(['sales_rep', 'estimator', 'team_lead'] as const).map(r => (
-                      <label key={r} className="flex items-center gap-1 text-xs cursor-pointer">
-                        <input type="checkbox" checked={newPerson.roles.includes(r)} onChange={() => toggleNewRole(r)} className="rounded" />
-                        {r === 'sales_rep' ? t('auth.salesRep') : r === 'estimator' ? t('settings.tabs.estimator') : t('auth.teamLead') || 'Team Lead'}
-                      </label>
-                    ))}
-                  </div>
+                  <h4 className="text-sm font-semibold text-card-foreground">Add External Personnel</h4>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Use this for sales reps or estimators who should appear in the personnel list but do not have a platform account.
+                  </p>
                 </div>
-                <Button size="sm" onClick={addPerson}><Plus className="h-3 w-3 mr-1" />{t('settings.personnel.addPerson')}</Button>
+                <div className="flex flex-wrap gap-3 items-end">
+                  <div>
+                    <Label className="text-xs">{t('settings.personnel.headers.name')}</Label>
+                    <Input
+                      className="input-blue mt-1 h-8"
+                      value={newExternalPerson.name}
+                      onChange={event => setNewExternalPerson(current => ({ ...current, name: event.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs">{t('settings.personnel.headers.email')}</Label>
+                    <Input
+                      className="input-blue mt-1 h-8"
+                      value={newExternalPerson.email}
+                      onChange={event => setNewExternalPerson(current => ({ ...current, email: event.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs">{t('settings.personnel.headers.role')}</Label>
+                    <div className="flex gap-2 mt-2">
+                      {(['sales_rep', 'estimator', 'team_lead'] as const).map(role => (
+                        <label key={role} className="flex items-center gap-1 text-xs cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={newExternalPerson.roles.includes(role)}
+                            onChange={() => toggleExternalRole(role)}
+                            className="rounded"
+                          />
+                          {role === 'sales_rep'
+                            ? t('auth.salesRep')
+                            : role === 'estimator'
+                              ? t('settings.tabs.estimator')
+                              : t('auth.teamLead') || 'Team Lead'}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  <Button size="sm" onClick={() => void addExternalPerson()}>
+                    Add External Person
+                  </Button>
+                </div>
               </div>
             )}
+            {isAdmin && <UserManagement managedRoles={['sales_rep', 'estimator']} hidePendingRequests />}
           </div>
         </TabsContent>
 
