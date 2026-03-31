@@ -1,126 +1,171 @@
 import { useState, useEffect } from 'react';
-import { useSettings, type DealerProfile } from '@/context/SettingsContext';
-import { useAuth } from '@/context/AuthContext';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Save, Store, Mail, Phone, Hash } from 'lucide-react';
+import { useSettings } from '@/context/SettingsContext';
+import { useAuth } from '@/context/AuthContext';
 import { toast } from 'sonner';
-import { Store, Save } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 
 export default function DealerProfileSettings() {
+  const { t } = useTranslation();
   const { settings, updateSettings } = useSettings();
   const { user } = useAuth();
   const navigate = useNavigate();
-
-  const [form, setForm] = useState<Partial<DealerProfile>>({
-    clientId: '',
-    contactEmail: user?.email || '',
+  
+  const [profile, setProfile] = useState({
+    businessName: '',
+    contactEmail: '',
     contactPhone: '',
+    clientId: '',
     billingInfo: '',
   });
 
+  const [loading, setLoading] = useState(false);
+
   useEffect(() => {
-    if (user?.id) {
-      const existing = settings.dealers?.find(d => d.userId === user.id);
+    if (user && settings.dealers) {
+      const existing = settings.dealers.find(d => d.userId === user.id);
       if (existing) {
-        setForm({
-          clientId: existing.clientId || '',
+        setProfile({
+          businessName: existing.businessName || '',
           contactEmail: existing.contactEmail || user.email || '',
           contactPhone: existing.contactPhone || '',
+          clientId: existing.clientId || '',
           billingInfo: existing.billingInfo || '',
         });
+      } else {
+        setProfile(p => ({ ...p, contactEmail: user.email || '' }));
       }
     }
-  }, [user?.id, settings.dealers, user?.email]);
+  }, [user, settings.dealers]);
 
-  const handleSave = () => {
-    if (!user?.id) return;
-    if (!form.clientId?.trim()) {
-      toast.error('Client ID is required');
+  const handleSave = async () => {
+    if (!user) return;
+    if (!profile.clientId.trim()) {
+      toast.error(t('dealerProfile.toast.clientIdRequired') || 'Client ID is required');
       return;
     }
-    if (!form.contactEmail?.trim()) {
-      toast.error('Contact Email is required');
-      return;
-    }
+    
+    setLoading(true);
 
-    const newProfile: DealerProfile = {
+    const updatedDealers = [...(settings.dealers || [])];
+    const index = updatedDealers.findIndex(d => d.userId === user.id);
+    
+    const newProfile = {
+      ...profile,
       userId: user.id,
-      clientId: form.clientId,
-      contactEmail: form.contactEmail,
-      contactPhone: form.contactPhone || '',
-      billingInfo: form.billingInfo || '',
+      updatedAt: new Date().toISOString(),
     };
 
-    const updatedDealers = (settings.dealers || []).filter(d => d.userId !== user.id);
-    updatedDealers.push(newProfile);
+    if (index >= 0) {
+      updatedDealers[index] = newProfile as any;
+    } else {
+      updatedDealers.push(newProfile as any);
+    }
 
     updateSettings({ dealers: updatedDealers });
-    toast.success('Dealer profile saved consistently');
+    
+    // Simulate API delay
+    await new Promise(resolve => setTimeout(resolve, 800));
+    setLoading(false);
+    toast.success(t('dealerProfile.toast.success'));
     
     // Redirect back to dealer-log if they were forced here
     navigate('/dealer-log');
   };
 
   return (
-    <div className="bg-card border rounded-lg p-5 space-y-4">
-      <div className="flex items-center gap-2 pb-2 border-b border-border">
-        <Store className="h-5 w-5 text-primary" />
-        <h3 className="text-sm font-semibold text-card-foreground">My Dealer Profile</h3>
-      </div>
-      <p className="text-xs text-muted-foreground">Setup your default contact information and custom billing references. This information will be used for all your RFQs.</p>
-
-      <div className="space-y-4 mt-4 max-w-xl">
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <Label className="text-xs font-semibold">Client ID *</Label>
-            <Input 
-              className="input-blue mt-1 h-9 bg-background" 
-              value={form.clientId} 
-              onChange={e => setForm(f => ({ ...f, clientId: e.target.value }))} 
-              placeholder="e.g. DL-1004"
-            />
-            <p className="text-[10px] text-muted-foreground mt-1">Your assigned or preferred Client ID</p>
-          </div>
+    <Card className="border-border/50 shadow-sm">
+      <CardHeader>
+        <div className="flex items-center gap-2 mb-1">
+          <Store className="h-5 w-5 text-primary" />
+          <CardTitle className="text-xl">{t('dealerProfile.title')}</CardTitle>
         </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <Label className="text-xs font-semibold">Contact Email *</Label>
+        <CardDescription>
+          {t('dealerProfile.subtitle')}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        <div className="grid gap-6 md:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="biz-name" className="flex items-center gap-2">
+              <Store className="h-3.5 w-3.5" /> {t('dealerProfile.businessName')}
+            </Label>
             <Input 
-              className="input-blue mt-1 h-9 bg-background" 
+              id="biz-name" 
+              placeholder={t('dealerProfile.businessNamePlaceholder')}
+              value={profile.businessName}
+              onChange={e => setProfile({...profile, businessName: e.target.value})}
+              className="input-blue"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="client-id" className="flex items-center gap-2">
+              <Hash className="h-3.5 w-3.5" /> {t('dealerProfile.clientId')}
+            </Label>
+            <Input 
+              id="client-id" 
+              placeholder="DLR-XXXX"
+              value={profile.clientId}
+              onChange={e => setProfile({...profile, clientId: e.target.value})}
+              className="input-blue"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="contact-email" className="flex items-center gap-2">
+              <Mail className="h-3.5 w-3.5" /> {t('dealerProfile.contactEmail')}
+            </Label>
+            <Input 
+              id="contact-email" 
               type="email"
-              value={form.contactEmail} 
-              onChange={e => setForm(f => ({ ...f, contactEmail: e.target.value }))} 
+              placeholder="sales@yourcompany.com"
+              value={profile.contactEmail}
+              onChange={e => setProfile({...profile, contactEmail: e.target.value})}
+              className="input-blue"
             />
           </div>
-          <div>
-            <Label className="text-xs font-semibold">Contact Phone</Label>
+
+          <div className="space-y-2">
+            <Label htmlFor="contact-phone" className="flex items-center gap-2">
+              <Phone className="h-3.5 w-3.5" /> {t('dealerProfile.contactPhone')}
+            </Label>
             <Input 
-              className="input-blue mt-1 h-9 bg-background" 
-              value={form.contactPhone} 
-              onChange={e => setForm(f => ({ ...f, contactPhone: e.target.value }))} 
-              placeholder="(555) 555-5555"
+              id="contact-phone" 
+              placeholder="(555) 000-0000"
+              value={profile.contactPhone}
+              onChange={e => setProfile({...profile, contactPhone: e.target.value})}
+              className="input-blue"
             />
           </div>
         </div>
 
-        <div>
-          <Label className="text-xs font-semibold">Personal Billing / Account Info</Label>
+        <div className="space-y-2">
+          <Label htmlFor="billing-info" className="flex items-center gap-2">
+            <Hash className="h-3.5 w-3.5" /> {t('dealerProfile.billingInfo') || 'Personal Billing / Account Info'}
+          </Label>
           <Textarea 
+            id="billing-info"
             className="input-blue mt-1 min-h-[100px] bg-background text-sm" 
-            value={form.billingInfo} 
-            onChange={e => setForm(f => ({ ...f, billingInfo: e.target.value }))} 
-            placeholder="Enter your personal billing information, address, or payment references..."
+            value={profile.billingInfo} 
+            onChange={e => setProfile({...profile, billingInfo: e.target.value})} 
+            placeholder={t('dealerProfile.billingInfoPlaceholder') || "Enter your personal billing information, address, or payment references..."}
           />
         </div>
 
-        <Button onClick={handleSave} className="w-full sm:w-auto">
-          <Save className="h-4 w-4 mr-2" /> Save Profile
-        </Button>
-      </div>
-    </div>
+        <div className="pt-4 flex justify-end">
+          <Button onClick={handleSave} disabled={loading} className="px-8">
+            <Save className="h-4 w-4 mr-2" />
+            {loading ? t('common.saving') : t('dealerProfile.saveProfile')}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
