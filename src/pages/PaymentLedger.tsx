@@ -56,7 +56,7 @@ function computeTax(amount: number, province: string, taxOverride: boolean, taxO
 
 export default function PaymentLedger() {
   const { payments, deals, clients, vendors, addPayment, updatePayment, refreshData, deletePayment } = useAppContext();
-  const { visibleJobs, visibleJobIds } = useSharedJobs({ allowedStates: ['deal'] });
+  const { visibleJobIds } = useSharedJobs({ allowedStates: ['deal'] });
   const [showForm, setShowForm] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncSummary, setSyncSummary] = useState('');
@@ -106,6 +106,16 @@ export default function PaymentLedger() {
     }
     return visibleDeals.find(d => d.jobId === jobId)?.province || 'ON';
   };
+
+  const visibleDeals = useMemo(
+    () => deals.filter(deal => visibleJobIds.has(deal.jobId)),
+    [deals, visibleJobIds],
+  );
+
+  const visiblePayments = useMemo(
+    () => payments.filter(payment => visibleJobIds.has(payment.jobId)),
+    [payments, visibleJobIds],
+  );
 
   const save = () => {
     const amount = parseFloat(form.amountExclTax) || 0;
@@ -710,12 +720,3 @@ export default function PaymentLedger() {
     </div>
   );
 }
-  const visibleDeals = useMemo(
-    () => deals.filter(deal => visibleJobIds.has(deal.jobId)),
-    [deals, visibleJobIds],
-  );
-
-  const visiblePayments = useMemo(
-    () => payments.filter(payment => visibleJobIds.has(payment.jobId)),
-    [payments, visibleJobIds],
-  );
