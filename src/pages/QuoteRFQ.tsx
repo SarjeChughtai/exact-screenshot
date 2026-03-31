@@ -282,11 +282,13 @@ export default function QuoteRFQ() {
       updatedAt: new Date().toISOString(),
     });
 
-    const estimatorUserId = settings.personnel.find(person =>
-      person.role === 'estimator' && person.name.trim().toLowerCase() === form.estimator.trim().toLowerCase(),
-    )?.id;
+    const estimatorUserIds = form.estimator.trim()
+      ? settings.personnel
+          .filter(person => person.role === 'estimator' && person.name.trim().toLowerCase() === form.estimator.trim().toLowerCase())
+          .map(person => person.id)
+      : settings.personnel.filter(person => person.role === 'estimator').map(person => person.id);
     await notifyUsers({
-      userIds: [estimatorUserId],
+      userIds: estimatorUserIds,
       title: 'New RFQ Submitted',
       message: `${form.clientName || 'A client'} RFQ ${jobId} is ready for estimating.`,
       link: '/quote-log',

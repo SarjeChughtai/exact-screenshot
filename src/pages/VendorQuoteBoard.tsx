@@ -66,6 +66,36 @@ export default function VendorQuoteBoard() {
     },
   });
 
+  const { data: allBids } = useQuery({
+    queryKey: ['vendor_bids_all', canManageBidBoard],
+    enabled: canManageBidBoard,
+    queryFn: async () => {
+      const { data, error } = await (supabase.from as any)('vendor_bids')
+        .select('*')
+        .order('updated_at', { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const relevantBidIds = useMemo(() => {
+    const source = canManageBidBoard ? (allBids || []) : (bids || []);
+    return source.map((bid: any) => bid.id).filter(Boolean);
+  }, [allBids, bids, canManageBidBoard]);
+
+  const { data: bidEvents } = useQuery({
+    queryKey: ['vendor_bid_events', relevantBidIds.join('|')],
+    enabled: relevantBidIds.length > 0,
+    queryFn: async () => {
+      const { data, error } = await (supabase.from as any)('vendor_bid_events')
+        .select('*')
+        .in('bid_id', relevantBidIds)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
   const [bidAmount, setBidAmount] = useState<Record<string, string>>({});
   const [bidLeadTime, setBidLeadTime] = useState<Record<string, string>>({});
   const [bidDetails, setBidDetails] = useState<Record<string, string>>({});
@@ -92,6 +122,20 @@ export default function VendorQuoteBoard() {
       }))
       .filter((row: any) => row.job);
   }, [bids, jobs]);
+
+  const eventsByBidId = useMemo(() => (
+    (bidEvents || []).reduce<Record<string, any[]>>((accumulator, event: any) => {
+      accumulator[event.bid_id] = [...(accumulator[event.bid_id] || []), event];
+      return accumulator;
+    }, {})
+  ), [bidEvents]);
+
+  const allBidsByJobId = useMemo(() => (
+    (allBids || []).reduce<Record<string, any[]>>((accumulator, bid: any) => {
+      accumulator[bid.job_id] = [...(accumulator[bid.job_id] || []), bid];
+      return accumulator;
+    }, {})
+  ), [allBids]);
 
   const createVendorJobMutation = useMutation({
     mutationFn: async () => {
@@ -442,6 +486,7 @@ export default function VendorQuoteBoard() {
                   <th className="pb-2 font-medium">Lead Time</th>
                   <th className="pb-2 font-medium">Status</th>
                   <th className="pb-2 font-medium">Notes</th>
+                  <th className="pb-2 font-medium">Change Log</th>
                 </tr>
               </thead>
               <tbody>
@@ -452,10 +497,80 @@ export default function VendorQuoteBoard() {
                     <td className="py-2">{row.bid.lead_time_days || 0} days</td>
                     <td className="py-2"><Badge variant="outline" className="capitalize">{row.bid.status || 'submitted'}</Badge></td>
                     <td className="py-2 text-muted-foreground">{row.bid.details || '-'}</td>
+                    <td className="py-2 text-xs text-muted-foreground">
+                      {(eventsByBidId[row.bid.id] || []).slice(0, 3).map((event: any) => (
+                        <div key={event.id} className="mb-1 last:mb-0">
+                          <span className="font-medium capitalize">{String(event.event_type || '').replace(/_/g, ' ')}</span>
+                          <span className="ml-1">{new Date(event.created_at).toLocaleString()}</span>
+                        </div>
+                      ))}
+                      {(eventsByBidId[row.bid.id] || []).length === 0 && '-'}
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          </CardContent>
+        </Card>
+      )}
+
+      {canManageBidBoard && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Bid Review</CardTitle>
+            <CardDescription>Operations review blind bids and their event history by request.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {(jobs || []).length === 0 ? (
+              <p className="text-sm text-muted-foreground">No bid requests available.</p>
+            ) : (
+              (jobs || []).map((job: any) => {
+                const reviewBids = allBidsByJobId[job.id] || [];
+                return (
+                  <div key={`review-${job.id}`} className="rounded-lg border p-4">
+                    <div className="mb-3 flex items-start justify-between gap-4">
+                      <div>
+                        <p className="font-semibold">{job.title}</p>
+                        <p className="text-xs text-muted-foreground">{job.job_id || 'No shared job ID'} · {reviewBids.length} bids received</p>
+                      </div>
+                      <Badge variant="outline" className="capitalize">{job.status || 'open'}</Badge>
+                    </div>
+                    {reviewBids.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">No bids submitted yet.</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {reviewBids.map((bid: any) => (
+                          <div key={`review-bid-${bid.id}`} className="rounded-md bg-muted/20 p-3">
+                            <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+                              <div>
+                                <p className="font-medium">Vendor {String(bid.vendor_id).slice(0, 8)}</p>
+                                <p className="text-xs text-muted-foreground">{bid.details || 'No notes provided'}</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="font-mono">{formatCurrency(bid.amount || 0)}</p>
+                                <p className="text-xs text-muted-foreground">{bid.lead_time_days || 0} days</p>
+                              </div>
+                            </div>
+                            <div className="mt-2 border-t pt-2 text-xs text-muted-foreground">
+                              {(eventsByBidId[bid.id] || []).length === 0 ? (
+                                <p>No event history yet.</p>
+                              ) : (
+                                (eventsByBidId[bid.id] || []).map((event: any) => (
+                                  <div key={event.id} className="flex items-center justify-between gap-3 py-1">
+                                    <span className="capitalize">{String(event.event_type || '').replace(/_/g, ' ')}</span>
+                                    <span>{new Date(event.created_at).toLocaleString()}</span>
+                                  </div>
+                                ))
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
           </CardContent>
         </Card>
       )}

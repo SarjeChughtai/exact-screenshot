@@ -15,6 +15,24 @@ import { useTranslation } from 'react-i18next';
 import { saveDocumentPdf } from '@/lib/documentPdf';
 import { notifyUsers } from '@/lib/workflowNotifications';
 
+type WallLocation = 'LEW' | 'REW' | 'FSW' | 'BSW';
+
+interface Opening {
+  id: string;
+  wall: WallLocation;
+  number: number;
+  width: string;
+  height: string;
+  notes: string;
+}
+
+const WALL_LABELS: Record<WallLocation, string> = {
+  LEW: 'Left End Wall',
+  REW: 'Right End Wall',
+  FSW: 'Front Side Wall',
+  BSW: 'Back Side Wall',
+};
+
 const INITIAL_FORM = {
   clientName: '',
   contactEmail: '',
@@ -52,6 +70,7 @@ export default function DealerRFQ() {
     contactEmail: dealerProfile?.contactEmail || user?.email || '',
     contactPhone: dealerProfile?.contactPhone || '',
   });
+  const [openings, setOpenings] = useState<Opening[]>([]);
 
   useEffect(() => {
     if (!dealerProfile) return;
@@ -75,6 +94,31 @@ export default function DealerRFQ() {
 
   const set = (key: keyof typeof INITIAL_FORM, value: string | boolean) => {
     setForm(current => ({ ...current, [key]: value }));
+  };
+
+  const addOpening = (wall: WallLocation) => {
+    const number = openings.filter(opening => opening.wall === wall).length + 1;
+    setOpenings(current => [...current, {
+      id: crypto.randomUUID(),
+      wall,
+      number,
+      width: '',
+      height: '',
+      notes: '',
+    }]);
+  };
+
+  const updateOpening = (id: string, key: keyof Opening, value: string) => {
+    setOpenings(current => current.map(opening => opening.id === id ? { ...opening, [key]: value } : opening));
+  };
+
+  const removeOpening = (id: string) => {
+    const remaining = openings.filter(opening => opening.id !== id);
+    const renumbered = remaining.map(opening => ({
+      ...opening,
+      number: remaining.filter(item => item.wall === opening.wall).findIndex(item => item.id === opening.id) + 1,
+    }));
+    setOpenings(renumbered);
   };
 
   const handleSubmit = async () => {
@@ -135,6 +179,7 @@ export default function DealerRFQ() {
       workflowStatus: 'submitted',
       payload: {
         ...form,
+        openings,
         dealerBusinessName: dealerProfile?.businessName || '',
         dealerClientId: dealerProfile?.clientId || '',
       },
@@ -148,11 +193,8 @@ export default function DealerRFQ() {
       updatedAt: new Date().toISOString(),
     });
 
-    const estimatorUserId = settings.personnel.find(person =>
-      person.role === 'estimator' && person.name.trim().toLowerCase() === form.estimator.trim().toLowerCase(),
-    )?.id;
     await notifyUsers({
-      userIds: [estimatorUserId],
+      userIds: settings.personnel.filter(person => person.role === 'estimator').map(person => person.id),
       title: 'New Dealer RFQ Submitted',
       message: `${form.clientName || dealerProfile?.businessName || 'Dealer'} submitted RFQ ${jobId}.`,
       link: '/quote-log',
@@ -164,6 +206,7 @@ export default function DealerRFQ() {
       contactEmail: dealerProfile?.contactEmail || user?.email || '',
       contactPhone: dealerProfile?.contactPhone || '',
     });
+    setOpenings([]);
   };
 
   return (
@@ -277,6 +320,58 @@ export default function DealerRFQ() {
               <div><Label className="text-xs">Wall Grade</Label><Input className="input-blue mt-1" value={form.insulationWallGrade} onChange={event => set('insulationWallGrade', event.target.value)} /></div>
             </div>
           )}
+        </div>
+
+        <div className="bg-card border rounded-lg p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Wall Openings</h3>
+            <p className="text-xs text-muted-foreground">Track framed openings by wall for design reference.</p>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            {(['LEW', 'REW', 'FSW', 'BSW'] as WallLocation[]).map(wall => (
+              <div key={wall} className="rounded-md border p-3">
+                <div className="mb-3 flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium">{WALL_LABELS[wall]}</p>
+                    <p className="text-xs text-muted-foreground">{openings.filter(opening => opening.wall === wall).length} openings</p>
+                  </div>
+                  <Button type="button" size="sm" variant="outline" onClick={() => addOpening(wall)}>
+                    Add Opening
+                  </Button>
+                </div>
+
+                <div className="space-y-3">
+                  {openings.filter(opening => opening.wall === wall).length === 0 ? (
+                    <p className="text-xs text-muted-foreground">No openings added.</p>
+                  ) : openings.filter(opening => opening.wall === wall).map(opening => (
+                    <div key={opening.id} className="rounded-md bg-muted/30 p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-medium">{opening.wall} #{opening.number}</p>
+                        <Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => removeOpening(opening.id)}>
+                          Remove
+                        </Button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <Label className="text-xs">Width</Label>
+                          <Input className="input-blue mt-1 h-8" value={opening.width} onChange={event => updateOpening(opening.id, 'width', event.target.value)} />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Height</Label>
+                          <Input className="input-blue mt-1 h-8" value={opening.height} onChange={event => updateOpening(opening.id, 'height', event.target.value)} />
+                        </div>
+                      </div>
+                      <div>
+                        <Label className="text-xs">Notes</Label>
+                        <Input className="input-blue mt-1 h-8" value={opening.notes} onChange={event => updateOpening(opening.id, 'notes', event.target.value)} placeholder="Door, window, framed opening..." />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
 
         <div className="bg-card border rounded-lg p-5 space-y-4">
