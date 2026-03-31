@@ -1,4 +1,4 @@
-import type { Quote, Deal, InternalCost, PaymentEntry, ProductionRecord, FreightRecord, Client, Vendor, ManufacturerRFQ, ManufacturerBid } from '@/types';
+import type { Quote, Deal, InternalCost, PaymentEntry, ProductionRecord, FreightRecord, Client, Vendor, ManufacturerRFQ, ManufacturerBid, QuoteFileRecord, SteelCostEntry } from '@/types';
 
 // --- Deal ---
 export function dealFromRow(r: any): Deal {
@@ -385,6 +385,98 @@ export function manufacturerBidToRow(b: Partial<ManufacturerBid>): Record<string
   };
   const row: Record<string, any> = {};
   for (const [k, v] of Object.entries(b)) {
+    if (map[k]) row[map[k]] = v;
+  }
+  return row;
+}
+
+// --- QuoteFileRecord ---
+export function quoteFileFromRow(r: any): QuoteFileRecord {
+  return {
+    id: r.id ?? '',
+    jobId: r.job_id ?? '',
+    clientName: r.client_name ?? '',
+    clientId: r.client_id ?? '',
+    fileName: r.file_name ?? '',
+    fileSize: Number(r.file_size) || 0,
+    fileType: r.file_type ?? 'unknown',
+    storagePath: r.storage_path ?? '',
+    buildingLabel: r.building_label ?? '',
+    extractionSource: r.extraction_source ?? 'unknown',
+    aiOutput: r.ai_output ?? null,
+    reviewStatus: r.review_status ?? 'pending',
+    parseError: r.parse_error ?? null,
+    reviewedBy: r.reviewed_by ?? null,
+    reviewedAt: r.reviewed_at ?? null,
+    correctedData: r.corrected_data ?? null,
+    gdriveStatus: r.gdrive_status ?? 'pending',
+    gdriveFileId: r.gdrive_file_id ?? null,
+    uploadedBy: r.uploaded_by ?? null,
+    createdAt: r.created_at ?? '',
+  };
+}
+
+export function quoteFileToRow(qf: Partial<QuoteFileRecord>): Record<string, any> {
+  const map: Record<string, string> = {
+    id: 'id', jobId: 'job_id', clientName: 'client_name', clientId: 'client_id',
+    fileName: 'file_name', fileSize: 'file_size', fileType: 'file_type',
+    storagePath: 'storage_path', buildingLabel: 'building_label',
+    extractionSource: 'extraction_source', aiOutput: 'ai_output',
+    reviewStatus: 'review_status', parseError: 'parse_error',
+    reviewedBy: 'reviewed_by', reviewedAt: 'reviewed_at',
+    correctedData: 'corrected_data', gdriveStatus: 'gdrive_status',
+    gdriveFileId: 'gdrive_file_id', uploadedBy: 'uploaded_by',
+  };
+  const row: Record<string, any> = {};
+  for (const [k, v] of Object.entries(qf)) {
+    if (map[k]) row[map[k]] = v;
+  }
+  return row;
+}
+
+// --- SteelCostEntry ---
+export function steelCostEntryFromRow(r: any): SteelCostEntry {
+  return {
+    id: r.id ?? '',
+    quoteFileId: r.quote_file_id ?? null,
+    jobId: r.job_id ?? '',
+    clientName: r.client_name ?? '',
+    clientId: r.client_id ?? '',
+    buildingLabel: r.building_label ?? '',
+    documentType: r.document_type ?? '',
+    fileName: r.file_name ?? '',
+    weightLbs: Number(r.weight_lbs) || 0,
+    costPerLb: Number(r.cost_per_lb) || 0,
+    totalCost: Number(r.total_cost) || 0,
+    width: r.width != null ? Number(r.width) : null,
+    length: r.length != null ? Number(r.length) : null,
+    height: r.height != null ? Number(r.height) : null,
+    roofPitch: r.roof_pitch != null ? Number(r.roof_pitch) : null,
+    province: r.province ?? null,
+    city: r.city ?? null,
+    components: r.components ?? null,
+    insulationTotal: Number(r.insulation_total) || 0,
+    insulationGrade: r.insulation_grade ?? null,
+    extractionSource: r.extraction_source ?? '',
+    aiRawOutput: r.ai_raw_output ?? null,
+    uploadedBy: r.uploaded_by ?? null,
+    createdAt: r.created_at ?? '',
+  };
+}
+
+export function steelCostEntryToRow(e: Partial<SteelCostEntry>): Record<string, any> {
+  const map: Record<string, string> = {
+    id: 'id', quoteFileId: 'quote_file_id', jobId: 'job_id',
+    clientName: 'client_name', clientId: 'client_id', buildingLabel: 'building_label',
+    documentType: 'document_type', fileName: 'file_name', weightLbs: 'weight_lbs',
+    costPerLb: 'cost_per_lb', totalCost: 'total_cost', width: 'width', length: 'length',
+    height: 'height', roofPitch: 'roof_pitch', province: 'province', city: 'city',
+    components: 'components', insulationTotal: 'insulation_total',
+    insulationGrade: 'insulation_grade', extractionSource: 'extraction_source',
+    aiRawOutput: 'ai_raw_output', uploadedBy: 'uploaded_by',
+  };
+  const row: Record<string, any> = {};
+  for (const [k, v] of Object.entries(e)) {
     if (map[k]) row[map[k]] = v;
   }
   return row;

@@ -19,6 +19,7 @@ export interface ClientEntry {
 export interface DealerProfile {
   userId: string;
   clientId: string;
+  businessName: string;
   contactEmail: string;
   contactPhone: string;
   billingInfo: string;

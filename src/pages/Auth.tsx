@@ -11,32 +11,12 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { Building2, Store, Factory, Briefcase, ArrowLeft } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
+import { useTranslation } from 'react-i18next';
 
 type PortalType = 'internal' | 'dealer' | 'vendor' | null;
 
-const PORTAL_ROLES = {
-  internal: [
-    { value: 'accounting', label: 'Accounting' },
-    { value: 'operations', label: 'Operations' },
-    { value: 'sales_rep', label: 'Sales Rep' },
-  ],
-  vendor: [
-    { value: 'freight', label: 'Freight Carrier' },
-    { value: 'manufacturer', label: 'Steel Manufacturer' },
-    { value: 'construction', label: 'Construction Worker' },
-  ],
-  dealer: [
-    { value: 'dealer', label: 'Dealer Portal' },
-  ]
-};
-
-const PORTAL_DETAILS = {
-  internal: { title: 'Employee Portal', icon: Briefcase, desc: 'For dedicated staff members' },
-  dealer: { title: 'Dealer Portal', icon: Store, desc: 'For independent certified dealers' },
-  vendor: { title: 'Vendor Portal', icon: Factory, desc: 'For carriers, manufacturers & construction' }
-};
-
 export default function Auth() {
+  const { t } = useTranslation();
   const { session, loading } = useAuth();
   const [portalType, setPortalType] = useState<PortalType>(null);
   const [email, setEmail] = useState('');
@@ -44,6 +24,28 @@ export default function Auth() {
   const [requestedRole, setRequestedRole] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [forgotMode, setForgotMode] = useState(false);
+
+  const PORTAL_ROLES = {
+    internal: [
+      { value: 'accounting', label: t('auth.accounting') },
+      { value: 'operations', label: t('auth.operations') },
+      { value: 'sales_rep', label: t('auth.salesRep') },
+    ],
+    vendor: [
+      { value: 'freight', label: t('auth.freightCarrier') },
+      { value: 'manufacturer', label: t('auth.steelManufacturer') },
+      { value: 'construction', label: t('auth.constructionWorker') },
+    ],
+    dealer: [
+      { value: 'dealer', label: t('auth.dealerPortal') },
+    ]
+  };
+
+  const PORTAL_DETAILS = {
+    internal: { title: t('auth.employeePortal'), icon: Briefcase, desc: t('auth.employeePortalDesc') },
+    dealer: { title: t('auth.dealerPortal'), icon: Store, desc: t('auth.dealerPortalDesc') },
+    vendor: { title: t('auth.vendorPortal'), icon: Factory, desc: t('auth.vendorPortalDesc') }
+  };
 
   // Set default requested role when portal changes
   useEffect(() => {
@@ -70,7 +72,7 @@ export default function Auth() {
     if (error) {
       toast.error(error.message);
     } else {
-      toast.success('Signed in successfully');
+      toast.success(t('auth.successSignIn'));
     }
   };
 
@@ -118,7 +120,7 @@ export default function Auth() {
     }
 
     setSubmitting(false);
-    toast.success('Account created! Check your email to confirm, then wait for role approval.');
+    toast.success(t('auth.successSignUp'));
   };
 
   const handleForgotPassword = async (e: React.FormEvent) => {
@@ -131,7 +133,7 @@ export default function Auth() {
     if (error) {
       toast.error(error.message);
     } else {
-      toast.success('Password reset email sent');
+      toast.success(t('auth.successResetEmail'));
       setForgotMode(false);
     }
   };
@@ -143,20 +145,20 @@ export default function Auth() {
         <Card className="w-full max-w-md border-border/50 shadow-md">
           <CardHeader className="text-center">
             <Building2 className="mx-auto h-10 w-10 text-primary mb-2" />
-            <CardTitle className="text-2xl font-bold">Reset Password</CardTitle>
-            <CardDescription>Enter your email to receive a reset link</CardDescription>
+            <CardTitle className="text-2xl font-bold">{t('auth.resetPassword')}</CardTitle>
+            <CardDescription>{t('auth.resetPasswordDesc')}</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleForgotPassword} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="reset-email">Email</Label>
+                <Label htmlFor="reset-email">{t('auth.email')}</Label>
                 <Input id="reset-email" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
               </div>
               <Button type="submit" className="w-full" disabled={submitting}>
-                {submitting ? 'Sending...' : 'Send Reset Link'}
+                {submitting ? t('auth.sending') : t('auth.sendResetLink')}
               </Button>
               <Button type="button" variant="ghost" className="w-full" onClick={() => setForgotMode(false)}>
-                Back to Sign In
+                {t('auth.backToSignIn')}
               </Button>
             </form>
           </CardContent>
@@ -173,8 +175,8 @@ export default function Auth() {
           <div className="inline-flex items-center justify-center p-4 bg-primary/10 rounded-full mb-2">
             <Building2 className="h-10 w-10 text-primary" />
           </div>
-          <h1 className="text-3xl font-bold tracking-tight">Canada Steel Buildings</h1>
-          <p className="text-muted-foreground text-lg">Please select the portal you wish to enter.</p>
+          <h1 className="text-3xl font-bold tracking-tight">{t('auth.title')}</h1>
+          <p className="text-muted-foreground text-lg">{t('auth.selectPortal')}</p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-4xl">
@@ -220,7 +222,7 @@ export default function Auth() {
           onClick={() => setPortalType(null)}
         >
           <ArrowLeft className="h-4 w-4 mr-2 group-hover:-translate-x-1 transition-transform" />
-          Back to Portals
+          {t('auth.backToPortals')}
         </Button>
       </div>
 
@@ -230,39 +232,38 @@ export default function Auth() {
             <Icon className="h-6 w-6 text-primary" />
           </div>
           <CardTitle className="text-2xl font-bold">{details.title}</CardTitle>
-          <CardDescription>Sign in or request an account below.</CardDescription>
+          <CardDescription>{t('auth.signInOrRequest')}</CardDescription>
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="signin" className="w-full">
             <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="signin">Sign In</TabsTrigger>
-              <TabsTrigger value="signup">Sign Up</TabsTrigger>
+              <TabsTrigger value="signin">{t('auth.signIn')}</TabsTrigger>
+              <TabsTrigger value="signup">{t('auth.signUp')}</TabsTrigger>
             </TabsList>
             
             <TabsContent value="signin" className="animate-in slide-in-from-left-2 direction-normal duration-200">
               <form onSubmit={handleSignIn} className="space-y-4 mt-6">
                 <div className="space-y-2">
-                  <Label htmlFor="signin-email">Email</Label>
+                  <Label htmlFor="signin-email">{t('auth.email')}</Label>
                   <Input id="signin-email" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="signin-password">Password</Label>
+                  <Label htmlFor="signin-password">{t('auth.password')}</Label>
                   <Input id="signin-password" type="password" value={password} onChange={e => setPassword(e.target.value)} required />
                 </div>
                 <Button type="submit" className="w-full" disabled={submitting}>
-                  {submitting ? 'Signing in...' : 'Sign In'}
+                  {submitting ? t('auth.signingIn') : t('auth.signIn')}
                 </Button>
                 <Button type="button" variant="link" className="w-full text-sm" onClick={() => setForgotMode(true)}>
-                  Forgot password?
+                  {t('auth.forgotPassword')}
                 </Button>
                 <div className="relative my-4">
-                  <Separator />
-                  <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-card px-2 text-xs text-muted-foreground">or</span>
+                  <span className="absolute inset-0 flex items-center"><Separator /></span>
+                  <span className="relative z-10 bg-card px-2 text-xs text-muted-foreground mx-auto block w-fit">or</span>
                 </div>
                 <Button type="button" variant="outline" className="w-full" onClick={handleGoogleSignIn} disabled={submitting}>
-                  {/* Google Icon SVG */}
                   <svg className="h-4 w-4 mr-2" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
-                  Sign in with Google
+                  {t('auth.signInWithGoogle')}
                 </Button>
               </form>
             </TabsContent>
@@ -270,17 +271,17 @@ export default function Auth() {
             <TabsContent value="signup" className="animate-in slide-in-from-right-2 direction-normal duration-200">
               <form onSubmit={handleSignUp} className="space-y-4 mt-6">
                 <div className="space-y-2">
-                  <Label htmlFor="signup-email">Email</Label>
+                  <Label htmlFor="signup-email">{t('auth.email')}</Label>
                   <Input id="signup-email" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="signup-password">Password</Label>
+                  <Label htmlFor="signup-password">{t('auth.password')}</Label>
                   <Input id="signup-password" type="password" value={password} onChange={e => setPassword(e.target.value)} required minLength={6} />
                 </div>
                 
                 {portalType !== 'dealer' && (
                   <div className="space-y-2">
-                    <Label htmlFor="signup-role">Specific Classification</Label>
+                    <Label htmlFor="signup-role">{t('auth.specificClassification')}</Label>
                     <Select value={requestedRole} onValueChange={setRequestedRole}>
                       <SelectTrigger id="signup-role"><SelectValue /></SelectTrigger>
                       <SelectContent>
@@ -293,20 +294,19 @@ export default function Auth() {
                 )}
                 
                 <p className="text-xs text-muted-foreground mt-2 mb-4 text-center">
-                  An admin will review and approve your registration payload.
+                  {t('auth.adminReviewNote')}
                 </p>
 
                 <Button type="submit" className="w-full" disabled={submitting}>
-                  {submitting ? 'Creating account...' : 'Create Account'}
+                  {submitting ? t('auth.creatingAccount') : t('auth.createAccount')}
                 </Button>
                 <div className="relative my-4">
-                  <Separator />
-                  <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-card px-2 text-xs text-muted-foreground">or</span>
+                  <span className="absolute inset-0 flex items-center"><Separator /></span>
+                  <span className="relative z-10 bg-card px-2 text-xs text-muted-foreground mx-auto block w-fit">or</span>
                 </div>
                 <Button type="button" variant="outline" className="w-full" onClick={handleGoogleSignUp} disabled={submitting}>
-                  {/* Google Icon SVG */}
                   <svg className="h-4 w-4 mr-2" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
-                  Sign up with Google
+                  {t('auth.signUpWithGoogle')}
                 </Button>
               </form>
             </TabsContent>
