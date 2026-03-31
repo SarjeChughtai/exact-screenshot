@@ -145,7 +145,7 @@ export default function QuoteRFQ() {
     setOpenings(current => [...current, createOpening(wall, current)]);
   };
 
-  const updateOpening = (id: string, key: keyof Opening, value: string) => {
+  const updateOpening = (id: string, key: keyof RFQOpening, value: string) => {
     setOpenings(current => current.map(opening => opening.id === id ? { ...opening, [key]: value } : opening));
   };
 
@@ -153,7 +153,7 @@ export default function QuoteRFQ() {
     setOpenings(current => renumberOpenings(current.filter(opening => opening.id !== id)));
   };
 
-  const getOpeningName = (opening: Opening) => `${opening.wall} #${opening.number}`;
+  const getOpeningName = (opening: RFQOpening) => `${opening.wall} #${opening.number}`;
 
   const handleSubmit = async () => {
     if (!form.clientId.trim()) {

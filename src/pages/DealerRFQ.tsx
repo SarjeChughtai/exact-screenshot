@@ -83,7 +83,7 @@ export default function DealerRFQ() {
     setOpenings(current => [...current, createOpening(wall, current)]);
   };
 
-  const updateOpening = (id: string, key: keyof Opening, value: string) => {
+  const updateOpening = (id: string, key: keyof RFQOpening, value: string) => {
     setOpenings(current => current.map(opening => opening.id === id ? { ...opening, [key]: value } : opening));
   };
 
