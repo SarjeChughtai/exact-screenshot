@@ -9,6 +9,7 @@ import { AppProvider } from "@/context/AppContext";
 import { RoleProvider } from "@/context/RoleContext";
 import { SettingsProvider } from "@/context/SettingsContext";
 import { NotificationsProvider } from "@/context/NotificationsContext";
+import { MessagesProvider } from "@/context/MessagesContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import ModuleRoute from "@/components/ModuleRoute";
 import Layout from "@/components/Layout";
@@ -47,6 +48,7 @@ import Vendors from "@/pages/Vendors";
 import VendorQuoteBoard from "@/pages/VendorQuoteBoard";
 import ImportReview from "@/pages/ImportReview";
 import CostData from "@/pages/CostData";
+import Messages from "@/pages/Messages";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient({
@@ -69,6 +71,7 @@ const App = () => (
           <SettingsProvider>
             <AppProvider>
               <NotificationsProvider>
+              <MessagesProvider>
               <Toaster />
               <Sonner />
               <SpeedInsights />
@@ -113,6 +116,7 @@ const App = () => (
                           <Route path="/vendor-board" element={withModule('vendor-board', <VendorQuoteBoard />)} />
                           <Route path="/import-review" element={withModule('internal-quote-builder', <ImportReview />)} />
                           <Route path="/cost-data" element={withModule('cost-data', <CostData />)} />
+                          <Route path="/messages" element={withModule('messages', <Messages />)} />
                           <Route path="*" element={<NotFound />} />
                         </Routes>
                       </Layout>
@@ -120,6 +124,7 @@ const App = () => (
                   } />
                 </Routes>
               </BrowserRouter>
+              </MessagesProvider>
               </NotificationsProvider>
             </AppProvider>
           </SettingsProvider>

@@ -185,6 +185,14 @@ export default function Settings() {
             <Switch checked={profile.smsNotifications} onCheckedChange={value => void updateProfile({ smsNotifications: value })} />
           </div>
 
+          <div className="flex items-center justify-between rounded-md border px-3 py-2">
+            <div>
+              <Label className="text-xs">Messaging Access</Label>
+              <p className="text-[11px] text-muted-foreground">Enabled by admin per user.</p>
+            </div>
+            <span className="text-xs font-medium">{profile.canUseMessaging ? 'Enabled' : 'Disabled'}</span>
+          </div>
+
           {isDealer && <DealerProfileSettings />}
         </div>
       </div>
@@ -196,6 +204,7 @@ export default function Settings() {
       <div>
         <h2 className="text-2xl font-bold text-foreground">{t('settings.title')}</h2>
         <p className="text-sm text-muted-foreground mt-1">{t('settings.subtitle')}</p>
+        <p className="text-xs text-muted-foreground mt-2">Messaging access for your account: <span className="font-medium text-foreground">{profile.canUseMessaging ? 'Enabled' : 'Disabled'}</span></p>
       </div>
 
       <Tabs defaultValue={isAdmin ? "markups" : isDealer ? "dealer-profile" : "statuses"}>

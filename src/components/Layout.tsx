@@ -2,6 +2,7 @@ import { useLocation } from 'react-router-dom';
 import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/AppSidebar';
 import { NotificationBell } from '@/components/NotificationBell';
+import { MessagesButton } from '@/components/MessagesButton';
 import { LanguageToggle } from '@/components/LanguageToggle';
 import { ChevronRight } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -29,6 +30,7 @@ const routeLabelKeys: Record<string, string> = {
   '/audit-log': 'layout.auditLog',
   '/import-review': 'layout.importReview',
   '/cost-data': 'layout.costData',
+  '/messages': 'layout.messages',
 };
 
 export default function Layout({ children }: { children: React.ReactNode }) {
@@ -50,6 +52,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             </div>
             <div className="flex items-center gap-2">
               <LanguageToggle />
+              <MessagesButton />
               <NotificationBell />
             </div>
           </header>

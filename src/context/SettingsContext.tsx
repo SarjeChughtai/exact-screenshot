@@ -91,6 +91,8 @@ const DEFAULT_PROFILE: UserProfileSettings = {
   emailNotifications: true,
   smsNotifications: false,
   canViewAllFreightBoard: false,
+  canUseMessaging: false,
+  lastSeenAt: null,
 };
 
 interface SettingsContextType {
@@ -340,6 +342,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
           emailNotifications: profileRes.data.email_notifications ?? true,
           smsNotifications: profileRes.data.sms_notifications ?? false,
           canViewAllFreightBoard: profileRes.data.can_view_all_freight_board ?? false,
+          canUseMessaging: profileRes.data.can_use_messaging ?? false,
+          lastSeenAt: profileRes.data.last_seen_at ?? null,
           createdAt: profileRes.data.created_at ?? '',
           updatedAt: profileRes.data.updated_at ?? '',
         });
@@ -430,6 +434,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       email_notifications: next.emailNotifications,
       sms_notifications: next.smsNotifications,
       can_view_all_freight_board: next.canViewAllFreightBoard,
+      can_use_messaging: next.canUseMessaging,
+      last_seen_at: next.lastSeenAt,
       updated_at: new Date().toISOString(),
     });
   }, [currentUser.id, profile]);

@@ -529,6 +529,8 @@ export function userProfileFromRow(r: any): UserProfileSettings {
     emailNotifications: r.email_notifications ?? true,
     smsNotifications: r.sms_notifications ?? false,
     canViewAllFreightBoard: r.can_view_all_freight_board ?? false,
+    canUseMessaging: r.can_use_messaging ?? false,
+    lastSeenAt: r.last_seen_at ?? null,
     createdAt: r.created_at ?? '',
     updatedAt: r.updated_at ?? '',
   };
@@ -542,6 +544,8 @@ export function userProfileToRow(p: Partial<UserProfileSettings>): Record<string
     emailNotifications: 'email_notifications',
     smsNotifications: 'sms_notifications',
     canViewAllFreightBoard: 'can_view_all_freight_board',
+    canUseMessaging: 'can_use_messaging',
+    lastSeenAt: 'last_seen_at',
     updatedAt: 'updated_at',
   };
   const row: Record<string, any> = {};
