@@ -1,6 +1,8 @@
 import { useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useAppContext } from '@/context/AppContext';
 import { useRoles, type UserProfile, type UserRole } from '@/context/RoleContext';
+import { supabase } from '@/integrations/supabase/client';
 import type { Deal, DocumentType, FreightRecord, Quote, SharedJobRecord, SharedJobState } from '@/types';
 
 const STATE_PRECEDENCE: Record<SharedJobState, number> = {
@@ -172,18 +174,59 @@ export function filterSharedJobsForUser(
   });
 }
 
+function sharedJobFromRpcRow(row: any): SharedJobRecord {
+  return {
+    jobId: row.job_id ?? '',
+    clientName: row.client_name ?? '',
+    jobName: row.job_name ?? '',
+    state: (row.state ?? 'rfq') as SharedJobState,
+    salesRep: row.sales_rep ?? '',
+    salesRepUserId: row.sales_rep_user_id ?? null,
+    estimator: row.estimator ?? '',
+    assignedEstimatorUserId: row.assigned_estimator_user_id ?? null,
+    assignedFreightUserId: row.assigned_freight_user_id ?? null,
+    dealerUserId: row.dealer_user_id ?? null,
+    vendorUserIds: Array.isArray(row.vendor_user_ids) ? row.vendor_user_ids : [],
+    sourceDocumentType: row.source_document_type ?? undefined,
+    sourceDocumentId: row.source_document_id ?? null,
+  };
+}
+
 export function useSharedJobs(options?: { allowedStates?: SharedJobState[]; limitToJobIds?: string[] }) {
   const { quotes, deals, freight } = useAppContext();
   const { currentUser } = useRoles();
 
-  const allJobs = useMemo(
+  const localAllJobs = useMemo(
     () => buildSharedJobRecords({ quotes, deals, freight }),
     [deals, freight, quotes],
   );
 
+  const visibleJobsQuery = useQuery({
+    queryKey: ['shared-job-directory', currentUser?.id || 'anonymous', options?.allowedStates || []],
+    enabled: Boolean(currentUser?.id),
+    queryFn: async () => {
+      const { data, error } = await (supabase.rpc as any)('get_visible_job_directory', {
+        _allowed_states: options?.allowedStates?.length ? options.allowedStates : null,
+      });
+
+      if (error) throw error;
+      return (data || []).map(sharedJobFromRpcRow) as SharedJobRecord[];
+    },
+    staleTime: 60_000,
+  });
+
   const visibleJobs = useMemo(
-    () => filterSharedJobsForUser(allJobs, currentUser, options),
-    [allJobs, currentUser, options],
+    () => {
+      const baseJobs = visibleJobsQuery.data || filterSharedJobsForUser(localAllJobs, currentUser, options);
+      const allowedJobIds = options?.limitToJobIds?.length ? new Set(options.limitToJobIds) : null;
+      return allowedJobIds ? baseJobs.filter(job => allowedJobIds.has(job.jobId)) : baseJobs;
+    },
+    [visibleJobsQuery.data, localAllJobs, currentUser, options],
+  );
+
+  const allJobs = useMemo(
+    () => visibleJobsQuery.data || localAllJobs,
+    [visibleJobsQuery.data, localAllJobs],
   );
 
   const visibleJobIds = useMemo(
@@ -199,5 +242,5 @@ export function useSharedJobs(options?: { allowedStates?: SharedJobState[]; limi
     [allJobs],
   );
 
-  return { allJobs, visibleJobs, visibleJobIds, stateByJobId };
+  return { allJobs, visibleJobs, visibleJobIds, stateByJobId, loading: visibleJobsQuery.isLoading };
 }
