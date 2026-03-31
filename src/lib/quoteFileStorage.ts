@@ -182,6 +182,23 @@ export async function getQuoteFiles(jobId: string) {
 }
 
 /**
+ * Retrieves the most recent uploaded files across all jobs.
+ */
+export async function getRecentQuoteFiles(limit = 20) {
+  const { data, error } = await supabase
+    .from('quote_files')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    console.error('Error fetching recent quote files:', error);
+    return [];
+  }
+  return data || [];
+}
+
+/**
  * Gets a temporary download URL for a stored file.
  */
 export async function getQuoteFileUrl(storagePath: string): Promise<string | null> {

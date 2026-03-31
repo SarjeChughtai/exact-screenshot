@@ -44,8 +44,8 @@ const menuGroups: MenuGroup[] = [
     label: 'Quotes',
     items: [
       { path: '/estimator', label: 'Quick Estimator', icon: Calculator, module: 'estimator' },
-      { path: '/quote-rfq', label: 'Quote RFQ', icon: Send, module: 'quote-log' },
       { path: '/estimates-log', label: 'Estimates Log', icon: List, module: 'estimator' },
+      { path: '/quote-rfq', label: 'Quote RFQ', icon: Send, module: 'quote-log' },
       { path: '/quote-log', label: 'Quote Log', icon: ClipboardList, module: 'quote-log' },
       { path: '/internal-quote-builder', label: 'Internal Quote Builder', icon: FileInput, module: 'internal-quote-builder' },
       { path: '/import-review', label: 'Import Review', icon: Eye, module: 'internal-quote-builder' },
