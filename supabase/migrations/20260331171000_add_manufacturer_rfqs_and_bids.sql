@@ -37,24 +37,25 @@ CREATE TABLE IF NOT EXISTS public.manufacturer_bids (
   submitted_at timestamptz DEFAULT now()
 );
 
--- Enable Row Level Security
 ALTER TABLE public.manufacturer_rfqs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.manufacturer_bids ENABLE ROW LEVEL SECURITY;
 
--- RLS policies: all authenticated users can read/write
+DO $$ BEGIN
 CREATE POLICY "Authenticated users full access to manufacturer_rfqs"
   ON public.manufacturer_rfqs FOR ALL
   TO authenticated
   USING (true)
   WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN null; END $$;
 
+DO $$ BEGIN
 CREATE POLICY "Authenticated users full access to manufacturer_bids"
   ON public.manufacturer_bids FOR ALL
   TO authenticated
   USING (true)
   WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN null; END $$;
 
--- Indexes for common queries
 CREATE INDEX IF NOT EXISTS idx_manufacturer_rfqs_status ON public.manufacturer_rfqs(status);
 CREATE INDEX IF NOT EXISTS idx_manufacturer_bids_rfq_id ON public.manufacturer_bids(rfq_id);
 CREATE INDEX IF NOT EXISTS idx_manufacturer_bids_manufacturer_id ON public.manufacturer_bids(manufacturer_id);
