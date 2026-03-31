@@ -189,7 +189,7 @@ SET search_path = public
 AS $$
 DECLARE
   current_user_id uuid := auth.uid();
-  conversation_id uuid;
+  _conversation_id uuid;
   _direct_key text;
 BEGIN
   IF current_user_id IS NULL THEN
@@ -210,10 +210,10 @@ BEGIN
   VALUES ('direct', '', _direct_key, current_user_id, now())
   ON CONFLICT (direct_key) WHERE kind = 'direct' AND direct_key IS NOT NULL
   DO UPDATE SET updated_at = now()
-  RETURNING id INTO conversation_id;
+  RETURNING id INTO _conversation_id;
 
-  IF conversation_id IS NULL THEN
-    SELECT c.id INTO conversation_id
+  IF _conversation_id IS NULL THEN
+    SELECT c.id INTO _conversation_id
     FROM public.messaging_conversations c
     WHERE c.kind = 'direct' AND c.direct_key = _direct_key
     LIMIT 1;
@@ -221,12 +221,12 @@ BEGIN
 
   INSERT INTO public.messaging_conversation_members (conversation_id, user_id, is_admin, membership_source, joined_at)
   VALUES
-    (conversation_id, current_user_id, false, 'direct', now()),
-    (conversation_id, _other_user_id, false, 'direct', now())
+    (_conversation_id, current_user_id, false, 'direct', now()),
+    (_conversation_id, _other_user_id, false, 'direct', now())
   ON CONFLICT (conversation_id, user_id) DO UPDATE
   SET membership_source = 'direct';
 
-  RETURN conversation_id;
+  RETURN _conversation_id;
 END;
 $$;
 
@@ -238,7 +238,7 @@ SET search_path = public
 AS $$
 DECLARE
   current_user_id uuid := auth.uid();
-  conversation_id uuid;
+  _conversation_id uuid;
   conversation_title text;
 BEGIN
   IF current_user_id IS NULL THEN
@@ -267,17 +267,17 @@ BEGIN
   VALUES ('team', conversation_title, _team_key, current_user_id, now())
   ON CONFLICT (team_key) WHERE kind = 'team' AND team_key IS NOT NULL
   DO UPDATE SET title = EXCLUDED.title, updated_at = now()
-  RETURNING id INTO conversation_id;
+  RETURNING id INTO _conversation_id;
 
-  IF conversation_id IS NULL THEN
-    SELECT c.id INTO conversation_id
+  IF _conversation_id IS NULL THEN
+    SELECT c.id INTO _conversation_id
     FROM public.messaging_conversations c
     WHERE c.kind = 'team' AND c.team_key = _team_key
     LIMIT 1;
   END IF;
 
   DELETE FROM public.messaging_conversation_members
-  WHERE public.messaging_conversation_members.conversation_id = conversation_id
+  WHERE public.messaging_conversation_members.conversation_id = _conversation_id
     AND membership_source = 'auto_team'
     AND user_id NOT IN (
       SELECT DISTINCT ur.user_id
@@ -296,7 +296,7 @@ BEGIN
 
   INSERT INTO public.messaging_conversation_members (conversation_id, user_id, joined_at, membership_source, is_admin)
   SELECT
-    conversation_id,
+    _conversation_id,
     ur.user_id,
     now(),
     'auto_team',
@@ -316,7 +316,7 @@ BEGIN
   SET membership_source = 'auto_team',
       is_admin = public.messaging_conversation_members.is_admin OR EXCLUDED.is_admin;
 
-  RETURN conversation_id;
+  RETURN _conversation_id;
 END;
 $$;
 
@@ -328,7 +328,7 @@ SET search_path = public
 AS $$
 DECLARE
   current_user_id uuid := auth.uid();
-  conversation_id uuid;
+  _conversation_id uuid;
 BEGIN
   IF current_user_id IS NULL THEN
     RAISE EXCEPTION 'Authentication required';
@@ -342,10 +342,10 @@ BEGIN
   VALUES ('deal', 'Deal ' || COALESCE(_job_id, ''), _job_id, current_user_id, now())
   ON CONFLICT (job_id) WHERE kind = 'deal' AND job_id IS NOT NULL
   DO UPDATE SET title = EXCLUDED.title, updated_at = now()
-  RETURNING id INTO conversation_id;
+  RETURNING id INTO _conversation_id;
 
-  IF conversation_id IS NULL THEN
-    SELECT c.id INTO conversation_id
+  IF _conversation_id IS NULL THEN
+    SELECT c.id INTO _conversation_id
     FROM public.messaging_conversations c
     WHERE c.kind = 'deal' AND c.job_id = _job_id
     LIMIT 1;
@@ -394,7 +394,7 @@ BEGIN
     SELECT current_user_id
   )
   DELETE FROM public.messaging_conversation_members
-  WHERE public.messaging_conversation_members.conversation_id = conversation_id
+  WHERE public.messaging_conversation_members.conversation_id = _conversation_id
     AND membership_source = 'auto_deal'
     AND user_id NOT IN (SELECT user_id FROM desired_members);
 
@@ -448,7 +448,7 @@ BEGIN
     is_admin
   )
   SELECT
-    conversation_id,
+    _conversation_id,
     dm.user_id,
     now(),
     'auto_deal',
@@ -461,7 +461,7 @@ BEGIN
       END,
       is_admin = public.messaging_conversation_members.is_admin OR EXCLUDED.is_admin;
 
-  RETURN conversation_id;
+  RETURN _conversation_id;
 END;
 $$;
 
