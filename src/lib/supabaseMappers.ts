@@ -3,6 +3,7 @@ import type {
   Deal,
   InternalCost,
   PaymentEntry,
+  CommissionPayout,
   ProductionRecord,
   FreightRecord,
   Client,
@@ -237,6 +238,52 @@ export function paymentToRow(p: Partial<PaymentEntry>): Record<string, any> {
     vendorProvinceOverride: 'vendor_province_override',
     paymentMethod: 'payment_method', referenceNumber: 'reference_number',
     qbSynced: 'qb_synced', notes: 'notes',
+  };
+  const row: Record<string, any> = {};
+  for (const [k, v] of Object.entries(p)) {
+    if (map[k]) row[map[k]] = v;
+  }
+  return row;
+}
+
+// --- CommissionPayout ---
+export function commissionPayoutFromRow(r: any): CommissionPayout {
+  return {
+    id: r.id ?? '',
+    jobId: r.job_id ?? '',
+    recipientRole: r.recipient_role ?? 'sales_rep',
+    recipientName: r.recipient_name ?? '',
+    payoutStage: r.payout_stage ?? 'sales_rep_stage_1',
+    amount: Number(r.amount) || 0,
+    eligibleOnDate: r.eligible_on_date ?? null,
+    paidOn: r.paid_on ?? '',
+    paymentMethod: r.payment_method ?? '',
+    referenceNumber: r.reference_number ?? '',
+    notes: r.notes ?? '',
+    confirmedByUserId: r.confirmed_by_user_id ?? null,
+    confirmedByName: r.confirmed_by_name ?? null,
+    createdAt: r.created_at ?? '',
+    updatedAt: r.updated_at ?? '',
+  };
+}
+
+export function commissionPayoutToRow(p: Partial<CommissionPayout>): Record<string, any> {
+  const map: Record<string, string> = {
+    id: 'id',
+    jobId: 'job_id',
+    recipientRole: 'recipient_role',
+    recipientName: 'recipient_name',
+    payoutStage: 'payout_stage',
+    amount: 'amount',
+    eligibleOnDate: 'eligible_on_date',
+    paidOn: 'paid_on',
+    paymentMethod: 'payment_method',
+    referenceNumber: 'reference_number',
+    notes: 'notes',
+    confirmedByUserId: 'confirmed_by_user_id',
+    confirmedByName: 'confirmed_by_name',
+    createdAt: 'created_at',
+    updatedAt: 'updated_at',
   };
   const row: Record<string, any> = {};
   for (const [k, v] of Object.entries(p)) {

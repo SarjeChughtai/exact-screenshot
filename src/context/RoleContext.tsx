@@ -30,7 +30,7 @@ const MODULE_ACCESS: Record<string, UserRole[]> = {
   'quote-log': ['admin', 'owner', 'sales_rep', 'operations', 'estimator', 'dealer'],
   deals: ['admin', 'owner', 'operations', 'sales_rep'],
   'deal-pl': ['admin', 'owner', 'accounting'],
-  'commission': ['admin', 'owner'],
+  'commission': ['admin', 'owner', 'accounting'],
   'production': ['admin', 'owner', 'operations'],
   'internal-costs': ['admin', 'owner', 'operations'],
   'payment-ledger': ['admin', 'owner', 'accounting'],
