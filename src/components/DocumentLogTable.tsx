@@ -22,15 +22,19 @@ interface DocumentLogTableProps {
   title: string;
   subtitle: string;
   filterDocumentTypes: DocumentType[];
+  filterWorkflowStatuses?: string[];
 }
 
-export function DocumentLogTable({ title, subtitle, filterDocumentTypes }: DocumentLogTableProps) {
+export function DocumentLogTable({ title, subtitle, filterDocumentTypes, filterWorkflowStatuses }: DocumentLogTableProps) {
   const navigate = useNavigate();
   const { quotes, deals, updateQuote, deleteQuote, restoreQuote, addDeal, updateDeal } = useAppContext();
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showTrash, setShowTrash] = useState(false);
 
-  const visibleQuotes = quotes.filter(quote => filterDocumentTypes.includes(quote.documentType));
+  const visibleQuotes = quotes.filter(quote =>
+    filterDocumentTypes.includes(quote.documentType) &&
+    (!filterWorkflowStatuses || filterWorkflowStatuses.includes(quote.workflowStatus))
+  );
   const activeQuotes = visibleQuotes.filter(quote => !quote.isDeleted);
   const deletedQuotes = visibleQuotes.filter(quote => quote.isDeleted);
 
@@ -195,6 +199,11 @@ export function DocumentLogTable({ title, subtitle, filterDocumentTypes }: Docum
                           Convert to Deal
                         </Button>
                       )
+                    )}
+                    {quote.documentType === 'internal_quote' && (
+                      <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => navigate(`/quote-builder?sourceDocumentId=${quote.id}`)}>
+                        Create External Quote
+                      </Button>
                     )}
                     <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive" onClick={() => deleteQuote(quote.id)}>
                       <Trash2 className="h-3.5 w-3.5" />

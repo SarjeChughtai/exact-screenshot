@@ -62,6 +62,7 @@ interface AppContextType extends AppState {
   deleteEstimate: (id: string) => void;
   allocateJobId: () => Promise<string>;
   quickAddClient: (clientId: string, clientName: string) => Promise<Client | null>;
+  quickAddVendor: (vendorName: string, province?: string) => Promise<Vendor | null>;
   refreshData: () => Promise<void>;
 }
 
@@ -340,6 +341,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const client = clientFromRow(data);
       setState(prev => ({ ...prev, clients: [...prev.clients, client] }));
       return client;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const quickAddVendor = useCallback(async (vendorName: string, province = 'ON'): Promise<Vendor | null> => {
+    try {
+      const { data, error } = await supabase
+        .from('vendors')
+        .insert({
+          name: vendorName,
+          province,
+          contact_email: '',
+          contact_phone: '',
+          notes: '',
+        })
+        .select()
+        .single();
+      if (error || !data) return null;
+      const vendor = vendorFromRow(data);
+      setState(prev => ({ ...prev, vendors: [...prev.vendors, vendor] }));
+      return vendor;
     } catch {
       return null;
     }
@@ -667,7 +690,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addInternalCost, updateInternalCost, addPayment, updatePayment, deletePayment,
       addProduction, updateProduction, addFreight, updateFreight,
       addRFQ, updateRFQ, deleteRFQ,
-      quickAddClient, addClient, updateClient, deleteClient,
+      quickAddClient, quickAddVendor, addClient, updateClient, deleteClient,
       addVendor, updateVendor, deleteVendor,
       addEstimate, updateEstimate, deleteEstimate, allocateJobId,
       refreshData: fetchAll,

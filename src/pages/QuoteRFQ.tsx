@@ -14,6 +14,7 @@ import { Plus, Trash2, Send, Printer } from 'lucide-react';
 import { PersonnelSelect } from '@/components/PersonnelSelect';
 import { ClientSelect } from '@/components/ClientSelect';
 import type { Estimate, Quote } from '@/types';
+import { saveDocumentPdf } from '@/lib/documentPdf';
 
 type WallLocation = 'LEW' | 'REW' | 'FSW' | 'BSW';
 
@@ -259,12 +260,24 @@ export default function QuoteRFQ() {
     };
 
     if (existingQuote) {
-      await updateQuote(existingQuote.id, document);
+      await updateQuote(existingQuote.id, { ...document, updatedAt: new Date().toISOString() });
+      const pdf = await saveDocumentPdf(document);
+      await updateQuote(existingQuote.id, {
+        pdfStoragePath: pdf.storagePath,
+        pdfFileName: pdf.fileName,
+        updatedAt: new Date().toISOString(),
+      });
       toast.success('RFQ updated');
       return;
     }
 
     await addQuote(document);
+    const pdf = await saveDocumentPdf(document);
+    await updateQuote(document.id, {
+      pdfStoragePath: pdf.storagePath,
+      pdfFileName: pdf.fileName,
+      updatedAt: new Date().toISOString(),
+    });
     toast.success('RFQ submitted');
   };
 

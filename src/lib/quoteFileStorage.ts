@@ -7,6 +7,8 @@ interface UploadQuoteFileParams {
   clientName: string;
   clientId: string;
   buildingLabel: string;
+  documentId?: string | null;
+  fileCategory?: 'generated_pdf' | 'cost_file' | 'support_file';
   aiOutput?: Record<string, unknown> | null;
   extractionSource?: 'ai' | 'regex' | 'unknown';
   parseError?: string | null;
@@ -55,8 +57,12 @@ export async function uploadQuoteFile({
   clientName,
   clientId,
   buildingLabel,
+  documentId = null,
+  fileCategory = 'support_file',
   aiOutput,
   extractionSource = 'unknown',
+  parseError = null,
+  reviewStatus,
 }: UploadQuoteFileParams): Promise<QuoteFileRecord | null> {
   try {
     const { data: { user } } = await supabase.auth.getUser();
@@ -87,10 +93,12 @@ export async function uploadQuoteFile({
     const { data: record, error: insertError } = await supabase
       .from('quote_files')
       .insert({
+        document_id: documentId,
         job_id: jobId || '',
         client_name: clientName || '',
         client_id: clientId || '',
         file_type: fileType,
+        file_category: fileCategory,
         file_name: file.name,
         file_size: file.size,
         storage_path: storagePath,

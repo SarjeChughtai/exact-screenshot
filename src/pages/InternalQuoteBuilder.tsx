@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -22,6 +23,7 @@ import { JobIdSelect } from '@/components/JobIdSelect';
 import { DocumentGallery } from '@/components/DocumentGallery';
 import { getQuoteFileUrl } from '@/lib/quoteFileStorage';
 import * as pdfjsLib from 'pdfjs-dist';
+import { downloadDocumentPdf, saveDocumentPdf } from '@/lib/documentPdf';
 
 interface CostFileData {
   steelWeightLbs: number;
@@ -67,8 +69,13 @@ function generateCostSavingTips(form: any, costData: CostFileData, quote: Quote 
 }
 
 export default function InternalQuoteBuilder() {
-  const { addQuote, deals, quotes, allocateJobId } = useAppContext();
+  const [searchParams] = useSearchParams();
+  const { addQuote, updateQuote, deals, quotes, allocateJobId } = useAppContext();
   const { settings, getSalesReps } = useSettings();
+  const editingQuoteId = searchParams.get('quoteId');
+  const sourceDocumentId = searchParams.get('sourceDocumentId');
+  const existingQuote = quotes.find(item => item.id === editingQuoteId);
+  const sourceQuote = quotes.find(item => item.id === sourceDocumentId);
 
   const getInitialForm = () => ({
     jobId: '', jobName: '', clientName: '', clientId: '',
@@ -209,6 +216,105 @@ export default function InternalQuoteBuilder() {
     };
     localStorage.setItem('csb_internal_builder_active_state', JSON.stringify(stateToSave));
   }, [form, buildings, supplierMarkupPct, singleSlope, leftEaveHeight, rightEaveHeight, activeBuildingIdx, isInitialized]);
+
+  useEffect(() => {
+    if (!existingQuote) return;
+    const payload = (existingQuote.payload || {}) as Record<string, any>;
+    const incomingBuildings = Array.isArray(payload.buildings) && payload.buildings.length
+      ? payload.buildings.map((building: any, index: number) => ({
+          ...getInitialBuilding(String(building?.label || `Building ${index + 1}`)),
+          ...building,
+          costData: {
+            ...getInitialBuilding().costData,
+            ...(building?.costData || {}),
+          },
+          files: Array.isArray(building?.files) ? building.files : [],
+        }))
+      : [getInitialBuilding()];
+
+    setForm({
+      ...getInitialForm(),
+      jobId: existingQuote.jobId,
+      jobName: existingQuote.jobName,
+      clientName: existingQuote.clientName,
+      clientId: existingQuote.clientId,
+      salesRep: existingQuote.salesRep,
+      estimator: existingQuote.estimator,
+      province: existingQuote.province,
+      city: existingQuote.city,
+      address: existingQuote.address,
+      postalCode: existingQuote.postalCode,
+      width: String(existingQuote.width || ''),
+      length: String(existingQuote.length || ''),
+      height: String(existingQuote.height || 14),
+      pitch: String(existingQuote.pitch ?? payload.pitch ?? 1),
+      distance: String(payload.distance ?? 200),
+      remoteLevel: String(payload.remoteLevel ?? 'none'),
+      foundationType: existingQuote.foundationType,
+      insulationCost: String(existingQuote.insulation || 0),
+      insulationGrade: existingQuote.insulationGrade || '',
+      gutters: String(existingQuote.gutters || 0),
+      liners: String(existingQuote.liners || 0),
+      contingencyPct: String(existingQuote.contingencyPct || 5),
+      notes: String(payload.notes || ''),
+    });
+    setBuildings(incomingBuildings);
+    setActiveBuildingIdx(0);
+    setSingleSlope(Boolean(payload.singleSlope ?? existingQuote.isSingleSlope));
+    setLeftEaveHeight(String(payload.leftEaveHeight ?? existingQuote.leftEaveHeight ?? existingQuote.height ?? 14));
+    setRightEaveHeight(String(payload.rightEaveHeight ?? existingQuote.rightEaveHeight ?? existingQuote.height ?? 14));
+    setQuote(existingQuote);
+  }, [existingQuote]);
+
+  useEffect(() => {
+    if (existingQuote || !sourceQuote) return;
+    const payload = (sourceQuote.payload || {}) as Record<string, any>;
+    const importedBuildings = Array.isArray(payload.buildings) && payload.buildings.length
+      ? payload.buildings.map((building: any, index: number) => ({
+          ...getInitialBuilding(String(building?.label || `Building ${index + 1}`)),
+          ...building,
+          width: String(building?.width || sourceQuote.width || ''),
+          length: String(building?.length || sourceQuote.length || ''),
+          height: String(building?.height || sourceQuote.height || 14),
+          pitch: String(building?.pitch || payload.pitch || sourceQuote.pitch || 1),
+        }))
+      : [{
+          ...getInitialBuilding(),
+          width: String(sourceQuote.width || ''),
+          length: String(sourceQuote.length || ''),
+          height: String(sourceQuote.height || 14),
+          pitch: String(payload.pitch || sourceQuote.pitch || 1),
+        }];
+
+    setForm({
+      ...getInitialForm(),
+      jobId: sourceQuote.jobId,
+      jobName: sourceQuote.jobName,
+      clientName: sourceQuote.clientName,
+      clientId: sourceQuote.clientId,
+      salesRep: sourceQuote.salesRep,
+      estimator: sourceQuote.estimator,
+      province: sourceQuote.province,
+      city: sourceQuote.city,
+      address: sourceQuote.address,
+      postalCode: sourceQuote.postalCode,
+      width: String(sourceQuote.width || ''),
+      length: String(sourceQuote.length || ''),
+      height: String(sourceQuote.height || 14),
+      pitch: String(payload.pitch || sourceQuote.pitch || 1),
+      distance: String(payload.distance ?? 200),
+      remoteLevel: String(payload.remoteLevel ?? 'none'),
+      foundationType: sourceQuote.foundationType,
+      insulationCost: String(sourceQuote.insulation || 0),
+      insulationGrade: sourceQuote.insulationGrade || '',
+      gutters: String(sourceQuote.gutters || 0),
+      liners: String(sourceQuote.liners || 0),
+      contingencyPct: String(sourceQuote.contingencyPct || 5),
+      notes: Array.isArray(payload.notes) ? payload.notes.join('\n') : String(payload.notes || ''),
+    });
+    setBuildings(importedBuildings);
+    setActiveBuildingIdx(0);
+  }, [existingQuote, sourceQuote]);
 
   const handleEaveHeightChange = (side: 'left' | 'right', value: string) => {
     const left = side === 'left' ? value : leftEaveHeight;
@@ -828,9 +934,9 @@ export default function InternalQuoteBuilder() {
     const jobId = form.jobId || await allocateJobId();
     if (!form.jobId) set('jobId', jobId);
 
-    const q: Quote = {
-      id: crypto.randomUUID(),
-      date: new Date().toISOString().split('T')[0],
+  const q: Quote = {
+      id: existingQuote?.id || quote?.id || crypto.randomUUID(),
+      date: existingQuote?.date || quote?.date || new Date().toISOString().split('T')[0],
       jobId,
       jobName, clientName: form.clientName, clientId: form.clientId,
       salesRep: form.salesRep, estimator: form.estimator,
@@ -845,12 +951,18 @@ export default function InternalQuoteBuilder() {
       gstHst, qst, grandTotal: totalPlusCont, status: 'Draft',
       documentType: 'internal_quote',
       workflowStatus: 'internal_quote_ready',
+      sourceDocumentId: existingQuote?.sourceDocumentId || searchParams.get('sourceDocumentId'),
+      pdfStoragePath: existingQuote?.pdfStoragePath || quote?.pdfStoragePath || '',
+      pdfFileName: existingQuote?.pdfFileName || quote?.pdfFileName || '',
       payload: {
         notes,
         buildings,
         singleSlope,
         leftEaveHeight,
         rightEaveHeight,
+        distance: form.distance,
+        remoteLevel: form.remoteLevel,
+        pitch: form.pitch,
       },
     };
     setQuote(q);
@@ -862,22 +974,57 @@ export default function InternalQuoteBuilder() {
     setCostSavingTips(generateCostSavingTips(form, costData, q));
   };
 
-  const saveToLog = () => {
+  const persistQuote = async (resetAfterSave = false) => {
     if (!quote) return;
-    addQuote(quote);
+    const nextQuote = { ...quote, updatedAt: new Date().toISOString() };
 
-    toast.success('Quote saved to Quote Log — convert to Deal from the Quote Log when ready');
+    if (existingQuote) {
+      await updateQuote(existingQuote.id, nextQuote);
+    } else {
+      await addQuote(nextQuote);
+    }
+
+    const pdf = await saveDocumentPdf(nextQuote);
+    await updateQuote(nextQuote.id, {
+      pdfStoragePath: pdf.storagePath,
+      pdfFileName: pdf.fileName,
+      updatedAt: new Date().toISOString(),
+    });
+
+    if (nextQuote.sourceDocumentId) {
+      await updateQuote(nextQuote.sourceDocumentId, {
+        workflowStatus: 'internal_quote_ready',
+        updatedAt: new Date().toISOString(),
+      });
+    }
+
+    setQuote(current => current ? ({
+      ...current,
+      pdfStoragePath: pdf.storagePath,
+      pdfFileName: pdf.fileName,
+      updatedAt: new Date().toISOString(),
+    }) : current);
+
+    toast.success(existingQuote ? 'Internal quote updated' : 'Internal quote saved to Internal Quote Log');
+    if (resetAfterSave) {
+      resetBuilder('Save is complete. Start a new quote and clear this screen?');
+    }
   };
 
-  const saveToLogAndNew = () => {
+  const saveToLog = async () => {
     if (!quote) return;
-    addQuote(quote);
-    toast.success('Internal quote saved to Internal Quote Log');
-    resetBuilder('Save is complete. Start a new quote and clear this screen?');
+    await persistQuote(false);
   };
 
-  const downloadPdf = () => {
+  const saveToLogAndNew = async () => {
     if (!quote) return;
+    await persistQuote(true);
+  };
+
+  const downloadPdf = async () => {
+    if (!quote) return;
+    await downloadDocumentPdf(quote);
+    return;
     const printContent = document.getElementById('internal-quote-output');
     if (!printContent) return;
     const win = window.open('', '_blank');

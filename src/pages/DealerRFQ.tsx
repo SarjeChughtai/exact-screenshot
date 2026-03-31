@@ -12,6 +12,7 @@ import { useSettings } from '@/context/SettingsContext';
 import { useAuth } from '@/context/AuthContext';
 import { useAppContext } from '@/context/AppContext';
 import { useTranslation } from 'react-i18next';
+import { saveDocumentPdf } from '@/lib/documentPdf';
 
 const INITIAL_FORM = {
   clientName: '',
@@ -42,7 +43,7 @@ export default function DealerRFQ() {
   const { t } = useTranslation();
   const { settings } = useSettings();
   const { user } = useAuth();
-  const { addQuote, allocateJobId } = useAppContext();
+  const { addQuote, updateQuote, allocateJobId } = useAppContext();
   const dealerProfile = settings.dealers?.find(dealer => dealer.userId === user?.id);
 
   const [form, setForm] = useState({
@@ -90,7 +91,7 @@ export default function DealerRFQ() {
     const height = parseFloat(form.height) || parseFloat(form.highSide) || 14;
     const jobId = await allocateJobId();
 
-    await addQuote({
+    const quote = {
       id: crypto.randomUUID(),
       date: new Date().toISOString().split('T')[0],
       jobId,
@@ -136,6 +137,14 @@ export default function DealerRFQ() {
         dealerBusinessName: dealerProfile?.businessName || '',
         dealerClientId: dealerProfile?.clientId || '',
       },
+    };
+
+    await addQuote(quote);
+    const pdf = await saveDocumentPdf(quote);
+    await updateQuote(quote.id, {
+      pdfStoragePath: pdf.storagePath,
+      pdfFileName: pdf.fileName,
+      updatedAt: new Date().toISOString(),
     });
 
     toast.success(t('dealerRfq.toast.success'));

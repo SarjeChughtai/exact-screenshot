@@ -9,6 +9,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { JobIdSelect } from '@/components/JobIdSelect';
+import { ClientSelect } from '@/components/ClientSelect';
+import { VendorSelect } from '@/components/VendorSelect';
 import { formatCurrency, getProvinceTax, PROVINCES } from '@/lib/calculations';
 import { supabase } from '@/integrations/supabase/client';
 import type { PaymentEntry, PaymentDirection, PaymentType } from '@/types';
@@ -79,22 +81,20 @@ export default function PaymentLedger() {
     setEditForm(f => ({ ...f, direction: dir as PaymentDirection, clientId: '', vendorId: '', clientVendorName: '', vendorProvinceOverride: '' }));
   };
 
-  const handleClientSelect = (clientId: string) => {
-    const c = clients.find(c => c.id === clientId);
-    setForm(f => ({ ...f, clientId, clientVendorName: c?.name ?? '' }));
+  const handleClientSelect = ({ clientId, clientName }: { clientId: string; clientName: string }) => {
+    const client = clients.find(c => c.clientId === clientId || c.id === clientId);
+    setForm(f => ({ ...f, clientId: client?.id || clientId, clientVendorName: clientName || client?.clientName || client?.name || '' }));
   };
-  const handleEditClientSelect = (clientId: string) => {
-    const c = clients.find(c => c.id === clientId);
-    setEditForm(f => ({ ...f, clientId, clientVendorName: c?.name ?? '' }));
+  const handleEditClientSelect = ({ clientId, clientName }: { clientId: string; clientName: string }) => {
+    const client = clients.find(c => c.clientId === clientId || c.id === clientId);
+    setEditForm(f => ({ ...f, clientId: client?.id || clientId, clientVendorName: clientName || client?.clientName || client?.name || '' }));
   };
 
-  const handleVendorSelect = (vendorId: string) => {
-    const v = vendors.find(v => v.id === vendorId);
-    setForm(f => ({ ...f, vendorId, clientVendorName: v?.name ?? '', vendorProvinceOverride: v?.province ?? '' }));
+  const handleVendorSelect = ({ vendorId, vendorName, province }: { vendorId: string; vendorName: string; province: string }) => {
+    setForm(f => ({ ...f, vendorId, clientVendorName: vendorName, vendorProvinceOverride: province || '' }));
   };
-  const handleEditVendorSelect = (vendorId: string) => {
-    const v = vendors.find(v => v.id === vendorId);
-    setEditForm(f => ({ ...f, vendorId, clientVendorName: v?.name ?? '', vendorProvinceOverride: v?.province ?? '' }));
+  const handleEditVendorSelect = ({ vendorId, vendorName, province }: { vendorId: string; vendorName: string; province: string }) => {
+    setEditForm(f => ({ ...f, vendorId, clientVendorName: vendorName, vendorProvinceOverride: province || '' }));
   };
 
   const resolveProvince = (f: typeof BLANK_FORM, jobId: string) => {
@@ -315,24 +315,23 @@ export default function PaymentLedger() {
             {isClientDirection(form.direction) ? (
               <div>
                 <Label className="text-xs">Client</Label>
-                <Select value={form.clientId} onValueChange={handleClientSelect}>
-                  <SelectTrigger className="input-blue mt-1"><SelectValue placeholder="Select client..." /></SelectTrigger>
-                  <SelectContent>
-                    {clients.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                    <SelectItem value="__manual">Manual entry</SelectItem>
-                  </SelectContent>
-                </Select>
+                <ClientSelect
+                  mode="name"
+                  valueId={clients.find(c => c.id === form.clientId)?.clientId || form.clientId}
+                  valueName={form.clientVendorName}
+                  onSelect={handleClientSelect}
+                  className="mt-1"
+                />
               </div>
             ) : (
               <div>
                 <Label className="text-xs">Vendor</Label>
-                <Select value={form.vendorId} onValueChange={handleVendorSelect}>
-                  <SelectTrigger className="input-blue mt-1"><SelectValue placeholder="Select vendor..." /></SelectTrigger>
-                  <SelectContent>
-                    {vendors.map(v => <SelectItem key={v.id} value={v.id}>{v.name} ({v.province})</SelectItem>)}
-                    <SelectItem value="__manual">Manual entry</SelectItem>
-                  </SelectContent>
-                </Select>
+                <VendorSelect
+                  valueId={form.vendorId}
+                  valueName={form.clientVendorName}
+                  onSelect={handleVendorSelect}
+                  className="mt-1"
+                />
               </div>
             )}
 
@@ -492,7 +491,7 @@ export default function PaymentLedger() {
                     <div><span className="text-muted-foreground">Date:</span> <span className="font-medium">{viewingPayment.date}</span></div>
                     <div><span className="text-muted-foreground">Job ID:</span> <span className="font-mono font-medium">{viewingPayment.jobId}</span></div>
                     <div><span className="text-muted-foreground">Name:</span> <span className="font-medium">{viewingPayment.clientVendorName}</span></div>
-                    {linkedClient && <div><span className="text-muted-foreground">Linked Client:</span> <span className="font-medium">{linkedClient.name}</span></div>}
+                    {linkedClient && <div><span className="text-muted-foreground">Linked Client:</span> <span className="font-medium">{linkedClient.clientName || linkedClient.name}</span></div>}
                     {linkedVendor && <div><span className="text-muted-foreground">Linked Vendor:</span> <span className="font-medium">{linkedVendor.name} ({linkedVendor.province})</span></div>}
                     <div><span className="text-muted-foreground">Direction:</span> <span className="font-medium">{viewingPayment.direction}</span></div>
                     <div><span className="text-muted-foreground">Type:</span> <span className="font-medium">{viewingPayment.type}</span></div>
@@ -603,24 +602,23 @@ export default function PaymentLedger() {
                   {isClientDirection(editForm.direction) ? (
                     <div>
                       <Label className="text-xs">Client</Label>
-                      <Select value={editForm.clientId} onValueChange={handleEditClientSelect}>
-                        <SelectTrigger className="input-blue mt-1"><SelectValue placeholder="Select client..." /></SelectTrigger>
-                        <SelectContent>
-                          {clients.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                          <SelectItem value="__manual">Manual entry</SelectItem>
-                        </SelectContent>
-                      </Select>
+                      <ClientSelect
+                        mode="name"
+                        valueId={clients.find(c => c.id === editForm.clientId)?.clientId || editForm.clientId}
+                        valueName={editForm.clientVendorName}
+                        onSelect={handleEditClientSelect}
+                        className="mt-1"
+                      />
                     </div>
                   ) : (
                     <div>
                       <Label className="text-xs">Vendor</Label>
-                      <Select value={editForm.vendorId} onValueChange={handleEditVendorSelect}>
-                        <SelectTrigger className="input-blue mt-1"><SelectValue placeholder="Select vendor..." /></SelectTrigger>
-                        <SelectContent>
-                          {vendors.map(v => <SelectItem key={v.id} value={v.id}>{v.name} ({v.province})</SelectItem>)}
-                          <SelectItem value="__manual">Manual entry</SelectItem>
-                        </SelectContent>
-                      </Select>
+                      <VendorSelect
+                        valueId={editForm.vendorId}
+                        valueName={editForm.clientVendorName}
+                        onSelect={handleEditVendorSelect}
+                        className="mt-1"
+                      />
                     </div>
                   )}
 
