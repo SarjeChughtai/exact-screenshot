@@ -70,8 +70,8 @@ WITH quote_agg AS (
     max(nullif(q.job_name, '')) AS job_name,
     max(nullif(q.sales_rep, '')) AS sales_rep,
     max(nullif(q.estimator, '')) AS estimator,
-    max(q.assigned_estimator_user_id) AS assigned_estimator_user_id,
-    max(q.created_by_user_id) FILTER (WHERE q.document_type = 'dealer_rfq') AS dealer_user_id,
+    (array_remove(array_agg(q.assigned_estimator_user_id), NULL))[1] AS assigned_estimator_user_id,
+    (array_remove(array_agg(q.created_by_user_id) FILTER (WHERE q.document_type = 'dealer_rfq'), NULL))[1] AS dealer_user_id,
     max(
       CASE q.document_type
         WHEN 'external_quote' THEN 3
@@ -129,7 +129,7 @@ deal_agg AS (
 freight_agg AS (
   SELECT
     f.job_id,
-    max(f.assigned_freight_user_id) AS assigned_freight_user_id
+    (array_remove(array_agg(f.assigned_freight_user_id), NULL))[1] AS assigned_freight_user_id
   FROM public.freight f
   WHERE coalesce(f.job_id, '') <> ''
   GROUP BY f.job_id
