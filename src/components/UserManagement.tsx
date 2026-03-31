@@ -79,7 +79,7 @@ export function UserManagement({
   hidePendingRequests = false,
 }: UserManagementProps = {}) {
   const { user, hasAnyRole } = useAuth();
-  const { profile } = useSettings();
+  const { profile, updateProfile } = useSettings();
   const navigate = useNavigate();
   const isOwner = hasAnyRole(['owner']);
   const isAdmin = hasAnyRole(['admin', 'owner']);
@@ -279,6 +279,14 @@ export function UserManagement({
     if (error) {
       toast.error('Failed to update messaging access: ' + error.message);
       return;
+    }
+
+    setUsers(prev => prev.map(existing => existing.userId === userId
+      ? { ...existing, messagingEnabled: enabled }
+      : existing));
+
+    if (userId === user?.id) {
+      await updateProfile({ canUseMessaging: enabled });
     }
 
     toast.success(enabled ? 'Messaging enabled' : 'Messaging disabled');
