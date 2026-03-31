@@ -3,11 +3,10 @@ import { useRoles } from '@/context/RoleContext';
 import { formatCurrency } from '@/lib/calculations';
 import { BarChart3, Briefcase, DollarSign, TrendingUp, Clock, CheckCircle2, AlertCircle, CreditCard } from 'lucide-react';
 import { Navigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 
 const PIPELINE_STAGES = ['Lead', 'Quoted', 'Pending Payment', 'In Progress', 'In Production', 'Shipped', 'Delivered', 'Complete'] as const;
-const PIPELINE_STAGE_LABELS: Record<string, string> = {
-  Lead: 'Request for Quote',
-};
+
 const STAGE_COLORS: Record<string, string> = {
   Lead: 'bg-muted text-muted-foreground',
   Quoted: 'bg-accent/20 text-accent',
@@ -22,6 +21,18 @@ const STAGE_COLORS: Record<string, string> = {
 export default function Dashboard() {
   const { quotes, deals, payments, freight, internalCosts } = useAppContext();
   const { currentUser, hasAnyRole } = useRoles();
+  const { t } = useTranslation();
+
+  const PIPELINE_STAGE_LABELS: Record<string, string> = {
+    Lead: t('dashboard.stages.lead'),
+    Quoted: t('dashboard.stages.quoted'),
+    'Pending Payment': t('dashboard.stages.pendingPayment'),
+    'In Progress': t('dashboard.stages.inProgress'),
+    'In Production': t('dashboard.stages.inProduction'),
+    Shipped: t('dashboard.stages.shipped'),
+    Delivered: t('dashboard.stages.delivered'),
+    Complete: t('dashboard.stages.complete'),
+  };
 
   if (hasAnyRole('freight', 'manufacturer', 'construction')) {
      return <Navigate to="/vendor-board" replace />;
@@ -115,29 +126,29 @@ export default function Dashboard() {
   const stats = [
     ...(isSalesRep
       ? [
-          { label: 'Active Deals', value: activeDeals.length, icon: Briefcase, color: 'text-accent' },
-          { label: 'Pipeline Value', value: formatCurrency(pipelineValue), icon: TrendingUp, color: 'text-steel-blue' },
-          { label: 'Total GP', value: formatCurrency(totalGrossProfit), icon: DollarSign, color: 'text-success' },
-          { label: 'Cash Position', value: formatCurrency(cashPosition), icon: CreditCard, color: 'text-warning' },
-          { label: 'Win Rate', value: totalQuotes ? `${Math.round((wonQuotes / totalQuotes) * 100)}%` : '—', icon: TrendingUp, color: 'text-success' },
-          { label: 'Active Quotes', value: activeQuotes.length, icon: Clock, color: 'text-warning' },
+          { label: t('dashboard.activeDeals'), value: activeDeals.length, icon: Briefcase, color: 'text-accent' },
+          { label: t('dashboard.pipelineValue'), value: formatCurrency(pipelineValue), icon: TrendingUp, color: 'text-steel-blue' },
+          { label: t('dashboard.totalGp'), value: formatCurrency(totalGrossProfit), icon: DollarSign, color: 'text-success' },
+          { label: t('dashboard.cashPosition'), value: formatCurrency(cashPosition), icon: CreditCard, color: 'text-warning' },
+          { label: t('dashboard.winRate'), value: totalQuotes ? `${Math.round((wonQuotes / totalQuotes) * 100)}%` : '—', icon: TrendingUp, color: 'text-success' },
+          { label: t('dashboard.activeQuotes'), value: activeQuotes.length, icon: Clock, color: 'text-warning' },
         ]
       : [
-          { label: 'Active Deals', value: activeDeals.length, icon: Briefcase, color: 'text-accent' },
-          { label: 'Pipeline Value', value: formatCurrency(pipelineValue), icon: TrendingUp, color: 'text-steel-blue' },
-          { label: 'Revenue In', value: formatCurrency(totalRevenue), icon: DollarSign, color: 'text-success' },
-          { label: 'Costs Out', value: formatCurrency(totalCosts), icon: BarChart3, color: 'text-destructive' },
-          { label: 'Total GP', value: formatCurrency(totalGrossProfit), icon: DollarSign, color: 'text-success' },
-          { label: 'Cash Position', value: formatCurrency(cashPosition), icon: CreditCard, color: 'text-warning' },
+          { label: t('dashboard.activeDeals'), value: activeDeals.length, icon: Briefcase, color: 'text-accent' },
+          { label: t('dashboard.pipelineValue'), value: formatCurrency(pipelineValue), icon: TrendingUp, color: 'text-steel-blue' },
+          { label: t('dashboard.revenueIn'), value: formatCurrency(totalRevenue), icon: DollarSign, color: 'text-success' },
+          { label: t('dashboard.costsOut'), value: formatCurrency(totalCosts), icon: BarChart3, color: 'text-destructive' },
+          { label: t('dashboard.totalGp'), value: formatCurrency(totalGrossProfit), icon: DollarSign, color: 'text-success' },
+          { label: t('dashboard.cashPosition'), value: formatCurrency(cashPosition), icon: CreditCard, color: 'text-warning' },
         ]),
   ];
 
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold text-foreground">Dashboard</h2>
+        <h2 className="text-2xl font-bold text-foreground">{t('dashboard.title')}</h2>
         <p className="text-sm text-muted-foreground mt-1">
-          {isSalesRep ? `${currentUser.name}'s pipeline & quotes` : 'Pipeline overview and key metrics'}
+          {isSalesRep ? t('dashboard.subtitleSalesRep', { name: currentUser.name }) : t('dashboard.subtitleAdmin')}
         </p>
       </div>
 
@@ -156,12 +167,12 @@ export default function Dashboard() {
 
       {/* Pipeline */}
       <div className="bg-card rounded-lg border p-5">
-        <h3 className="text-sm font-semibold text-card-foreground mb-4">Deal Pipeline</h3>
+        <h3 className="text-sm font-semibold text-card-foreground mb-4">{t('dashboard.dealPipeline')}</h3>
         {visibleDeals.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No deals yet.</p>
+          <p className="text-sm text-muted-foreground">{t('dashboard.noDeals')}</p>
         ) : (
           <>
-            <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-2">
+            <div className="grid grid-cols-2 md:grid-cols-4 XL:grid-cols-8 gap-2">
               {PIPELINE_STAGES.map(stage => (
                 <div key={stage} className={`rounded-lg p-3 text-center ${STAGE_COLORS[stage] || 'bg-muted'}`}>
                   <p className="text-lg font-bold">{pipelineCounts[stage]}</p>
@@ -181,21 +192,21 @@ export default function Dashboard() {
 
       {/* Recent deals */}
       <div className="bg-card rounded-lg border p-5">
-        <h3 className="text-sm font-semibold text-card-foreground mb-4">Recent Deals</h3>
+        <h3 className="text-sm font-semibold text-card-foreground mb-4">{t('dashboard.recentDeals')}</h3>
         {visibleDeals.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No deals yet. Create quotes and convert won quotes to deals.</p>
+          <p className="text-sm text-muted-foreground">{t('dashboard.noDeals')}</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b text-left text-muted-foreground">
-                  <th className="pb-2 font-medium">Job ID</th>
-                  <th className="pb-2 font-medium">Client</th>
-                  {!isSalesRep && <th className="pb-2 font-medium">Sales Rep</th>}
-                  <th className="pb-2 font-medium">Status</th>
-                  <th className="pb-2 font-medium">Payment</th>
-                  <th className="pb-2 font-medium">Production</th>
-                  <th className="pb-2 font-medium">Freight</th>
+                  <th className="pb-2 font-medium">{t('dashboard.headers.jobId')}</th>
+                  <th className="pb-2 font-medium">{t('dashboard.headers.client')}</th>
+                  {!isSalesRep && <th className="pb-2 font-medium">{t('dashboard.headers.salesRep')}</th>}
+                  <th className="pb-2 font-medium">{t('dashboard.headers.status')}</th>
+                  <th className="pb-2 font-medium">{t('dashboard.headers.payment')}</th>
+                  <th className="pb-2 font-medium">{t('dashboard.headers.production')}</th>
+                  <th className="pb-2 font-medium">{t('dashboard.headers.freight')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -230,19 +241,19 @@ export default function Dashboard() {
         <div className="bg-card rounded-lg border p-5">
           <h3 className="text-sm font-semibold text-card-foreground mb-4 flex items-center gap-2">
             <Clock className="h-4 w-4 text-warning" />
-            Active Quotes Out
+            {t('dashboard.activeQuotesOut')}
           </h3>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b text-left text-muted-foreground">
-                  <th className="pb-2 font-medium">Job ID</th>
-                  <th className="pb-2 font-medium">Client</th>
-                  {!isSalesRep && <th className="pb-2 font-medium">Sales Rep</th>}
-                  <th className="pb-2 font-medium">Building</th>
-                  <th className="pb-2 font-medium">Total</th>
-                  <th className="pb-2 font-medium">Status</th>
-                  <th className="pb-2 font-medium">Date</th>
+                  <th className="pb-2 font-medium">{t('dashboard.headers.jobId')}</th>
+                  <th className="pb-2 font-medium">{t('dashboard.headers.client')}</th>
+                  {!isSalesRep && <th className="pb-2 font-medium">{t('dashboard.headers.salesRep')}</th>}
+                  <th className="pb-2 font-medium">{t('dashboard.headers.building')}</th>
+                  <th className="pb-2 font-medium">{t('dashboard.headers.total')}</th>
+                  <th className="pb-2 font-medium">{t('dashboard.headers.status')}</th>
+                  <th className="pb-2 font-medium">{t('dashboard.headers.date')}</th>
                 </tr>
               </thead>
               <tbody>
