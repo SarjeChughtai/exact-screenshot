@@ -24,6 +24,7 @@ import { DocumentGallery } from '@/components/DocumentGallery';
 import { getQuoteFileUrl } from '@/lib/quoteFileStorage';
 import * as pdfjsLib from 'pdfjs-dist';
 import { downloadDocumentPdf, saveDocumentPdf } from '@/lib/documentPdf';
+import { notifyUsers } from '@/lib/workflowNotifications';
 
 interface CostFileData {
   steelWeightLbs: number;
@@ -997,6 +998,16 @@ export default function InternalQuoteBuilder() {
         updatedAt: new Date().toISOString(),
       });
     }
+
+    const salesRepUserId = settings.personnel.find(person =>
+      person.role === 'sales_rep' && person.name.trim().toLowerCase() === nextQuote.salesRep.trim().toLowerCase(),
+    )?.id;
+    await notifyUsers({
+      userIds: [salesRepUserId],
+      title: existingQuote ? 'Internal Quote Updated' : 'Internal Quote Ready',
+      message: `${nextQuote.jobId} for ${nextQuote.clientName} is ready for sales review.`,
+      link: '/internal-quote-log',
+    });
 
     setQuote(current => current ? ({
       ...current,

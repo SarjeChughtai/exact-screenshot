@@ -5,9 +5,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { useAppContext } from '@/context/AppContext';
 import { useRoles } from '@/context/RoleContext';
+import { useSettings } from '@/context/SettingsContext';
 import { supabase } from '@/integrations/supabase/client';
 import { quoteFileFromRow } from '@/lib/supabaseMappers';
 import { getQuoteFileUrl, uploadQuoteFile } from '@/lib/quoteFileStorage';
+import { getUserIdsForRole, notifyUsers } from '@/lib/workflowNotifications';
 import type { Quote, QuoteFileRecord, WorkflowStatus } from '@/types';
 import { toast } from 'sonner';
 
@@ -99,6 +101,7 @@ export function RFQWorkflowQueues() {
   const navigate = useNavigate();
   const { quotes, updateQuote } = useAppContext();
   const { currentUser, hasAnyRole } = useRoles();
+  const { settings } = useSettings();
   const [filesByDocumentId, setFilesByDocumentId] = useState<Record<string, QuoteFileRecord[]>>({});
 
   const rfqDocuments = useMemo(
@@ -163,6 +166,12 @@ export function RFQWorkflowQueues() {
         .map(quote => [quote.sourceDocumentId as string, quote]),
     )
   ), [quotes]);
+
+  const getPersonnelUserId = (role: 'sales_rep' | 'estimator', name: string) => (
+    settings.personnel.find(person =>
+      person.role === role && person.name.trim().toLowerCase() === name.trim().toLowerCase()
+    )?.id
+  );
 
   const uploadCostFiles = async (quote: Quote, selectedFiles: FileList | null) => {
     if (!selectedFiles?.length) return;
@@ -263,11 +272,19 @@ export function RFQWorkflowQueues() {
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => updateQuote(quote.id, {
-                        workflowStatus: 'estimating',
-                        assignedEstimatorUserId: currentUser.id,
-                        updatedAt: new Date().toISOString(),
-                      })}
+                      onClick={async () => {
+                        await updateQuote(quote.id, {
+                          workflowStatus: 'estimating',
+                          assignedEstimatorUserId: currentUser.id,
+                          updatedAt: new Date().toISOString(),
+                        });
+                        await notifyUsers({
+                          userIds: [getPersonnelUserId('sales_rep', quote.salesRep)],
+                          title: 'Estimator Started RFQ',
+                          message: `${quote.jobId} for ${quote.clientName} is now in estimating.`,
+                          link: '/quote-log',
+                        });
+                      }}
                     >
                       Start Estimate
                     </Button>
@@ -282,11 +299,20 @@ export function RFQWorkflowQueues() {
                     </label>
                     <Button
                       size="sm"
-                      onClick={() => updateQuote(quote.id, {
-                        workflowStatus: 'estimate_complete',
-                        assignedEstimatorUserId: currentUser.id,
-                        updatedAt: new Date().toISOString(),
-                      })}
+                      onClick={async () => {
+                        await updateQuote(quote.id, {
+                          workflowStatus: 'estimate_complete',
+                          assignedEstimatorUserId: currentUser.id,
+                          updatedAt: new Date().toISOString(),
+                        });
+                        const operationsUserIds = await getUserIdsForRole('operations');
+                        await notifyUsers({
+                          userIds: [...operationsUserIds, getPersonnelUserId('sales_rep', quote.salesRep)],
+                          title: 'Estimate Complete',
+                          message: `${quote.jobId} for ${quote.clientName} is ready for internal quoting.`,
+                          link: '/quote-log',
+                        });
+                      }}
                     >
                       Submit To Operations
                     </Button>
@@ -318,11 +344,17 @@ export function RFQWorkflowQueues() {
                   <>
                     <Button
                       size="sm"
-                      onClick={() => {
-                        updateQuote(quote.id, {
+                      onClick={async () => {
+                        await updateQuote(quote.id, {
                           workflowStatus: 'internal_quote_in_progress',
                           assignedOperationsUserId: currentUser.id,
                           updatedAt: new Date().toISOString(),
+                        });
+                        await notifyUsers({
+                          userIds: [getPersonnelUserId('sales_rep', quote.salesRep)],
+                          title: 'Internal Quote In Progress',
+                          message: `${quote.jobId} for ${quote.clientName} is being built by operations.`,
+                          link: '/quote-log',
                         });
                         navigate(`/internal-quote-builder?sourceDocumentId=${quote.id}`);
                       }}

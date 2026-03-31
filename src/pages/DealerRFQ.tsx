@@ -13,6 +13,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useAppContext } from '@/context/AppContext';
 import { useTranslation } from 'react-i18next';
 import { saveDocumentPdf } from '@/lib/documentPdf';
+import { notifyUsers } from '@/lib/workflowNotifications';
 
 const INITIAL_FORM = {
   clientName: '',
@@ -145,6 +146,16 @@ export default function DealerRFQ() {
       pdfStoragePath: pdf.storagePath,
       pdfFileName: pdf.fileName,
       updatedAt: new Date().toISOString(),
+    });
+
+    const estimatorUserId = settings.personnel.find(person =>
+      person.role === 'estimator' && person.name.trim().toLowerCase() === form.estimator.trim().toLowerCase(),
+    )?.id;
+    await notifyUsers({
+      userIds: [estimatorUserId],
+      title: 'New Dealer RFQ Submitted',
+      message: `${form.clientName || dealerProfile?.businessName || 'Dealer'} submitted RFQ ${jobId}.`,
+      link: '/quote-log',
     });
 
     toast.success(t('dealerRfq.toast.success'));

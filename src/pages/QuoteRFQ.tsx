@@ -8,7 +8,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { JobIdSelect } from '@/components/JobIdSelect';
 import { Switch } from '@/components/ui/switch';
 import { useAppContext } from '@/context/AppContext';
+import { useSettings } from '@/context/SettingsContext';
 import { PROVINCES } from '@/lib/calculations';
+import { notifyUsers } from '@/lib/workflowNotifications';
 import { toast } from 'sonner';
 import { Plus, Trash2, Send, Printer } from 'lucide-react';
 import { PersonnelSelect } from '@/components/PersonnelSelect';
@@ -108,6 +110,7 @@ function mapQuoteToForm(quote: Quote) {
 export default function QuoteRFQ() {
   const [searchParams] = useSearchParams();
   const { deals, quotes, estimates, addQuote, updateQuote, allocateJobId } = useAppContext();
+  const { settings } = useSettings();
   const [form, setForm] = useState(INITIAL_FORM);
   const [openings, setOpenings] = useState<Opening[]>([]);
   const [selectedEstimateId, setSelectedEstimateId] = useState(searchParams.get('estimateId') || '');
@@ -277,6 +280,16 @@ export default function QuoteRFQ() {
       pdfStoragePath: pdf.storagePath,
       pdfFileName: pdf.fileName,
       updatedAt: new Date().toISOString(),
+    });
+
+    const estimatorUserId = settings.personnel.find(person =>
+      person.role === 'estimator' && person.name.trim().toLowerCase() === form.estimator.trim().toLowerCase(),
+    )?.id;
+    await notifyUsers({
+      userIds: [estimatorUserId],
+      title: 'New RFQ Submitted',
+      message: `${form.clientName || 'A client'} RFQ ${jobId} is ready for estimating.`,
+      link: '/quote-log',
     });
     toast.success('RFQ submitted');
   };
