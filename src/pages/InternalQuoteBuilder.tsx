@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -21,7 +22,15 @@ import { ClientSelect } from '@/components/ClientSelect';
 import { JobIdSelect } from '@/components/JobIdSelect';
 import { DocumentGallery } from '@/components/DocumentGallery';
 import { getQuoteFileUrl } from '@/lib/quoteFileStorage';
-import * as pdfjsLib from 'pdfjs-dist';
+import { downloadDocumentPdf, saveDocumentPdf } from '@/lib/documentPdf';
+import { notifyUsers } from '@/lib/workflowNotifications';
+import {
+  extractTextFromPdf as extractCostPdfText,
+  isInsulationQuoteText,
+  parseMbsQuotePages,
+  parseSilvercoteQuotePages,
+} from '@/lib/pdfParsers';
+import { persistParsedCostDocument } from '@/lib/costDataWarehouse';
 
 interface CostFileData {
   steelWeightLbs: number;
@@ -67,8 +76,13 @@ function generateCostSavingTips(form: any, costData: CostFileData, quote: Quote 
 }
 
 export default function InternalQuoteBuilder() {
-  const { addQuote, deals, quotes, allocateJobId } = useAppContext();
+  const [searchParams] = useSearchParams();
+  const { addQuote, updateQuote, deals, quotes, allocateJobId } = useAppContext();
   const { settings, getSalesReps } = useSettings();
+  const editingQuoteId = searchParams.get('quoteId');
+  const sourceDocumentId = searchParams.get('sourceDocumentId');
+  const existingQuote = quotes.find(item => item.id === editingQuoteId);
+  const sourceQuote = quotes.find(item => item.id === sourceDocumentId);
 
   const getInitialForm = () => ({
     jobId: '', jobName: '', clientName: '', clientId: '',
@@ -210,6 +224,105 @@ export default function InternalQuoteBuilder() {
     localStorage.setItem('csb_internal_builder_active_state', JSON.stringify(stateToSave));
   }, [form, buildings, supplierMarkupPct, singleSlope, leftEaveHeight, rightEaveHeight, activeBuildingIdx, isInitialized]);
 
+  useEffect(() => {
+    if (!existingQuote) return;
+    const payload = (existingQuote.payload || {}) as Record<string, any>;
+    const incomingBuildings = Array.isArray(payload.buildings) && payload.buildings.length
+      ? payload.buildings.map((building: any, index: number) => ({
+          ...getInitialBuilding(String(building?.label || `Building ${index + 1}`)),
+          ...building,
+          costData: {
+            ...getInitialBuilding().costData,
+            ...(building?.costData || {}),
+          },
+          files: Array.isArray(building?.files) ? building.files : [],
+        }))
+      : [getInitialBuilding()];
+
+    setForm({
+      ...getInitialForm(),
+      jobId: existingQuote.jobId,
+      jobName: existingQuote.jobName,
+      clientName: existingQuote.clientName,
+      clientId: existingQuote.clientId,
+      salesRep: existingQuote.salesRep,
+      estimator: existingQuote.estimator,
+      province: existingQuote.province,
+      city: existingQuote.city,
+      address: existingQuote.address,
+      postalCode: existingQuote.postalCode,
+      width: String(existingQuote.width || ''),
+      length: String(existingQuote.length || ''),
+      height: String(existingQuote.height || 14),
+      pitch: String(existingQuote.pitch ?? payload.pitch ?? 1),
+      distance: String(payload.distance ?? 200),
+      remoteLevel: String(payload.remoteLevel ?? 'none'),
+      foundationType: existingQuote.foundationType,
+      insulationCost: String(existingQuote.insulation || 0),
+      insulationGrade: existingQuote.insulationGrade || '',
+      gutters: String(existingQuote.gutters || 0),
+      liners: String(existingQuote.liners || 0),
+      contingencyPct: String(existingQuote.contingencyPct || 5),
+      notes: String(payload.notes || ''),
+    });
+    setBuildings(incomingBuildings);
+    setActiveBuildingIdx(0);
+    setSingleSlope(Boolean(payload.singleSlope ?? existingQuote.isSingleSlope));
+    setLeftEaveHeight(String(payload.leftEaveHeight ?? existingQuote.leftEaveHeight ?? existingQuote.height ?? 14));
+    setRightEaveHeight(String(payload.rightEaveHeight ?? existingQuote.rightEaveHeight ?? existingQuote.height ?? 14));
+    setQuote(existingQuote);
+  }, [existingQuote]);
+
+  useEffect(() => {
+    if (existingQuote || !sourceQuote) return;
+    const payload = (sourceQuote.payload || {}) as Record<string, any>;
+    const importedBuildings = Array.isArray(payload.buildings) && payload.buildings.length
+      ? payload.buildings.map((building: any, index: number) => ({
+          ...getInitialBuilding(String(building?.label || `Building ${index + 1}`)),
+          ...building,
+          width: String(building?.width || sourceQuote.width || ''),
+          length: String(building?.length || sourceQuote.length || ''),
+          height: String(building?.height || sourceQuote.height || 14),
+          pitch: String(building?.pitch || payload.pitch || sourceQuote.pitch || 1),
+        }))
+      : [{
+          ...getInitialBuilding(),
+          width: String(sourceQuote.width || ''),
+          length: String(sourceQuote.length || ''),
+          height: String(sourceQuote.height || 14),
+          pitch: String(payload.pitch || sourceQuote.pitch || 1),
+        }];
+
+    setForm({
+      ...getInitialForm(),
+      jobId: sourceQuote.jobId,
+      jobName: sourceQuote.jobName,
+      clientName: sourceQuote.clientName,
+      clientId: sourceQuote.clientId,
+      salesRep: sourceQuote.salesRep,
+      estimator: sourceQuote.estimator,
+      province: sourceQuote.province,
+      city: sourceQuote.city,
+      address: sourceQuote.address,
+      postalCode: sourceQuote.postalCode,
+      width: String(sourceQuote.width || ''),
+      length: String(sourceQuote.length || ''),
+      height: String(sourceQuote.height || 14),
+      pitch: String(payload.pitch || sourceQuote.pitch || 1),
+      distance: String(payload.distance ?? 200),
+      remoteLevel: String(payload.remoteLevel ?? 'none'),
+      foundationType: sourceQuote.foundationType,
+      insulationCost: String(sourceQuote.insulation || 0),
+      insulationGrade: sourceQuote.insulationGrade || '',
+      gutters: String(sourceQuote.gutters || 0),
+      liners: String(sourceQuote.liners || 0),
+      contingencyPct: String(sourceQuote.contingencyPct || 5),
+      notes: Array.isArray(payload.notes) ? payload.notes.join('\n') : String(payload.notes || ''),
+    });
+    setBuildings(importedBuildings);
+    setActiveBuildingIdx(0);
+  }, [existingQuote, sourceQuote]);
+
   const handleEaveHeightChange = (side: 'left' | 'right', value: string) => {
     const left = side === 'left' ? value : leftEaveHeight;
     const right = side === 'right' ? value : rightEaveHeight;
@@ -323,97 +436,7 @@ export default function InternalQuoteBuilder() {
     }
   };
 
-  const extractTextFromPdf = async (file: File): Promise<string[]> => {
-    const pdfjsLib = await import('pdfjs-dist');
-    pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs`;
-    const arrayBuffer = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-    const pages: string[] = [];
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i);
-      const content = await page.getTextContent();
-      pages.push(content.items.map((item: any) => item.str).join(' '));
-    }
-    return pages;
-  };
-
-  const detectInsulationPdf = (text: string): boolean => {
-    return (text.includes('Silvercote') || text.includes('SILVERCOTE')) ||
-      (text.includes('QUOTATION') && (text.includes('ROOF MATERIAL') || text.includes('WALLS MATERIAL')));
-  };
-
-  const parseInsulationPdf = (text: string): number => {
-    const totalMatch = text.match(/TOTAL\s*\(CAD\)\s*:?\s*\$?([\d,]+\.?\d*)/i);
-    if (totalMatch) return parseFloat(totalMatch[1].replace(/,/g, ''));
-    const altMatch = text.match(/Total\s*:?\s*\$?([\d,]+\.?\d*)/i);
-    if (altMatch) return parseFloat(altMatch[1].replace(/,/g, ''));
-    return 0;
-  };
-
-  const parseMbsPdf = (pages: string[]) => {
-    const fullText = pages.join('\n');
-    let weight = 0, costPerLb = 0, totalCost = 0;
-    let pWidth = 0, pLength = 0, pHeight = 0, pPitch = 0;
-    let clientName = '', clientId = '', jobId = '';
-    const accessories: { name: string; weight: number; cost: number }[] = [];
-
-    const forMatch = fullText.match(/FOR\s*\n?\s*(.+)/i);
-    if (forMatch) clientName = forMatch[1].trim();
-    const clientIdMatch = fullText.match(/FOR\s*\n?\s*.+\n?\s*(\d{4,})/i);
-    if (clientIdMatch) clientId = clientIdMatch[1].trim();
-    const jobMatch = fullText.match(/JOB\s*:?\s*(.+)/i);
-    if (jobMatch) jobId = jobMatch[1].trim();
-
-    const widthMatch = fullText.match(/Width\s*\(ft\)\s*=\s*([\d.]+)/i);
-    const lengthMatch = fullText.match(/Length\s*\(ft\)\s*=\s*([\d.]+)/i);
-    // Handles formats: "14" (symmetric) or "14 / 16" (single slope with different eave heights)
-    const heightMatch = fullText.match(/Eave\s*Height\s*\(ft\)\s*=\s*([\d.]+)\s*(?:\/\s*([\d.]+))?/i);
-    if (widthMatch) pWidth = parseFloat(widthMatch[1]);
-    if (lengthMatch) pLength = parseFloat(lengthMatch[1]);
-    let pLeftHeight: number | undefined;
-    let pRightHeight: number | undefined;
-    let pIsSingleSlope = false;
-    if (heightMatch) {
-      pLeftHeight = parseFloat(heightMatch[1]);
-      if (heightMatch[2]) {
-        pRightHeight = parseFloat(heightMatch[2]);
-        pIsSingleSlope = pLeftHeight !== pRightHeight;
-        pHeight = Math.max(pLeftHeight, pRightHeight);
-      } else {
-        pHeight = pLeftHeight;
-      }
-    }
-
-    // Roof Slope parsing: handles "Roof Slope (rise/12 )= 2.00/ 2.00" and similar formats
-    const slopeMatch = fullText.match(/Roof\s*Slope\s*\(?rise\/12\s*\)?\s*=\s*([\d.]+)/i);
-    if (slopeMatch) pPitch = parseFloat(slopeMatch[1]);
-
-    const totalMatch = fullText.match(/Total[:\s]+([\d,]+\.?\d*)\s+([\d,]+\.?\d*)/i);
-    if (totalMatch) {
-      weight = parseFloat(totalMatch[1].replace(/,/g, ''));
-      totalCost = parseFloat(totalMatch[2].replace(/,/g, ''));
-    }
-
-    const pplbMatch = fullText.match(/PRICE\s+PER\s+WEIGHT\s*\(lb\)\s+([\d.]+)/i);
-    if (pplbMatch) costPerLb = parseFloat(pplbMatch[1]);
-
-    const lines = fullText.split('\n');
-    for (const line of lines) {
-      const componentMatch = line.match(/^([A-Za-z][A-Za-z &,]+?)\s+([\d,]+\.?\d*)\s+([\d,]+\.?\d*)\s*$/);
-      if (componentMatch) {
-        const name = componentMatch[1].trim();
-        const cWeight = parseFloat(componentMatch[2].replace(/,/g, ''));
-        const cCost = parseFloat(componentMatch[3].replace(/,/g, ''));
-        if (name.toLowerCase() === 'total') continue;
-        if (cCost > 0) accessories.push({ name, weight: cWeight, cost: cCost });
-      }
-    }
-
-    if (weight && totalCost && !costPerLb) costPerLb = totalCost / weight;
-    if (weight && costPerLb && !totalCost) totalCost = weight * costPerLb;
-
-    return { weight, costPerLb, totalCost, pWidth, pLength, pHeight, pPitch, clientName, clientId, jobId, accessories, pLeftHeight, pRightHeight, pIsSingleSlope };
-  };
+  const extractTextFromPdf = async (file: File): Promise<string[]> => extractCostPdfText(file);
 
   const extractWithAI = async (text: string, filename: string): Promise<{ data: any; rawResponse: any; error: string | null }> => {
     try {
@@ -561,34 +584,38 @@ export default function InternalQuoteBuilder() {
         } else {
           // AI failed — try regex fallback
           const pages = fullText.split('\n');
-          if (detectInsulationPdf(fullText)) {
+          if (isInsulationQuoteText(fullText)) {
             extractionSource = 'regex';
             resolvedDocType = 'insulation';
-            const insulationTotal = parseInsulationPdf(fullText);
+            const parsedInsulation = parseSilvercoteQuotePages(pages);
+            const insulationTotal = parsedInsulation?.totalCost || 0;
             set('insulationCost', String(insulationTotal));
-            newParsedFiles.push({ name: file.name, type: 'insulation', status: 'success', data: { total: insulationTotal }, buildingIndex: activeBuildingIdx });
+            if (parsedInsulation?.grade) set('insulationGrade', parsedInsulation.grade);
+            newParsedFiles.push({ name: file.name, type: 'insulation', status: 'success', data: parsedInsulation || { total: insulationTotal }, buildingIndex: activeBuildingIdx });
             toast.success(`Insulation (regex): ${formatCurrency(insulationTotal)}`);
           } else {
-            const parsed = parseMbsPdf(pages);
-            if (parsed.weight > 0) {
+            const parsed = parseMbsQuotePages(pages);
+            if (parsed?.totalWeightLb && parsed.totalWeightLb > 0) {
               extractionSource = 'regex';
               resolvedDocType = 'mbs';
-              if (parsed.pWidth) set('width', String(parsed.pWidth));
-              if (parsed.pLength) set('length', String(parsed.pLength));
-              if (parsed.pHeight) set('height', String(parsed.pHeight));
-              if (parsed.pLeftHeight) setLeftEaveHeight(String(parsed.pLeftHeight));
-              if (parsed.pRightHeight) setRightEaveHeight(String(parsed.pRightHeight));
-              if (parsed.pIsSingleSlope) setSingleSlope(true);
-              if (parsed.pPitch) set('pitch', String(parsed.pPitch));
+              if (parsed.widthFt) set('width', String(parsed.widthFt));
+              if (parsed.lengthFt) set('length', String(parsed.lengthFt));
+              if (parsed.eaveHeightFt) set('height', String(parsed.eaveHeightFt));
+              if (parsed.leftEaveHeightFt) setLeftEaveHeight(String(parsed.leftEaveHeightFt));
+              if (parsed.rightEaveHeightFt) setRightEaveHeight(String(parsed.rightEaveHeightFt));
+              if (parsed.isSingleSlope) setSingleSlope(true);
+              if (parsed.roofSlope) set('pitch', String(parsed.roofSlope));
               if (parsed.clientName) set('clientName', parsed.clientName);
               if (parsed.clientId) set('clientId', parsed.clientId);
-              if (parsed.jobId) set('jobId', parsed.jobId);
+              if (parsed.projectId) set('jobId', parsed.projectId);
               setCostData({
-                steelWeightLbs: parsed.weight, supplierCostPerLb: parsed.costPerLb,
-                totalSupplierCost: parsed.totalCost, accessories: parsed.accessories,
+                steelWeightLbs: parsed.totalWeightLb,
+                supplierCostPerLb: parsed.pricePerLb || (parsed.totalWeightLb && parsed.totalCost ? parsed.totalCost / parsed.totalWeightLb : 0),
+                totalSupplierCost: parsed.totalCost || 0,
+                accessories: parsed.components.map(component => ({ name: component.name, weight: component.weight || 0, cost: component.cost })),
               });
               newParsedFiles.push({ name: file.name, type: 'mbs', status: 'success', data: parsed, buildingIndex: activeBuildingIdx });
-              toast.success(`MBS (regex): ${formatNumber(parsed.weight)} lbs`);
+              toast.success(`MBS (regex): ${formatNumber(parsed.totalWeightLb)} lbs`);
             } else {
               reviewStatus = 'needs_review';
               if (!parseError) parseError = 'Neither AI nor regex could extract data';
@@ -612,13 +639,14 @@ export default function InternalQuoteBuilder() {
           extractionSource,
           parseError,
           reviewStatus,
-        }).then(result => {
+        }).then(async (result) => {
           if (result) {
             toast.success(`${file.name} stored & backup queued`);
 
             // Save extracted data to the steel cost database (only on successful parse)
             if (lastParsed?.status === 'success') {
               const extractedData = lastParsed.data || {};
+              let persistedReviewStatus: 'pending' | 'needs_review' = reviewStatus;
               saveSteelCostEntry({
                 quoteFileId: result.id || undefined,
                 jobId: resolvedJobId,
@@ -648,6 +676,76 @@ export default function InternalQuoteBuilder() {
               }).catch(err => {
                 console.error('Steel cost entry save failed:', err);
               });
+
+              try {
+                if (resolvedDocType === 'mbs') {
+                  await persistParsedCostDocument({
+                    quoteFileId: result.id,
+                    documentId: existingQuote?.id || null,
+                    jobId: resolvedJobId || (extractedData.projectId ?? extractedData.jobId) || null,
+                    projectId: (extractedData.projectId ?? extractedData.jobId) || null,
+                    clientId: resolvedClientId || null,
+                    fileName: file.name,
+                    fileSize: file.size,
+                    fileType: file.type || lastParsed.type,
+                    storagePath: result.storagePath,
+                    uploadedBy: null,
+                    sourceType: 'uploaded',
+                    reviewStatus: persistedReviewStatus,
+                    parseError,
+                    parserName: extractionSource === 'regex' ? 'regex-pdf-parser' : 'ai-extractor',
+                  }, {
+                    type: 'mbs',
+                    steel: extractedData,
+                    reviewStatus: persistedReviewStatus,
+                    parseError,
+                  } as any);
+                } else if (resolvedDocType === 'insulation') {
+                  await persistParsedCostDocument({
+                    quoteFileId: result.id,
+                    documentId: existingQuote?.id || null,
+                    jobId: resolvedJobId || extractedData.projectId || null,
+                    projectId: extractedData.projectId || resolvedJobId || null,
+                    clientId: resolvedClientId || null,
+                    fileName: file.name,
+                    fileSize: file.size,
+                    fileType: file.type || lastParsed.type,
+                    storagePath: result.storagePath,
+                    uploadedBy: null,
+                    sourceType: 'uploaded',
+                    reviewStatus: persistedReviewStatus,
+                    parseError,
+                    parserName: extractionSource === 'regex' ? 'regex-pdf-parser' : 'ai-extractor',
+                  }, {
+                    type: 'insulation',
+                    insulation: extractedData,
+                    reviewStatus: persistedReviewStatus,
+                    parseError,
+                  } as any);
+                }
+              } catch (warehouseError) {
+                console.error('Cost warehouse persistence failed:', warehouseError);
+              }
+            } else {
+              try {
+                await persistParsedCostDocument({
+                  quoteFileId: result.id,
+                  documentId: existingQuote?.id || null,
+                  jobId: resolvedJobId || null,
+                  clientId: resolvedClientId || null,
+                  fileName: file.name,
+                  fileSize: file.size,
+                  fileType: file.type || lastParsed?.type || 'unknown',
+                  storagePath: result.storagePath,
+                  uploadedBy: null,
+                  sourceType: 'uploaded',
+                  reviewStatus: 'needs_review',
+                  parseError,
+                  parserName: extractionSource === 'regex' ? 'regex-pdf-parser' : extractionSource === 'ai' ? 'ai-extractor' : 'regex-pdf-parser',
+                }, null);
+              } catch (warehouseError) {
+                console.error('Unparsed document warehouse persistence failed:', warehouseError);
+              }
             }
           }
         }).catch(err => {
@@ -828,9 +926,9 @@ export default function InternalQuoteBuilder() {
     const jobId = form.jobId || await allocateJobId();
     if (!form.jobId) set('jobId', jobId);
 
-    const q: Quote = {
-      id: crypto.randomUUID(),
-      date: new Date().toISOString().split('T')[0],
+  const q: Quote = {
+      id: existingQuote?.id || quote?.id || crypto.randomUUID(),
+      date: existingQuote?.date || quote?.date || new Date().toISOString().split('T')[0],
       jobId,
       jobName, clientName: form.clientName, clientId: form.clientId,
       salesRep: form.salesRep, estimator: form.estimator,
@@ -845,12 +943,18 @@ export default function InternalQuoteBuilder() {
       gstHst, qst, grandTotal: totalPlusCont, status: 'Draft',
       documentType: 'internal_quote',
       workflowStatus: 'internal_quote_ready',
+      sourceDocumentId: existingQuote?.sourceDocumentId || searchParams.get('sourceDocumentId'),
+      pdfStoragePath: existingQuote?.pdfStoragePath || quote?.pdfStoragePath || '',
+      pdfFileName: existingQuote?.pdfFileName || quote?.pdfFileName || '',
       payload: {
         notes,
         buildings,
         singleSlope,
         leftEaveHeight,
         rightEaveHeight,
+        distance: form.distance,
+        remoteLevel: form.remoteLevel,
+        pitch: form.pitch,
       },
     };
     setQuote(q);
@@ -862,22 +966,67 @@ export default function InternalQuoteBuilder() {
     setCostSavingTips(generateCostSavingTips(form, costData, q));
   };
 
-  const saveToLog = () => {
+  const persistQuote = async (resetAfterSave = false) => {
     if (!quote) return;
-    addQuote(quote);
+    const nextQuote = { ...quote, updatedAt: new Date().toISOString() };
 
-    toast.success('Quote saved to Quote Log — convert to Deal from the Quote Log when ready');
+    if (existingQuote) {
+      await updateQuote(existingQuote.id, nextQuote);
+    } else {
+      await addQuote(nextQuote);
+    }
+
+    const pdf = await saveDocumentPdf(nextQuote);
+    await updateQuote(nextQuote.id, {
+      pdfStoragePath: pdf.storagePath,
+      pdfFileName: pdf.fileName,
+      updatedAt: new Date().toISOString(),
+    });
+
+    if (nextQuote.sourceDocumentId) {
+      await updateQuote(nextQuote.sourceDocumentId, {
+        workflowStatus: 'internal_quote_ready',
+        updatedAt: new Date().toISOString(),
+      });
+    }
+
+    const salesRepUserId = settings.personnel.find(person =>
+      person.role === 'sales_rep' && person.name.trim().toLowerCase() === nextQuote.salesRep.trim().toLowerCase(),
+    )?.id;
+    await notifyUsers({
+      userIds: [salesRepUserId],
+      title: existingQuote ? 'Internal Quote Updated' : 'Internal Quote Ready',
+      message: `${nextQuote.jobId} for ${nextQuote.clientName} is ready for sales review.`,
+      link: '/internal-quote-log',
+    });
+
+    setQuote(current => current ? ({
+      ...current,
+      pdfStoragePath: pdf.storagePath,
+      pdfFileName: pdf.fileName,
+      updatedAt: new Date().toISOString(),
+    }) : current);
+
+    toast.success(existingQuote ? 'Internal quote updated' : 'Internal quote saved to Internal Quote Log');
+    if (resetAfterSave) {
+      resetBuilder('Save is complete. Start a new quote and clear this screen?');
+    }
   };
 
-  const saveToLogAndNew = () => {
+  const saveToLog = async () => {
     if (!quote) return;
-    addQuote(quote);
-    toast.success('Internal quote saved to Internal Quote Log');
-    resetBuilder('Save is complete. Start a new quote and clear this screen?');
+    await persistQuote(false);
   };
 
-  const downloadPdf = () => {
+  const saveToLogAndNew = async () => {
     if (!quote) return;
+    await persistQuote(true);
+  };
+
+  const downloadPdf = async () => {
+    if (!quote) return;
+    await downloadDocumentPdf(quote);
+    return;
     const printContent = document.getElementById('internal-quote-output');
     if (!printContent) return;
     const win = window.open('', '_blank');

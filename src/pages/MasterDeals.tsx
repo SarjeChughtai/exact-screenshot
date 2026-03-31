@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useAppContext } from '@/context/AppContext';
 import { useRoles } from '@/context/RoleContext';
 import { useSettings } from '@/context/SettingsContext';
@@ -36,6 +36,8 @@ export default function MasterDeals() {
   const [editingDeal, setEditingDeal] = useState<Deal | null>(null);
   const [showAddDeal, setShowAddDeal] = useState(false);
   const [newDeal, setNewDeal] = useState<Partial<Deal>>(EMPTY_DEAL);
+  const [draggedDealId, setDraggedDealId] = useState<string | null>(null);
+  const [pipelineView, setPipelineView] = useState(true);
 
   const canEdit = hasAnyRole('admin', 'owner', 'operations');
   const isAdminOwner = hasAnyRole('admin', 'owner');
@@ -55,7 +57,30 @@ export default function MasterDeals() {
     return true;
   });
 
+  const pipelineStatuses = useMemo(
+    () => settings.dealStatuses.filter(status => status !== 'Cancelled'),
+    [settings.dealStatuses],
+  );
+
+  const pipelineDeals = useMemo(
+    () => filtered.filter(deal => deal.dealStatus !== 'Cancelled'),
+    [filtered],
+  );
+
+  const dealsByStatus = useMemo(() => (
+    pipelineStatuses.reduce<Record<string, Deal[]>>((accumulator, status) => {
+      accumulator[status] = pipelineDeals.filter(deal => deal.dealStatus === status);
+      return accumulator;
+    }, {})
+  ), [pipelineDeals, pipelineStatuses]);
+
   const toggle = (jobId: string) => setExpandedJob(prev => prev === jobId ? null : jobId);
+
+  const handlePipelineDrop = (status: string) => {
+    if (!draggedDealId) return;
+    updateDeal(draggedDealId, { dealStatus: status as DealStatus });
+    setDraggedDealId(null);
+  };
 
   const handleSaveEdit = () => {
     if (!editingDeal) return;
@@ -147,7 +172,70 @@ export default function MasterDeals() {
           {showCancelled ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
           {showCancelled ? 'Hide Cancelled' : 'Show Cancelled'}
         </Button>
+        <Button
+          size="sm"
+          variant={pipelineView ? 'default' : 'outline'}
+          onClick={() => setPipelineView(prev => !prev)}
+        >
+          {pipelineView ? 'Hide Pipeline' : 'Show Pipeline'}
+        </Button>
       </div>
+
+      {pipelineView && (
+        <div className="space-y-3">
+          <div>
+            <h3 className="text-sm font-semibold text-foreground">Sales Pipeline</h3>
+            <p className="text-xs text-muted-foreground">Drag a deal card into a new stage to update `deal_status` across the database.</p>
+          </div>
+          <div className="grid gap-4 xl:grid-cols-5 md:grid-cols-3">
+            {pipelineStatuses.map(status => (
+              <div
+                key={status}
+                className="rounded-lg border bg-card p-3 min-h-56"
+                onDragOver={event => event.preventDefault()}
+                onDrop={() => handlePipelineDrop(status)}
+              >
+                <div className="mb-3 flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-semibold">{DEAL_STATUS_LABELS[status] || status}</p>
+                    <p className="text-xs text-muted-foreground">{dealsByStatus[status]?.length || 0} deals</p>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  {(dealsByStatus[status] || []).length === 0 ? (
+                    <div className="rounded-md border border-dashed px-3 py-4 text-center text-xs text-muted-foreground">
+                      Drop deals here
+                    </div>
+                  ) : (
+                    (dealsByStatus[status] || []).map(deal => (
+                      <button
+                        key={`${status}-${deal.jobId}`}
+                        type="button"
+                        draggable
+                        onDragStart={() => setDraggedDealId(deal.jobId)}
+                        onDragEnd={() => setDraggedDealId(null)}
+                        onClick={() => toggle(deal.jobId)}
+                        className={`w-full rounded-md border p-3 text-left transition hover:border-primary hover:bg-muted/40 ${expandedJob === deal.jobId ? 'border-primary bg-muted/40' : 'border-border'} ${draggedDealId === deal.jobId ? 'opacity-50' : ''}`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="font-mono text-[11px] text-muted-foreground">{deal.jobId}</p>
+                            <p className="text-sm font-semibold">{deal.clientName || 'Unnamed client'}</p>
+                            <p className="text-xs text-muted-foreground">{deal.jobName || 'No job name'}</p>
+                          </div>
+                          <span className="rounded-full bg-muted px-2 py-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+                            {deal.salesRep || 'Unassigned'}
+                          </span>
+                        </div>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="bg-card border rounded-lg overflow-x-auto">
         <table className="w-full text-sm">

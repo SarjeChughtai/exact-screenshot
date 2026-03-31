@@ -8,12 +8,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { JobIdSelect } from '@/components/JobIdSelect';
 import { Switch } from '@/components/ui/switch';
 import { useAppContext } from '@/context/AppContext';
+import { useSettings } from '@/context/SettingsContext';
 import { PROVINCES } from '@/lib/calculations';
+import { notifyUsers } from '@/lib/workflowNotifications';
 import { toast } from 'sonner';
 import { Plus, Trash2, Send, Printer } from 'lucide-react';
 import { PersonnelSelect } from '@/components/PersonnelSelect';
 import { ClientSelect } from '@/components/ClientSelect';
 import type { Estimate, Quote } from '@/types';
+import { saveDocumentPdf } from '@/lib/documentPdf';
 
 type WallLocation = 'LEW' | 'REW' | 'FSW' | 'BSW';
 
@@ -107,6 +110,7 @@ function mapQuoteToForm(quote: Quote) {
 export default function QuoteRFQ() {
   const [searchParams] = useSearchParams();
   const { deals, quotes, estimates, addQuote, updateQuote, allocateJobId } = useAppContext();
+  const { settings } = useSettings();
   const [form, setForm] = useState(INITIAL_FORM);
   const [openings, setOpenings] = useState<Opening[]>([]);
   const [selectedEstimateId, setSelectedEstimateId] = useState(searchParams.get('estimateId') || '');
@@ -259,12 +263,36 @@ export default function QuoteRFQ() {
     };
 
     if (existingQuote) {
-      await updateQuote(existingQuote.id, document);
+      await updateQuote(existingQuote.id, { ...document, updatedAt: new Date().toISOString() });
+      const pdf = await saveDocumentPdf(document);
+      await updateQuote(existingQuote.id, {
+        pdfStoragePath: pdf.storagePath,
+        pdfFileName: pdf.fileName,
+        updatedAt: new Date().toISOString(),
+      });
       toast.success('RFQ updated');
       return;
     }
 
     await addQuote(document);
+    const pdf = await saveDocumentPdf(document);
+    await updateQuote(document.id, {
+      pdfStoragePath: pdf.storagePath,
+      pdfFileName: pdf.fileName,
+      updatedAt: new Date().toISOString(),
+    });
+
+    const estimatorUserIds = form.estimator.trim()
+      ? settings.personnel
+          .filter(person => person.role === 'estimator' && person.name.trim().toLowerCase() === form.estimator.trim().toLowerCase())
+          .map(person => person.id)
+      : settings.personnel.filter(person => person.role === 'estimator').map(person => person.id);
+    await notifyUsers({
+      userIds: estimatorUserIds,
+      title: 'New RFQ Submitted',
+      message: `${form.clientName || 'A client'} RFQ ${jobId} is ready for estimating.`,
+      link: '/quote-log',
+    });
     toast.success('RFQ submitted');
   };
 

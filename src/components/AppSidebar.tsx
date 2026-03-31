@@ -101,6 +101,7 @@ const menuGroups: MenuGroup[] = [
   {
     label: 'sidebar.system',
     items: [
+      { path: '/cost-data', label: 'sidebar.costData', icon: Database, module: 'cost-data' },
       { path: '/settings', label: 'sidebar.settings', icon: SettingsIcon, module: 'settings' },
       { path: '/audit-log', label: 'sidebar.auditLog', icon: ClipboardList, module: 'settings' },
       { path: '/master-data', label: 'sidebar.masterData', icon: Database, module: 'master-data' },

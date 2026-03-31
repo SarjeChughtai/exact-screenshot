@@ -16,6 +16,7 @@ import { toast } from 'sonner';
 import { MapPin } from 'lucide-react';
 import { PersonnelSelect } from '@/components/PersonnelSelect';
 import { ClientSelect } from '@/components/ClientSelect';
+import { saveDocumentPdf } from '@/lib/documentPdf';
 
 const INITIAL_FORM = {
   jobId: '',
@@ -49,6 +50,7 @@ export default function QuoteBuilder() {
   const [searchParams] = useSearchParams();
   const { addQuote, updateQuote, deals, quotes, allocateJobId } = useAppContext();
   const editingQuoteId = searchParams.get('quoteId');
+  const sourceDocumentId = searchParams.get('sourceDocumentId');
 
   const [form, setForm] = useState(INITIAL_FORM);
   const [quote, setQuote] = useState<Quote | null>(null);
@@ -57,6 +59,11 @@ export default function QuoteBuilder() {
   const existingQuote = useMemo(
     () => quotes.find(item => item.id === editingQuoteId),
     [editingQuoteId, quotes],
+  );
+
+  const sourceQuote = useMemo(
+    () => quotes.find(item => item.id === sourceDocumentId),
+    [quotes, sourceDocumentId],
   );
 
   useEffect(() => {
@@ -90,6 +97,38 @@ export default function QuoteBuilder() {
     });
     setQuote(existingQuote);
   }, [existingQuote]);
+
+  useEffect(() => {
+    if (existingQuote || !sourceQuote) return;
+    const sourcePayload = (sourceQuote.payload || {}) as Record<string, any>;
+    setForm({
+      jobId: sourceQuote.jobId,
+      jobName: sourceQuote.jobName,
+      clientName: sourceQuote.clientName,
+      clientId: sourceQuote.clientId,
+      salesRep: sourceQuote.salesRep,
+      estimator: sourceQuote.estimator,
+      province: sourceQuote.province,
+      city: sourceQuote.city,
+      address: sourceQuote.address,
+      postalCode: sourceQuote.postalCode,
+      width: String(sourceQuote.width || ''),
+      length: String(sourceQuote.length || ''),
+      height: String(sourceQuote.height || 14),
+      baseSteelCost: String(sourceQuote.baseSteelCost || sourceQuote.adjustedSteel || 0),
+      totalWeight: String(sourceQuote.weight || 0),
+      gutters: String(sourceQuote.gutters || 0),
+      liners: String(sourceQuote.liners || 0),
+      insulationCost: String(sourceQuote.insulation || 0),
+      insulationGrade: sourceQuote.insulationGrade || '',
+      distance: String(sourcePayload.distance || '200'),
+      remoteLevel: sourcePayload.remoteLevel || 'none',
+      overrideFreight: String(sourceQuote.freight || 0),
+      complexityFactor: String(sourcePayload.complexityFactor || '1.0'),
+      foundationType: sourceQuote.foundationType,
+      contingencyPct: String(sourceQuote.contingencyPct || 5),
+    });
+  }, [existingQuote, sourceQuote]);
 
   const set = (key: keyof typeof INITIAL_FORM, value: string) => {
     setForm(current => ({ ...current, [key]: value }));
@@ -209,10 +248,28 @@ export default function QuoteBuilder() {
     if (!quote) return;
     if (existingQuote) {
       await updateQuote(existingQuote.id, { ...quote, updatedAt: new Date().toISOString() });
+      const pdf = await saveDocumentPdf(quote);
+      await updateQuote(existingQuote.id, {
+        pdfStoragePath: pdf.storagePath,
+        pdfFileName: pdf.fileName,
+        updatedAt: new Date().toISOString(),
+      });
       toast.success('External quote updated');
       return;
     }
     await addQuote(quote);
+    const pdf = await saveDocumentPdf(quote);
+    await updateQuote(quote.id, {
+      pdfStoragePath: pdf.storagePath,
+      pdfFileName: pdf.fileName,
+      updatedAt: new Date().toISOString(),
+    });
+    if (quote.sourceDocumentId) {
+      await updateQuote(quote.sourceDocumentId, {
+        workflowStatus: 'external_quote_ready',
+        updatedAt: new Date().toISOString(),
+      });
+    }
     toast.success('External quote saved');
   };
 

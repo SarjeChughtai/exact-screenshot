@@ -1,10 +1,12 @@
-import { Fragment, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { formatCurrency, formatNumber, getProvinceTax } from '@/lib/calculations';
 import { useAppContext } from '@/context/AppContext';
-import type { Deal, DocumentType, Quote, QuoteStatus } from '@/types';
+import { supabase } from '@/integrations/supabase/client';
+import { quoteFileFromRow } from '@/lib/supabaseMappers';
+import type { Deal, DocumentType, Quote, QuoteFileRecord, QuoteStatus } from '@/types';
 import { toast } from 'sonner';
 import { Archive, ChevronDown, ChevronRight, Download, Pencil, RotateCcw, Trash2 } from 'lucide-react';
 import { getQuoteFileUrl } from '@/lib/quoteFileStorage';
@@ -22,17 +24,55 @@ interface DocumentLogTableProps {
   title: string;
   subtitle: string;
   filterDocumentTypes: DocumentType[];
+  filterWorkflowStatuses?: string[];
 }
 
-export function DocumentLogTable({ title, subtitle, filterDocumentTypes }: DocumentLogTableProps) {
+export function DocumentLogTable({ title, subtitle, filterDocumentTypes, filterWorkflowStatuses }: DocumentLogTableProps) {
   const navigate = useNavigate();
   const { quotes, deals, updateQuote, deleteQuote, restoreQuote, addDeal, updateDeal } = useAppContext();
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showTrash, setShowTrash] = useState(false);
+  const [filesByDocumentId, setFilesByDocumentId] = useState<Record<string, QuoteFileRecord[]>>({});
 
-  const visibleQuotes = quotes.filter(quote => filterDocumentTypes.includes(quote.documentType));
+  const visibleQuotes = quotes.filter(quote =>
+    filterDocumentTypes.includes(quote.documentType) &&
+    (!filterWorkflowStatuses || filterWorkflowStatuses.includes(quote.workflowStatus))
+  );
   const activeQuotes = visibleQuotes.filter(quote => !quote.isDeleted);
   const deletedQuotes = visibleQuotes.filter(quote => quote.isDeleted);
+
+  const visibleDocumentIds = useMemo(
+    () => visibleQuotes.map(quote => quote.id).sort(),
+    [visibleQuotes],
+  );
+  const visibleDocumentIdsKey = visibleDocumentIds.join('|');
+
+  useEffect(() => {
+    if (visibleDocumentIds.length === 0) {
+      setFilesByDocumentId({});
+      return;
+    }
+
+    void (async () => {
+      const { data, error } = await (supabase.from as any)('quote_files')
+        .select('*')
+        .in('document_id', visibleDocumentIds)
+        .order('created_at', { ascending: false });
+
+      if (error) return;
+
+      const grouped = (data || [])
+        .map((row: any) => quoteFileFromRow(row))
+        .reduce<Record<string, QuoteFileRecord[]>>((accumulator, file) => {
+          const key = file.documentId || '';
+          if (!key) return accumulator;
+          accumulator[key] = [...(accumulator[key] || []), file];
+          return accumulator;
+        }, {});
+
+      setFilesByDocumentId(grouped);
+    })();
+  }, [visibleDocumentIdsKey]);
 
   const changeStatus = (id: string, status: QuoteStatus) => {
     updateQuote(id, { status });
@@ -149,9 +189,10 @@ export function DocumentLogTable({ title, subtitle, filterDocumentTypes }: Docum
       );
     }
 
-    return items.map(quote => {
+      return items.map(quote => {
       const isExpanded = expandedId === quote.id;
       const existingDeal = deals.find(deal => deal.jobId === quote.jobId);
+      const attachedFiles = filesByDocumentId[quote.id] || [];
 
       return (
         <Fragment key={quote.id}>
@@ -195,6 +236,11 @@ export function DocumentLogTable({ title, subtitle, filterDocumentTypes }: Docum
                           Convert to Deal
                         </Button>
                       )
+                    )}
+                    {quote.documentType === 'internal_quote' && (
+                      <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => navigate(`/quote-builder?sourceDocumentId=${quote.id}`)}>
+                        Create External Quote
+                      </Button>
                     )}
                     <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive" onClick={() => deleteQuote(quote.id)}>
                       <Trash2 className="h-3.5 w-3.5" />
@@ -241,6 +287,40 @@ export function DocumentLogTable({ title, subtitle, filterDocumentTypes }: Docum
                     <pre className="text-[11px] bg-background border rounded p-3 overflow-x-auto whitespace-pre-wrap">{JSON.stringify(quote.payload, null, 2)}</pre>
                   </div>
                 )}
+                <div className="mt-4">
+                  <p className="text-xs font-semibold text-muted-foreground mb-2">Attached Files</p>
+                  {attachedFiles.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">No files attached to this document yet.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {attachedFiles.map(file => (
+                        <div key={file.id} className="flex items-center justify-between gap-3 rounded border bg-background px-3 py-2 text-xs">
+                          <div className="min-w-0">
+                            <p className="font-medium truncate">{file.fileName}</p>
+                            <p className="text-muted-foreground">
+                              {file.fileCategory || 'support_file'} · {file.fileType} · {new Date(file.createdAt).toLocaleString()}
+                            </p>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 px-2 text-xs"
+                            onClick={async () => {
+                              const url = await getQuoteFileUrl(file.storagePath);
+                              if (!url) {
+                                toast.error('Unable to load the file');
+                                return;
+                              }
+                              window.open(url, '_blank', 'noopener,noreferrer');
+                            }}
+                          >
+                            Open
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </td>
             </tr>
           )}

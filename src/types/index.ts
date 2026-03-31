@@ -355,3 +355,128 @@ export interface SteelCostEntry {
   uploadedBy: string | null;
   createdAt: string;
 }
+
+export type CostDocumentReviewStatus =
+  | 'pending'
+  | 'needs_review'
+  | 'approved'
+  | 'corrected'
+  | 'rejected'
+  | 'unparsed';
+
+export interface StoredDocument {
+  id: string;
+  quoteFileId?: string | null;
+  documentId?: string | null;
+  jobId?: string | null;
+  projectId?: string | null;
+  clientId?: string | null;
+  vendorId?: string | null;
+  sourceType: 'uploaded' | 'seed_json' | 'seed_csv' | 'seed_xlsx' | 'seed_zip' | 'legacy_backfill';
+  sourceFilename?: string | null;
+  sourceFileExtension?: string | null;
+  fileName: string;
+  fileSize?: number | null;
+  fileType: string;
+  storagePath: string;
+  extractedDocumentType?: string | null;
+  parserName?: string | null;
+  parserVersion?: string | null;
+  parseError?: string | null;
+  reviewStatus: CostDocumentReviewStatus;
+  parsedData?: Record<string, unknown> | null;
+  metadata?: Record<string, unknown> | null;
+  parsedSuccessfully?: boolean | null;
+  reviewedBy?: string | null;
+  reviewedAt?: string | null;
+  uploadedBy?: string | null;
+  uploadedAt?: string | null;
+  createdAt?: string;
+}
+
+export interface SteelCostDataRecord {
+  id: string;
+  storedDocumentId?: string | null;
+  quoteFileId?: string | null;
+  documentId?: string | null;
+  jobId?: string | null;
+  projectId?: string | null;
+  clientId?: string | null;
+  vendorId?: string | null;
+  widthFt?: number | null;
+  lengthFt?: number | null;
+  eaveHeightFt?: number | null;
+  roofSlope?: number | null;
+  floorAreaSqft?: number | null;
+  totalWeightLb?: number | null;
+  totalCost?: number | null;
+  costPerSqft?: number | null;
+  weightPerSqft?: number | null;
+  pricePerLb?: number | null;
+  snowLoadPsf?: number | null;
+  windLoadPsf?: number | null;
+  windCode?: string | null;
+  province?: string | null;
+  city?: string | null;
+  seismicCat?: string | null;
+  dataSource?: string | null;
+  sourceType?: string | null;
+  sourceFileName?: string | null;
+  sourceFilePath?: string | null;
+  reviewStatus?: CostDocumentReviewStatus;
+  parserVersion?: string | null;
+  rawExtraction?: Record<string, unknown> | null;
+  components?: Record<string, unknown>[] | null;
+  addedBy?: string | null;
+  reviewedBy?: string | null;
+  reviewedAt?: string | null;
+  dateAdded?: string | null;
+  createdAt?: string;
+}
+
+export interface InsulationCostDataRecord {
+  id: string;
+  storedDocumentId?: string | null;
+  quoteFileId?: string | null;
+  documentId?: string | null;
+  jobId?: string | null;
+  projectId?: string | null;
+  clientId?: string | null;
+  vendorId?: string | null;
+  widthFt?: number | null;
+  lengthFt?: number | null;
+  eaveHeightFt?: number | null;
+  roofSlope?: number | null;
+  floorAreaSqft?: number | null;
+  location?: string | null;
+  roofRValue?: string | null;
+  wallRValue?: string | null;
+  grade?: string | null;
+  roofAreaSqft?: number | null;
+  wallAreaSqft?: number | null;
+  totalInsulatedSqft?: number | null;
+  materialCost?: number | null;
+  freightCost?: number | null;
+  fuelSurcharge?: number | null;
+  totalDelivery?: number | null;
+  totalCost?: number | null;
+  materialPerSqft?: number | null;
+  totalPerSqft?: number | null;
+  weightLb?: number | null;
+  shipBranch?: string | null;
+  quoteNumber?: string | null;
+  quoteDate?: string | null;
+  dataSource?: string | null;
+  sourceType?: string | null;
+  sourceFileName?: string | null;
+  sourceFilePath?: string | null;
+  reviewStatus?: CostDocumentReviewStatus;
+  parserVersion?: string | null;
+  rawExtraction?: Record<string, unknown> | null;
+  accessories?: Record<string, unknown>[] | null;
+  addedBy?: string | null;
+  reviewedBy?: string | null;
+  reviewedAt?: string | null;
+  dateAdded?: string | null;
+  createdAt?: string;
+}

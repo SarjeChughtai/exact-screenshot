@@ -1,5 +1,19 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
-import { Quote, Deal, InternalCost, PaymentEntry, ProductionRecord, FreightRecord, RFQ, Client, Vendor, Estimate } from '@/types';
+import {
+  Quote,
+  Deal,
+  InternalCost,
+  PaymentEntry,
+  ProductionRecord,
+  FreightRecord,
+  RFQ,
+  Client,
+  Vendor,
+  Estimate,
+  SteelCostDataRecord,
+  InsulationCostDataRecord,
+  StoredDocument,
+} from '@/types';
 import { supabase } from '@/integrations/supabase/client';
 import { useRoles } from '@/context/RoleContext';
 import { logAudit } from '@/lib/auditLog';
@@ -13,6 +27,9 @@ import {
   freightFromRow, freightToRow,
   clientFromRow, clientToRow,
   vendorFromRow, vendorToRow,
+  steelCostDataFromRow,
+  insulationCostDataFromRow,
+  storedDocumentFromRow,
 } from '@/lib/supabaseMappers';
 import { SEED_DEALS } from '@/data/seedDeals';
 import { toast } from 'sonner';
@@ -28,6 +45,9 @@ interface AppState {
   clients: Client[];
   vendors: Vendor[];
   estimates: Estimate[];
+  steelCostData: SteelCostDataRecord[];
+  insulationCostData: InsulationCostDataRecord[];
+  storedDocuments: StoredDocument[];
   loading: boolean;
 }
 
@@ -62,6 +82,7 @@ interface AppContextType extends AppState {
   deleteEstimate: (id: string) => void;
   allocateJobId: () => Promise<string>;
   quickAddClient: (clientId: string, clientName: string) => Promise<Client | null>;
+  quickAddVendor: (vendorName: string, province?: string) => Promise<Vendor | null>;
   refreshData: () => Promise<void>;
 }
 
@@ -70,12 +91,38 @@ const AppContext = createContext<AppContextType | null>(null);
 export function AppProvider({ children }: { children: ReactNode }) {
   const { currentUser } = useRoles();
   const [state, setState] = useState<AppState>({
-    quotes: [], deals: [], internalCosts: [], payments: [], production: [], freight: [], rfqs: [], clients: [], vendors: [], estimates: [], loading: true,
+    quotes: [],
+    deals: [],
+    internalCosts: [],
+    payments: [],
+    production: [],
+    freight: [],
+    rfqs: [],
+    clients: [],
+    vendors: [],
+    estimates: [],
+    steelCostData: [],
+    insulationCostData: [],
+    storedDocuments: [],
+    loading: true,
   });
 
   const fetchAll = useCallback(async () => {
     try {
-      const [quotesRes, dealsRes, costsRes, paymentsRes, prodRes, freightRes, clientsRes, vendorsRes, estimatesRes] = await Promise.all([
+      const [
+        quotesRes,
+        dealsRes,
+        costsRes,
+        paymentsRes,
+        prodRes,
+        freightRes,
+        clientsRes,
+        vendorsRes,
+        estimatesRes,
+        steelCostRes,
+        insulationCostRes,
+        storedDocumentsRes,
+      ] = await Promise.all([
         supabase.from('quotes').select('*'),
         supabase.from('deals').select('*'),
         supabase.from('internal_costs').select('*'),
@@ -85,6 +132,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         supabase.from('clients').select('*'),
         supabase.from('vendors').select('*'),
         (supabase.from as any)('estimates').select('*'),
+        (supabase.from as any)('steel_cost_data').select('*'),
+        (supabase.from as any)('insulation_cost_data').select('*'),
+        (supabase.from as any)('stored_documents').select('*'),
       ]);
 
       // Log fetch results for debugging
@@ -98,6 +148,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         clients: clientsRes.data?.length, clientsErr: clientsRes.error,
         vendors: vendorsRes.data?.length, vendorsErr: vendorsRes.error,
         estimates: estimatesRes.data?.length, estimatesErr: estimatesRes.error,
+        steelCostData: steelCostRes.data?.length, steelCostErr: steelCostRes.error,
+        insulationCostData: insulationCostRes.data?.length, insulationCostErr: insulationCostRes.error,
+        storedDocuments: storedDocumentsRes.data?.length, storedDocumentsErr: storedDocumentsRes.error,
       });
 
       // Check if any core query had an error (e.g. RLS blocking unauthenticated)
@@ -118,6 +171,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const clients = (clientsRes.data || []).map(clientFromRow);
       const vendors = (vendorsRes.data || []).map(vendorFromRow);
       const estimates = (estimatesRes.data || []).map(estimateFromRow);
+      const steelCostData = (steelCostRes.data || []).map(steelCostDataFromRow);
+      const insulationCostData = (insulationCostRes.data || []).map(insulationCostDataFromRow);
+      const storedDocuments = (storedDocumentsRes.data || []).map(storedDocumentFromRow);
 
       // If all Supabase tables are empty, try migrating from localStorage
       const allEmpty = quotes.length === 0 && deals.length === 0 && payments.length === 0;
@@ -133,7 +189,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      setState({ quotes, deals, internalCosts, payments, production, freight, rfqs: state.rfqs, clients, vendors, estimates, loading: false });
+      setState({
+        quotes,
+        deals,
+        internalCosts,
+        payments,
+        production,
+        freight,
+        rfqs: state.rfqs,
+        clients,
+        vendors,
+        estimates,
+        steelCostData,
+        insulationCostData,
+        storedDocuments,
+        loading: false,
+      });
     } catch (err) {
       console.error('Supabase fetch error, falling back to localStorage', err);
       loadFromLocalStorage();
@@ -156,6 +227,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
           clients: data.clients || [],
           vendors: data.vendors || [],
           estimates: data.estimates || [],
+          steelCostData: data.steelCostData || [],
+          insulationCostData: data.insulationCostData || [],
+          storedDocuments: data.storedDocuments || [],
           loading: false,
         });
       } else {
@@ -227,6 +301,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         freight: (fR.data || []).map(freightFromRow),
         clients: (clR.data || []).map(clientFromRow),
         vendors: (vR.data || []).map(vendorFromRow),
+        estimates: [],
+        steelCostData: [],
+        insulationCostData: [],
+        storedDocuments: [],
         rfqs: [],
         loading: false,
       });
@@ -250,12 +328,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         console.warn('[Data] Supabase insert returned 0 rows — using SEED_DEALS in-memory');
         setState(prev => ({ ...prev, deals: SEED_DEALS, loading: false }));
         // Also save to localStorage so it persists
-        const currentState = { quotes: [], deals: SEED_DEALS, internalCosts: [], payments: [], production: [], freight: [], rfqs: [], clients: [], vendors: [], estimates: [] };
+        const currentState = { quotes: [], deals: SEED_DEALS, internalCosts: [], payments: [], production: [], freight: [], rfqs: [], clients: [], vendors: [], estimates: [], steelCostData: [], insulationCostData: [], storedDocuments: [] };
         localStorage.setItem('canada_steel_state', JSON.stringify(currentState));
       }
     } catch {
       setState(prev => ({ ...prev, deals: SEED_DEALS, loading: false }));
-      const currentState = { quotes: [], deals: SEED_DEALS, internalCosts: [], payments: [], production: [], freight: [], rfqs: [], clients: [], vendors: [], estimates: [] };
+      const currentState = { quotes: [], deals: SEED_DEALS, internalCosts: [], payments: [], production: [], freight: [], rfqs: [], clients: [], vendors: [], estimates: [], steelCostData: [], insulationCostData: [], storedDocuments: [] };
       localStorage.setItem('canada_steel_state', JSON.stringify(currentState));
     }
   }, []);
@@ -340,6 +418,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const client = clientFromRow(data);
       setState(prev => ({ ...prev, clients: [...prev.clients, client] }));
       return client;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const quickAddVendor = useCallback(async (vendorName: string, province = 'ON'): Promise<Vendor | null> => {
+    try {
+      const { data, error } = await supabase
+        .from('vendors')
+        .insert({
+          name: vendorName,
+          province,
+          contact_email: '',
+          contact_phone: '',
+          notes: '',
+        })
+        .select()
+        .single();
+      if (error || !data) return null;
+      const vendor = vendorFromRow(data);
+      setState(prev => ({ ...prev, vendors: [...prev.vendors, vendor] }));
+      return vendor;
     } catch {
       return null;
     }
@@ -667,7 +767,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addInternalCost, updateInternalCost, addPayment, updatePayment, deletePayment,
       addProduction, updateProduction, addFreight, updateFreight,
       addRFQ, updateRFQ, deleteRFQ,
-      quickAddClient, addClient, updateClient, deleteClient,
+      quickAddClient, quickAddVendor, addClient, updateClient, deleteClient,
       addVendor, updateVendor, deleteVendor,
       addEstimate, updateEstimate, deleteEstimate, allocateJobId,
       refreshData: fetchAll,

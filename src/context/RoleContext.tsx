@@ -24,7 +24,7 @@ interface RoleContextType {
 
 const MODULE_ACCESS: Record<string, UserRole[]> = {
   dashboard: ['admin', 'owner', 'accounting', 'operations', 'sales_rep', 'freight'],
-  estimator: ['admin', 'owner', 'sales_rep', 'estimator'],
+  estimator: ['admin', 'owner', 'sales_rep'],
   'quote-builder': ['admin', 'owner', 'sales_rep'],
   'internal-quote-builder': ['admin', 'owner', 'operations'],
   'quote-log': ['admin', 'owner', 'sales_rep', 'operations', 'estimator', 'dealer'],
@@ -45,9 +45,10 @@ const MODULE_ACCESS: Record<string, UserRole[]> = {
   'dealer-rfq': ['admin', 'owner', 'dealer'],
   'dealer-log': ['admin', 'owner', 'dealer'],
   'draft-log': ['admin', 'owner'],
-  'internal-quote-log': ['admin', 'owner', 'operations', 'sales_rep', 'estimator'],
+  'internal-quote-log': ['admin', 'owner', 'operations', 'sales_rep'],
   'master-data': ['owner'],
   'vendor-board': ['admin', 'owner', 'operations', 'freight', 'manufacturer', 'construction'],
+  'cost-data': ['admin', 'owner', 'operations'],
 };
 
 const RoleContext = createContext<RoleContextType | null>(null);

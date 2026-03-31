@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useRoles } from '@/context/RoleContext';
+import { useAppContext } from '@/context/AppContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -9,10 +10,23 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/calculations';
-import { Loader2, Calendar, FileText, Send, Building2, Pencil, Ban } from 'lucide-react';
+import { Loader2, Calendar, FileText, Send, Building2, Pencil, Ban, Plus, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
 type BidStatus = 'submitted' | 'updated' | 'cancelled' | 'awarded' | 'rejected';
+type BidLineItemDraft = {
+  name: string;
+  quantity: string;
+  unit: string;
+  notes: string;
+};
+
+const createEmptyLineItem = (): BidLineItemDraft => ({
+  name: '',
+  quantity: '',
+  unit: '',
+  notes: '',
+});
 
 async function logBidEvent(bidId: string, eventType: string, payload: Record<string, unknown>) {
   await (supabase.from as any)('vendor_bid_events').insert({
@@ -24,9 +38,11 @@ async function logBidEvent(bidId: string, eventType: string, payload: Record<str
 
 export default function VendorQuoteBoard() {
   const { currentUser } = useRoles();
+  const { deals, internalCosts } = useAppContext();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const primaryRole = ['freight', 'manufacturer', 'construction'].find(role => currentUser.roles.includes(role as any)) || 'vendor';
+  const canManageBidBoard = currentUser.roles.some(role => ['admin', 'owner', 'operations'].includes(role));
 
   const { data: jobs, isLoading: isJobsLoading } = useQuery({
     queryKey: ['vendor_jobs', primaryRole],
@@ -50,9 +66,48 @@ export default function VendorQuoteBoard() {
     },
   });
 
+  const { data: allBids } = useQuery({
+    queryKey: ['vendor_bids_all', canManageBidBoard],
+    enabled: canManageBidBoard,
+    queryFn: async () => {
+      const { data, error } = await (supabase.from as any)('vendor_bids')
+        .select('*')
+        .order('updated_at', { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const relevantBidIds = useMemo(() => {
+    const source = canManageBidBoard ? (allBids || []) : (bids || []);
+    return source.map((bid: any) => bid.id).filter(Boolean);
+  }, [allBids, bids, canManageBidBoard]);
+
+  const { data: bidEvents } = useQuery({
+    queryKey: ['vendor_bid_events', relevantBidIds.join('|')],
+    enabled: relevantBidIds.length > 0,
+    queryFn: async () => {
+      const { data, error } = await (supabase.from as any)('vendor_bid_events')
+        .select('*')
+        .in('bid_id', relevantBidIds)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
   const [bidAmount, setBidAmount] = useState<Record<string, string>>({});
   const [bidLeadTime, setBidLeadTime] = useState<Record<string, string>>({});
   const [bidDetails, setBidDetails] = useState<Record<string, string>>({});
+  const [jobDraft, setJobDraft] = useState({
+    sourceJobId: '',
+    title: '',
+    category: 'materials',
+    description: '',
+    requiredByDate: '',
+    closingDate: '',
+    lineItems: [createEmptyLineItem()],
+  });
 
   const bidsByJobId = useMemo(
     () => new Map((bids || []).map((bid: any) => [bid.job_id, bid])),
@@ -67,6 +122,88 @@ export default function VendorQuoteBoard() {
       }))
       .filter((row: any) => row.job);
   }, [bids, jobs]);
+
+  const eventsByBidId = useMemo(() => (
+    (bidEvents || []).reduce<Record<string, any[]>>((accumulator, event: any) => {
+      accumulator[event.bid_id] = [...(accumulator[event.bid_id] || []), event];
+      return accumulator;
+    }, {})
+  ), [bidEvents]);
+
+  const allBidsByJobId = useMemo(() => (
+    (allBids || []).reduce<Record<string, any[]>>((accumulator, bid: any) => {
+      accumulator[bid.job_id] = [...(accumulator[bid.job_id] || []), bid];
+      return accumulator;
+    }, {})
+  ), [allBids]);
+
+  const createVendorJobMutation = useMutation({
+    mutationFn: async () => {
+      const cleanedLineItems = jobDraft.lineItems
+        .map(item => ({
+          name: item.name.trim(),
+          quantity: item.quantity.trim(),
+          unit: item.unit.trim(),
+          notes: item.notes.trim(),
+        }))
+        .filter(item => item.name);
+
+      if (!jobDraft.title.trim()) throw new Error('Bid title is required');
+      if (cleanedLineItems.length === 0) throw new Error('At least one line item is required');
+
+      const sourceDeal = deals.find(deal => deal.jobId === jobDraft.sourceJobId);
+      const sourceCost = internalCosts.find(cost => cost.jobId === jobDraft.sourceJobId);
+
+      const { error } = await (supabase.from as any)('vendor_jobs').insert({
+        job_id: jobDraft.sourceJobId || null,
+        title: jobDraft.title.trim(),
+        category: jobDraft.category.trim() || 'materials',
+        description: jobDraft.description.trim(),
+        line_items: cleanedLineItems,
+        required_by_date: jobDraft.requiredByDate || null,
+        closing_date: jobDraft.closingDate || null,
+        specifications: {
+          source: jobDraft.sourceJobId ? 'deal_import' : 'manual',
+          sourceDeal: sourceDeal ? {
+            clientName: sourceDeal.clientName,
+            jobName: sourceDeal.jobName,
+            province: sourceDeal.province,
+            dimensions: {
+              width: sourceDeal.width,
+              length: sourceDeal.length,
+              height: sourceDeal.height,
+            },
+            address: sourceDeal.address,
+            city: sourceDeal.city,
+          } : null,
+          internalCostSummary: sourceCost ? {
+            salePrice: sourceCost.salePrice,
+            trueMaterial: sourceCost.trueMaterial,
+            trueFreight: sourceCost.trueFreight,
+          } : null,
+        },
+        status: 'open',
+      });
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast({ title: 'Bid request created' });
+      setJobDraft({
+        sourceJobId: '',
+        title: '',
+        category: 'materials',
+        description: '',
+        requiredByDate: '',
+        closingDate: '',
+        lineItems: [createEmptyLineItem()],
+      });
+      queryClient.invalidateQueries({ queryKey: ['vendor_jobs'] });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Failed to create bid request', description: error.message, variant: 'destructive' });
+    },
+  });
 
   const upsertBidMutation = useMutation({
     mutationFn: async ({ jobId, existingBidId }: { jobId: string; existingBidId?: string }) => {
@@ -135,6 +272,30 @@ export default function VendorQuoteBoard() {
     if (bidDetails[jobId] == null) setBidDetails(current => ({ ...current, [jobId]: bid.details || '' }));
   };
 
+  const importDealIntoBidDraft = (sourceJobId: string) => {
+    const sourceDeal = deals.find(deal => deal.jobId === sourceJobId);
+    if (!sourceDeal) return;
+
+    setJobDraft(current => ({
+      ...current,
+      sourceJobId,
+      title: sourceDeal.jobName ? `${sourceDeal.jobName} Vendor Bid` : `${sourceDeal.clientName} Vendor Bid`,
+      description: [
+        `Client: ${sourceDeal.clientName}`,
+        `Location: ${[sourceDeal.city, sourceDeal.province].filter(Boolean).join(', ') || 'N/A'}`,
+        `Dimensions: ${sourceDeal.width || 0} x ${sourceDeal.length || 0} x ${sourceDeal.height || 0}`,
+      ].join('\n'),
+      lineItems: current.lineItems.some(item => item.name)
+        ? current.lineItems
+        : [{
+            name: 'Primary material package',
+            quantity: '1',
+            unit: 'lot',
+            notes: `Imported from deal ${sourceDeal.jobId}`,
+          }],
+    }));
+  };
+
   if (isJobsLoading || isBidsLoading) {
     return (
       <div className="flex items-center justify-center p-12">
@@ -149,6 +310,166 @@ export default function VendorQuoteBoard() {
         <h1 className="text-3xl font-bold tracking-tight capitalize">{primaryRole} Bid Board</h1>
         <p className="text-muted-foreground mt-2">Blind-bid board with an active bids log and update/cancel controls.</p>
       </div>
+
+      {canManageBidBoard && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Create Bid Request</CardTitle>
+            <CardDescription>Operations can import an existing job, define line items, and publish a blind bid request.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <div className="space-y-1">
+                <Label>Import Existing Job</Label>
+                <Input
+                  list="bid-board-job-ids"
+                  placeholder="Enter job ID"
+                  value={jobDraft.sourceJobId}
+                  onChange={event => setJobDraft(current => ({ ...current, sourceJobId: event.target.value }))}
+                />
+                <datalist id="bid-board-job-ids">
+                  {deals.map(deal => (
+                    <option key={deal.jobId} value={deal.jobId}>{deal.clientName} - {deal.jobName}</option>
+                  ))}
+                </datalist>
+                <Button type="button" variant="outline" size="sm" onClick={() => importDealIntoBidDraft(jobDraft.sourceJobId)}>
+                  Import Job Details
+                </Button>
+              </div>
+              <div className="space-y-1">
+                <Label>Bid Title</Label>
+                <Input
+                  value={jobDraft.title}
+                  onChange={event => setJobDraft(current => ({ ...current, title: event.target.value }))}
+                  placeholder="Steel package, insulation, freight, etc."
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Category</Label>
+                <Input
+                  value={jobDraft.category}
+                  onChange={event => setJobDraft(current => ({ ...current, category: event.target.value }))}
+                  placeholder="materials"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Required By</Label>
+                <Input
+                  type="date"
+                  value={jobDraft.requiredByDate}
+                  onChange={event => setJobDraft(current => ({ ...current, requiredByDate: event.target.value }))}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Closing Date</Label>
+                <Input
+                  type="date"
+                  value={jobDraft.closingDate}
+                  onChange={event => setJobDraft(current => ({ ...current, closingDate: event.target.value }))}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <Label>Scope / Notes</Label>
+              <Textarea
+                value={jobDraft.description}
+                onChange={event => setJobDraft(current => ({ ...current, description: event.target.value }))}
+                placeholder="Describe the scope vendors are bidding on."
+              />
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label>Requested Line Items</Label>
+                  <p className="text-xs text-muted-foreground">Vendors see these requirements but not competitors' pricing.</p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setJobDraft(current => ({ ...current, lineItems: [...current.lineItems, createEmptyLineItem()] }))}
+                >
+                  <Plus className="mr-1 h-4 w-4" />
+                  Add Line Item
+                </Button>
+              </div>
+
+              {jobDraft.lineItems.map((item, index) => (
+                <div key={`line-item-${index}`} className="grid gap-3 rounded-md border p-3 md:grid-cols-[2fr_1fr_1fr_auto]">
+                  <div className="space-y-1">
+                    <Label>Item</Label>
+                    <Input
+                      value={item.name}
+                      onChange={event => setJobDraft(current => ({
+                        ...current,
+                        lineItems: current.lineItems.map((lineItem, itemIndex) => itemIndex === index ? { ...lineItem, name: event.target.value } : lineItem),
+                      }))}
+                      placeholder="Item name"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Qty</Label>
+                    <Input
+                      value={item.quantity}
+                      onChange={event => setJobDraft(current => ({
+                        ...current,
+                        lineItems: current.lineItems.map((lineItem, itemIndex) => itemIndex === index ? { ...lineItem, quantity: event.target.value } : lineItem),
+                      }))}
+                      placeholder="1"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Unit</Label>
+                    <Input
+                      value={item.unit}
+                      onChange={event => setJobDraft(current => ({
+                        ...current,
+                        lineItems: current.lineItems.map((lineItem, itemIndex) => itemIndex === index ? { ...lineItem, unit: event.target.value } : lineItem),
+                      }))}
+                      placeholder="lot, pcs, ft"
+                    />
+                  </div>
+                  <div className="flex items-end">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setJobDraft(current => ({
+                        ...current,
+                        lineItems: current.lineItems.length === 1
+                          ? [createEmptyLineItem()]
+                          : current.lineItems.filter((_, itemIndex) => itemIndex !== index),
+                      }))}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <div className="space-y-1 md:col-span-4">
+                    <Label>Item Notes</Label>
+                    <Textarea
+                      value={item.notes}
+                      onChange={event => setJobDraft(current => ({
+                        ...current,
+                        lineItems: current.lineItems.map((lineItem, itemIndex) => itemIndex === index ? { ...lineItem, notes: event.target.value } : lineItem),
+                      }))}
+                      placeholder="Specs, tolerances, special delivery constraints..."
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex justify-end">
+              <Button onClick={() => createVendorJobMutation.mutate()} disabled={createVendorJobMutation.isPending}>
+                {createVendorJobMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Publish Bid Request
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {activeBidRows.length > 0 && (
         <Card>
@@ -165,6 +486,7 @@ export default function VendorQuoteBoard() {
                   <th className="pb-2 font-medium">Lead Time</th>
                   <th className="pb-2 font-medium">Status</th>
                   <th className="pb-2 font-medium">Notes</th>
+                  <th className="pb-2 font-medium">Change Log</th>
                 </tr>
               </thead>
               <tbody>
@@ -175,10 +497,80 @@ export default function VendorQuoteBoard() {
                     <td className="py-2">{row.bid.lead_time_days || 0} days</td>
                     <td className="py-2"><Badge variant="outline" className="capitalize">{row.bid.status || 'submitted'}</Badge></td>
                     <td className="py-2 text-muted-foreground">{row.bid.details || '-'}</td>
+                    <td className="py-2 text-xs text-muted-foreground">
+                      {(eventsByBidId[row.bid.id] || []).slice(0, 3).map((event: any) => (
+                        <div key={event.id} className="mb-1 last:mb-0">
+                          <span className="font-medium capitalize">{String(event.event_type || '').replace(/_/g, ' ')}</span>
+                          <span className="ml-1">{new Date(event.created_at).toLocaleString()}</span>
+                        </div>
+                      ))}
+                      {(eventsByBidId[row.bid.id] || []).length === 0 && '-'}
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          </CardContent>
+        </Card>
+      )}
+
+      {canManageBidBoard && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Bid Review</CardTitle>
+            <CardDescription>Operations review blind bids and their event history by request.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {(jobs || []).length === 0 ? (
+              <p className="text-sm text-muted-foreground">No bid requests available.</p>
+            ) : (
+              (jobs || []).map((job: any) => {
+                const reviewBids = allBidsByJobId[job.id] || [];
+                return (
+                  <div key={`review-${job.id}`} className="rounded-lg border p-4">
+                    <div className="mb-3 flex items-start justify-between gap-4">
+                      <div>
+                        <p className="font-semibold">{job.title}</p>
+                        <p className="text-xs text-muted-foreground">{job.job_id || 'No shared job ID'} · {reviewBids.length} bids received</p>
+                      </div>
+                      <Badge variant="outline" className="capitalize">{job.status || 'open'}</Badge>
+                    </div>
+                    {reviewBids.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">No bids submitted yet.</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {reviewBids.map((bid: any) => (
+                          <div key={`review-bid-${bid.id}`} className="rounded-md bg-muted/20 p-3">
+                            <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+                              <div>
+                                <p className="font-medium">Vendor {String(bid.vendor_id).slice(0, 8)}</p>
+                                <p className="text-xs text-muted-foreground">{bid.details || 'No notes provided'}</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="font-mono">{formatCurrency(bid.amount || 0)}</p>
+                                <p className="text-xs text-muted-foreground">{bid.lead_time_days || 0} days</p>
+                              </div>
+                            </div>
+                            <div className="mt-2 border-t pt-2 text-xs text-muted-foreground">
+                              {(eventsByBidId[bid.id] || []).length === 0 ? (
+                                <p>No event history yet.</p>
+                              ) : (
+                                (eventsByBidId[bid.id] || []).map((event: any) => (
+                                  <div key={event.id} className="flex items-center justify-between gap-3 py-1">
+                                    <span className="capitalize">{String(event.event_type || '').replace(/_/g, ' ')}</span>
+                                    <span>{new Date(event.created_at).toLocaleString()}</span>
+                                  </div>
+                                ))
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
           </CardContent>
         </Card>
       )}

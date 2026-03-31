@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { upsertStoredDocument } from '@/lib/costDataWarehouse';
 
 interface UploadQuoteFileParams {
   file: File;
@@ -7,6 +8,8 @@ interface UploadQuoteFileParams {
   clientName: string;
   clientId: string;
   buildingLabel: string;
+  documentId?: string | null;
+  fileCategory?: 'generated_pdf' | 'cost_file' | 'support_file';
   aiOutput?: Record<string, unknown> | null;
   extractionSource?: 'ai' | 'regex' | 'unknown';
   parseError?: string | null;
@@ -17,6 +20,7 @@ interface QuoteFileRecord {
   id: string;
   storagePath: string;
   gdriveStatus: string;
+  storedDocumentId?: string | null;
 }
 
 interface SteelCostEntryParams {
@@ -55,8 +59,12 @@ export async function uploadQuoteFile({
   clientName,
   clientId,
   buildingLabel,
+  documentId = null,
+  fileCategory = 'support_file',
   aiOutput,
   extractionSource = 'unknown',
+  parseError = null,
+  reviewStatus,
 }: UploadQuoteFileParams): Promise<QuoteFileRecord | null> {
   try {
     const { data: { user } } = await supabase.auth.getUser();
@@ -87,10 +95,12 @@ export async function uploadQuoteFile({
     const { data: record, error: insertError } = await supabase
       .from('quote_files')
       .insert({
+        document_id: documentId,
         job_id: jobId || '',
         client_name: clientName || '',
         client_id: clientId || '',
         file_type: fileType,
+        file_category: fileCategory,
         file_name: file.name,
         file_size: file.size,
         storage_path: storagePath,
@@ -111,6 +121,27 @@ export async function uploadQuoteFile({
       return { id: '', storagePath, gdriveStatus: 'pending' };
     }
 
+    let storedDocumentId: string | null = null;
+    try {
+      storedDocumentId = await upsertStoredDocument({
+        quoteFileId: record.id,
+        documentId: documentId || null,
+        jobId: jobId || null,
+        clientId: clientId || null,
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: file.type || fileType,
+        storagePath,
+        uploadedBy: user.id,
+        sourceType: 'uploaded',
+        reviewStatus: (reviewStatus || (extractionSource === 'unknown' ? 'needs_review' : 'pending')) as any,
+        parseError: parseError || null,
+        parserName: extractionSource === 'regex' ? 'regex-pdf-parser' : extractionSource === 'ai' ? 'ai-extractor' : null,
+      });
+    } catch (storedDocError) {
+      console.warn('Stored document insert error:', storedDocError);
+    }
+
     // Fire-and-forget: trigger Google Drive backup via edge function
     triggerGdriveBackup(record.id, storagePath, file.name, fileType, jobId, clientName);
 
@@ -118,6 +149,7 @@ export async function uploadQuoteFile({
       id: record.id,
       storagePath,
       gdriveStatus: 'pending',
+      storedDocumentId,
     };
   } catch (err) {
     console.error('uploadQuoteFile error:', err);

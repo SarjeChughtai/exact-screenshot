@@ -83,6 +83,7 @@
     "dealerRfq": "Dealer RFQ",
     "vendorPortal": "Vendor Portal",
     "quoteBoard": "Bid Board",
+    "costData": "Cost Data",
     "system": "System",
     "settings": "Settings",
     "auditLog": "Audit Log",
@@ -323,5 +324,8 @@
     },
     "editDealer": "Edit Dealer Profile",
     "noDealers": "No dealer profiles found."
+  },
+  "layout": {
+    "costData": "Cost Data"
   }
 }

@@ -14,6 +14,7 @@ import {
   processDocumentWithAI,
   extractFileContent,
 } from '@/lib/aiDocumentService';
+import { upsertStoredDocument } from '@/lib/costDataWarehouse';
 
 type ImportStep = 'idle' | 'extracting' | 'processing' | 'review' | 'saving';
 
@@ -21,7 +22,7 @@ const CATEGORIES = ['materials', 'labor', 'subcontractor', 'freight', 'engineeri
 
 export default function DataImportSettings() {
   const { user } = useAuth();
-  const { state } = useAppContext();
+  const { deals } = useAppContext();
 
   // AI Provider state
   const [provider, setProvider] = useState('openrouter');
@@ -196,7 +197,7 @@ export default function DataImportSettings() {
       // Find matching project_id from deals
       let projectId: string | null = null;
       if (projectName) {
-        const deal = state.deals.find(d =>
+        const deal = deals.find(d =>
           d.jobName.toLowerCase().includes(projectName.toLowerCase()) ||
           d.jobId.toLowerCase().includes(projectName.toLowerCase()) ||
           projectName.toLowerCase().includes(d.jobName.toLowerCase())
@@ -235,6 +236,17 @@ export default function DataImportSettings() {
           status: 'completed',
         });
       if (historyError) throw historyError;
+
+      await upsertStoredDocument({
+        fileName: selectedFile?.name || '',
+        fileSize: selectedFile?.size || 0,
+        fileType: documentType || selectedFile?.type || 'unknown',
+        storagePath: '',
+        uploadedBy: user.id,
+        sourceType: 'uploaded',
+        reviewStatus: 'approved',
+        parserName: 'ai-line-item-import',
+      }, null);
 
       toast.success(`Successfully imported ${editableItems.length} cost items ($${calculatedTotal.toLocaleString('en-CA', { minimumFractionDigits: 2 })})`);
 

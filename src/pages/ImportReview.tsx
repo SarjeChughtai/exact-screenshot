@@ -6,11 +6,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { saveSteelCostEntry } from '@/lib/quoteFileStorage';
-import { quoteFileFromRow } from '@/lib/supabaseMappers';
+import { insulationCostDataFromRow, quoteFileFromRow, steelCostDataFromRow, storedDocumentFromRow } from '@/lib/supabaseMappers';
 import { formatCurrency, formatNumber } from '@/lib/calculations';
 import { toast } from 'sonner';
 import { CheckCircle2, XCircle, AlertTriangle, Pencil, Download, ChevronDown, ChevronUp, Clock, FileText } from 'lucide-react';
-import type { QuoteFileRecord, ImportReviewStatus } from '@/types';
+import type { InsulationCostDataRecord, QuoteFileRecord, ImportReviewStatus, SteelCostDataRecord, StoredDocument } from '@/types';
+import { persistParsedCostDocument } from '@/lib/costDataWarehouse';
 
 const STATUS_OPTIONS: { value: ImportReviewStatus | 'all'; label: string }[] = [
   { value: 'all', label: 'All' },
@@ -50,7 +51,12 @@ interface EditFormState {
 }
 
 export default function ImportReview() {
-  const [files, setFiles] = useState<(QuoteFileRecord & { steelCostEntries?: any[] })[]>([]);
+  const [files, setFiles] = useState<(QuoteFileRecord & {
+    steelCostEntries?: any[];
+    steelWarehouseEntry?: SteelCostDataRecord | null;
+    insulationWarehouseEntry?: InsulationCostDataRecord | null;
+    storedDocument?: StoredDocument | null;
+  })[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<ImportReviewStatus | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -76,9 +82,32 @@ export default function ImportReview() {
       return;
     }
 
+    const quoteFileIds = (data || []).map((row: any) => row.id).filter(Boolean);
+    const [storedDocsRes, steelWarehouseRes, insulationWarehouseRes] = await Promise.all([
+      quoteFileIds.length
+        ? (supabase.from as any)('stored_documents').select('*').in('quote_file_id', quoteFileIds)
+        : Promise.resolve({ data: [], error: null }),
+      quoteFileIds.length
+        ? (supabase.from as any)('steel_cost_data').select('*').in('quote_file_id', quoteFileIds)
+        : Promise.resolve({ data: [], error: null }),
+      quoteFileIds.length
+        ? (supabase.from as any)('insulation_cost_data').select('*').in('quote_file_id', quoteFileIds)
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+
+    const storedDocumentMap = new Map<string, StoredDocument>();
+    for (const row of storedDocsRes.data || []) storedDocumentMap.set(row.quote_file_id, storedDocumentFromRow(row));
+    const steelWarehouseMap = new Map<string, SteelCostDataRecord>();
+    for (const row of steelWarehouseRes.data || []) steelWarehouseMap.set(row.quote_file_id, steelCostDataFromRow(row));
+    const insulationWarehouseMap = new Map<string, InsulationCostDataRecord>();
+    for (const row of insulationWarehouseRes.data || []) insulationWarehouseMap.set(row.quote_file_id, insulationCostDataFromRow(row));
+
     const mapped = (data || []).map((row: any) => ({
       ...quoteFileFromRow(row),
       steelCostEntries: row.steel_cost_entries || [],
+      steelWarehouseEntry: steelWarehouseMap.get(row.id) || null,
+      insulationWarehouseEntry: insulationWarehouseMap.get(row.id) || null,
+      storedDocument: storedDocumentMap.get(row.id) || null,
     }));
     setFiles(mapped);
     setLoading(false);
@@ -119,6 +148,13 @@ export default function ImportReview() {
       toast.error('Failed to update status');
       return;
     }
+    await (supabase.from as any)('stored_documents')
+      .update({
+        review_status: status,
+        reviewed_by: user?.id || null,
+        reviewed_at: new Date().toISOString(),
+      })
+      .eq('quote_file_id', id);
     toast.success(`Status updated to ${STATUS_BADGE[status].label}`);
     fetchFiles();
   };
@@ -199,6 +235,110 @@ export default function ImportReview() {
       extractionSource: 'regex',
       aiRawOutput: editingFile.aiOutput,
     });
+
+    try {
+      if (editingFile.fileType === 'insulation') {
+        await persistParsedCostDocument({
+          quoteFileId: editingFile.id,
+          documentId: editingFile.documentId || null,
+          jobId: editingFile.jobId || null,
+          clientId: editingFile.clientId || null,
+          fileName: editingFile.fileName,
+          fileSize: editingFile.fileSize,
+          fileType: editingFile.fileType,
+          storagePath: editingFile.storagePath,
+          sourceType: 'uploaded',
+          reviewStatus: 'corrected',
+          parseError: null,
+          parserName: 'manual-review',
+        }, {
+          type: 'insulation',
+          reviewStatus: 'corrected',
+          parseError: null,
+          insulation: {
+            documentType: 'insulation',
+            projectId: editingFile.jobId || null,
+            clientName: editingFile.clientName || null,
+            location: [editForm.city, editForm.province].filter(Boolean).join(', ') || null,
+            province: editForm.province || null,
+            postalCode: null,
+            widthFt: correctedData.width,
+            lengthFt: correctedData.length,
+            eaveHeightFt: correctedData.height,
+            roofSlope: correctedData.roof_pitch,
+            floorAreaSqft: correctedData.width && correctedData.length ? correctedData.width * correctedData.length : null,
+            roofRValue: null,
+            wallRValue: null,
+            grade: correctedData.insulation_grade,
+            roofAreaSqft: null,
+            wallAreaSqft: null,
+            totalInsulatedSqft: null,
+            materialCost: correctedData.total_cost ? correctedData.total_cost - (editingFile.aiOutput as any)?.fuel_surcharge - (editingFile.aiOutput as any)?.freight_cost : correctedData.total_cost,
+            freightCost: (editingFile.aiOutput as any)?.freight_cost || null,
+            fuelSurcharge: (editingFile.aiOutput as any)?.fuel_surcharge || null,
+            totalDelivery: ((editingFile.aiOutput as any)?.freight_cost || 0) + ((editingFile.aiOutput as any)?.fuel_surcharge || 0) || null,
+            totalCost: correctedData.total_cost,
+            materialPerSqft: null,
+            totalPerSqft: null,
+            weightLb: (editingFile.aiOutput as any)?.weight_lb || null,
+            shipBranch: (editingFile.aiOutput as any)?.ship_branch || null,
+            quoteNumber: (editingFile.aiOutput as any)?.quote_number || null,
+            quoteDate: (editingFile.aiOutput as any)?.quote_date || null,
+            accessories: [],
+            rawText: '',
+          },
+        } as any);
+      } else {
+        await persistParsedCostDocument({
+          quoteFileId: editingFile.id,
+          documentId: editingFile.documentId || null,
+          jobId: editingFile.jobId || null,
+          clientId: editingFile.clientId || null,
+          fileName: editingFile.fileName,
+          fileSize: editingFile.fileSize,
+          fileType: editingFile.fileType,
+          storagePath: editingFile.storagePath,
+          sourceType: 'uploaded',
+          reviewStatus: 'corrected',
+          parseError: null,
+          parserName: 'manual-review',
+        }, {
+          type: 'mbs',
+          reviewStatus: 'corrected',
+          parseError: null,
+          steel: {
+            documentType: 'mbs',
+            projectId: editingFile.jobId || null,
+            clientName: editingFile.clientName || null,
+            clientId: editingFile.clientId || null,
+            city: editForm.city || null,
+            province: editForm.province || null,
+            postalCode: null,
+            widthFt: correctedData.width,
+            lengthFt: correctedData.length,
+            eaveHeightFt: correctedData.height,
+            leftEaveHeightFt: correctedData.height,
+            rightEaveHeightFt: correctedData.height,
+            isSingleSlope: false,
+            roofSlope: correctedData.roof_pitch,
+            floorAreaSqft: correctedData.width && correctedData.length ? correctedData.width * correctedData.length : null,
+            totalWeightLb: correctedData.weight,
+            totalCost: correctedData.total_cost,
+            costPerSqft: correctedData.width && correctedData.length ? correctedData.total_cost / (correctedData.width * correctedData.length) : null,
+            weightPerSqft: correctedData.width && correctedData.length ? correctedData.weight / (correctedData.width * correctedData.length) : null,
+            pricePerLb: correctedData.cost_per_lb,
+            snowLoadPsf: null,
+            windLoadPsf: null,
+            windCode: null,
+            seismicCat: null,
+            components: [],
+            rawText: '',
+          },
+        } as any);
+      }
+    } catch (warehouseError) {
+      console.error('Warehouse correction save failed:', warehouseError);
+    }
 
     toast.success('Correction saved and data entry created');
     setEditingFile(null);
@@ -312,7 +452,7 @@ export default function ImportReview() {
                 const isExpanded = expandedId === file.id;
                 const badge = STATUS_BADGE[file.reviewStatus] || STATUS_BADGE.pending;
                 const srcBadge = SOURCE_BADGE[file.extractionSource] || SOURCE_BADGE.unknown;
-                const entry = file.steelCostEntries?.[0];
+                const entry = file.steelWarehouseEntry || file.insulationWarehouseEntry || file.steelCostEntries?.[0];
 
                 return (
                   <React.Fragment key={file.id}>
@@ -388,15 +528,15 @@ export default function ImportReview() {
                               <h4 className="font-medium mb-2 text-sm">Extracted Values</h4>
                               {entry ? (
                                 <div className="space-y-1 text-sm">
-                                  <div className="flex justify-between"><span className="text-muted-foreground">Weight:</span><span>{formatNumber(entry.weight_lbs || 0)} lbs</span></div>
-                                  <div className="flex justify-between"><span className="text-muted-foreground">Cost/lb:</span><span>${(entry.cost_per_lb || 0).toFixed(2)}</span></div>
-                                  <div className="flex justify-between"><span className="text-muted-foreground">Total Cost:</span><span>{formatCurrency(entry.total_cost || 0)}</span></div>
-                                  {entry.width && <div className="flex justify-between"><span className="text-muted-foreground">Width:</span><span>{entry.width} ft</span></div>}
-                                  {entry.length && <div className="flex justify-between"><span className="text-muted-foreground">Length:</span><span>{entry.length} ft</span></div>}
-                                  {entry.height && <div className="flex justify-between"><span className="text-muted-foreground">Height:</span><span>{entry.height} ft</span></div>}
-                                  {entry.roof_pitch && <div className="flex justify-between"><span className="text-muted-foreground">Roof Pitch:</span><span>{entry.roof_pitch}:12</span></div>}
-                                  {entry.province && <div className="flex justify-between"><span className="text-muted-foreground">Province:</span><span>{entry.province}</span></div>}
-                                  {entry.insulation_total > 0 && <div className="flex justify-between"><span className="text-muted-foreground">Insulation:</span><span>{formatCurrency(entry.insulation_total)}</span></div>}
+                                  <div className="flex justify-between"><span className="text-muted-foreground">Weight:</span><span>{formatNumber(entry.weight_lbs || entry.totalWeightLb || entry.weightLb || 0)} lbs</span></div>
+                                  <div className="flex justify-between"><span className="text-muted-foreground">Cost/lb:</span><span>${Number(entry.cost_per_lb || entry.pricePerLb || 0).toFixed(2)}</span></div>
+                                  <div className="flex justify-between"><span className="text-muted-foreground">Total Cost:</span><span>{formatCurrency(entry.total_cost || entry.totalCost || 0)}</span></div>
+                                  {(entry.width || entry.widthFt) && <div className="flex justify-between"><span className="text-muted-foreground">Width:</span><span>{entry.width || entry.widthFt} ft</span></div>}
+                                  {(entry.length || entry.lengthFt) && <div className="flex justify-between"><span className="text-muted-foreground">Length:</span><span>{entry.length || entry.lengthFt} ft</span></div>}
+                                  {(entry.height || entry.eaveHeightFt) && <div className="flex justify-between"><span className="text-muted-foreground">Height:</span><span>{entry.height || entry.eaveHeightFt} ft</span></div>}
+                                  {(entry.roof_pitch || entry.roofSlope) && <div className="flex justify-between"><span className="text-muted-foreground">Roof Pitch:</span><span>{entry.roof_pitch || entry.roofSlope}:12</span></div>}
+                                  {(entry.province || entry.location) && <div className="flex justify-between"><span className="text-muted-foreground">Province / Location:</span><span>{entry.province || entry.location}</span></div>}
+                                  {(entry.insulation_total || entry.totalDelivery) > 0 && <div className="flex justify-between"><span className="text-muted-foreground">Delivery / Insulation:</span><span>{formatCurrency(entry.insulation_total || entry.totalDelivery || 0)}</span></div>}
                                 </div>
                               ) : (
                                 <p className="text-muted-foreground text-sm">No extracted data — {file.reviewStatus === 'needs_review' ? 'use Edit to manually enter values' : 'parsing failed'}</p>
