@@ -178,6 +178,31 @@ export interface PaymentEntry {
   notes: string;
 }
 
+export type CommissionRecipientRole = 'sales_rep' | 'estimator';
+export type CommissionPayoutStage =
+  | 'sales_rep_stage_1'
+  | 'sales_rep_stage_2'
+  | 'sales_rep_stage_3'
+  | 'estimator_stage_2';
+
+export interface CommissionPayout {
+  id: string;
+  jobId: string;
+  recipientRole: CommissionRecipientRole;
+  recipientName: string;
+  payoutStage: CommissionPayoutStage;
+  amount: number;
+  eligibleOnDate?: string | null;
+  paidOn: string;
+  paymentMethod: string;
+  referenceNumber: string;
+  notes: string;
+  confirmedByUserId?: string | null;
+  confirmedByName?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface ProductionRecord {
   jobId: string;
   submitted: boolean;

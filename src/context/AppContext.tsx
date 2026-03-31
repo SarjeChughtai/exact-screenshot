@@ -4,6 +4,7 @@ import {
   Deal,
   InternalCost,
   PaymentEntry,
+  CommissionPayout,
   ProductionRecord,
   FreightRecord,
   RFQ,
@@ -23,6 +24,7 @@ import {
   estimateFromRow, estimateToRow,
   internalCostFromRow, internalCostToRow,
   paymentFromRow, paymentToRow,
+  commissionPayoutFromRow, commissionPayoutToRow,
   productionFromRow, productionToRow,
   freightFromRow, freightToRow,
   clientFromRow, clientToRow,
@@ -39,6 +41,7 @@ interface AppState {
   deals: Deal[];
   internalCosts: InternalCost[];
   payments: PaymentEntry[];
+  commissionPayouts: CommissionPayout[];
   production: ProductionRecord[];
   freight: FreightRecord[];
   rfqs: RFQ[];
@@ -64,6 +67,8 @@ interface AppContextType extends AppState {
   addPayment: (p: PaymentEntry) => void;
   updatePayment: (id: string, updates: Partial<PaymentEntry>) => void;
   deletePayment: (id: string) => void;
+  upsertCommissionPayout: (payout: CommissionPayout) => Promise<void>;
+  deleteCommissionPayout: (id: string) => Promise<void>;
   addProduction: (pr: ProductionRecord) => void;
   updateProduction: (jobId: string, updates: Partial<ProductionRecord>) => void;
   addFreight: (fr: FreightRecord) => void;
@@ -95,6 +100,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     deals: [],
     internalCosts: [],
     payments: [],
+    commissionPayouts: [],
     production: [],
     freight: [],
     rfqs: [],
@@ -114,6 +120,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         dealsRes,
         costsRes,
         paymentsRes,
+        commissionPayoutsRes,
         prodRes,
         freightRes,
         clientsRes,
@@ -127,6 +134,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         supabase.from('deals').select('*'),
         supabase.from('internal_costs').select('*'),
         supabase.from('payments').select('*'),
+        (supabase.from as any)('commission_payouts').select('*'),
         supabase.from('production').select('*'),
         supabase.from('freight').select('*'),
         supabase.from('clients').select('*'),
@@ -143,6 +151,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         deals: dealsRes.data?.length, dealsErr: dealsRes.error,
         costs: costsRes.data?.length, costsErr: costsRes.error,
         payments: paymentsRes.data?.length, paymentsErr: paymentsRes.error,
+        commissionPayouts: commissionPayoutsRes.data?.length, commissionPayoutsErr: commissionPayoutsRes.error,
         production: prodRes.data?.length, prodErr: prodRes.error,
         freight: freightRes.data?.length, freightErr: freightRes.error,
         clients: clientsRes.data?.length, clientsErr: clientsRes.error,
@@ -166,6 +175,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const deals = (dealsRes.data || []).map(dealFromRow);
       const internalCosts = (costsRes.data || []).map(internalCostFromRow);
       const payments = (paymentsRes.data || []).map(paymentFromRow);
+      const commissionPayouts = commissionPayoutsRes.error
+        ? []
+        : ((commissionPayoutsRes.data || []).map(commissionPayoutFromRow));
       const production = (prodRes.data || []).map(productionFromRow);
       const freight = (freightRes.data || []).map(freightFromRow);
       const clients = (clientsRes.data || []).map(clientFromRow);
@@ -194,6 +206,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         deals,
         internalCosts,
         payments,
+        commissionPayouts,
         production,
         freight,
         rfqs: state.rfqs,
@@ -221,6 +234,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           deals: data.deals || [],
           internalCosts: data.internalCosts || [],
           payments: data.payments || [],
+          commissionPayouts: data.commissionPayouts || [],
           production: data.production || [],
           freight: data.freight || [],
           rfqs: data.rfqs || [],
@@ -248,7 +262,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       const data = JSON.parse(raw);
       const hasData = (data.quotes?.length || data.deals?.length || data.payments?.length ||
-        data.internalCosts?.length || data.production?.length || data.freight?.length);
+        data.internalCosts?.length || data.production?.length || data.freight?.length || data.commissionPayouts?.length);
       if (!hasData) return false;
 
       // Insert into Supabase
@@ -268,6 +282,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const rows = data.payments.map((p: PaymentEntry) => paymentToRow(p));
         await supabase.from('payments').insert(rows as any).select();
       }
+      if (data.commissionPayouts?.length) {
+        const rows = data.commissionPayouts.map((p: CommissionPayout) => commissionPayoutToRow(p));
+        await (supabase.from as any)('commission_payouts').upsert(rows, { onConflict: 'job_id,recipient_role,payout_stage' });
+      }
       if (data.production?.length) {
         const rows = data.production.map((pr: ProductionRecord) => productionToRow(pr));
         await supabase.from('production').insert(rows as any).select();
@@ -281,11 +299,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       localStorage.removeItem('canada_steel_state');
 
       // Re-fetch from Supabase after migration
-      const [qR, dR, cR, pR, prR, fR, clR, vR] = await Promise.all([
+      const [qR, dR, cR, pR, cpR, prR, fR, clR, vR] = await Promise.all([
         supabase.from('quotes').select('*'),
         supabase.from('deals').select('*'),
         supabase.from('internal_costs').select('*'),
         supabase.from('payments').select('*'),
+        (supabase.from as any)('commission_payouts').select('*'),
         supabase.from('production').select('*'),
         supabase.from('freight').select('*'),
         supabase.from('clients').select('*'),
@@ -297,6 +316,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         deals: (dR.data || []).map(dealFromRow),
         internalCosts: (cR.data || []).map(internalCostFromRow),
         payments: (pR.data || []).map(paymentFromRow),
+        commissionPayouts: (cpR.data || []).map(commissionPayoutFromRow),
         production: (prR.data || []).map(productionFromRow),
         freight: (fR.data || []).map(freightFromRow),
         clients: (clR.data || []).map(clientFromRow),
@@ -328,12 +348,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         console.warn('[Data] Supabase insert returned 0 rows — using SEED_DEALS in-memory');
         setState(prev => ({ ...prev, deals: SEED_DEALS, loading: false }));
         // Also save to localStorage so it persists
-        const currentState = { quotes: [], deals: SEED_DEALS, internalCosts: [], payments: [], production: [], freight: [], rfqs: [], clients: [], vendors: [], estimates: [], steelCostData: [], insulationCostData: [], storedDocuments: [] };
+        const currentState = { quotes: [], deals: SEED_DEALS, internalCosts: [], payments: [], commissionPayouts: [], production: [], freight: [], rfqs: [], clients: [], vendors: [], estimates: [], steelCostData: [], insulationCostData: [], storedDocuments: [] };
         localStorage.setItem('canada_steel_state', JSON.stringify(currentState));
       }
     } catch {
       setState(prev => ({ ...prev, deals: SEED_DEALS, loading: false }));
-      const currentState = { quotes: [], deals: SEED_DEALS, internalCosts: [], payments: [], production: [], freight: [], rfqs: [], clients: [], vendors: [], estimates: [], steelCostData: [], insulationCostData: [], storedDocuments: [] };
+      const currentState = { quotes: [], deals: SEED_DEALS, internalCosts: [], payments: [], commissionPayouts: [], production: [], freight: [], rfqs: [], clients: [], vendors: [], estimates: [], steelCostData: [], insulationCostData: [], storedDocuments: [] };
       localStorage.setItem('canada_steel_state', JSON.stringify(currentState));
     }
   }, []);
@@ -578,6 +598,60 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } catch {}
   }, [currentUser]);
 
+  const upsertCommissionPayout = useCallback(async (payout: CommissionPayout) => {
+    const nextPayout = {
+      ...payout,
+      updatedAt: new Date().toISOString(),
+      createdAt: payout.createdAt || new Date().toISOString(),
+    };
+
+    setState(prev => {
+      const existing = prev.commissionPayouts.find(entry =>
+        entry.jobId === nextPayout.jobId
+        && entry.recipientRole === nextPayout.recipientRole
+        && entry.payoutStage === nextPayout.payoutStage,
+      );
+
+      if (existing) {
+        logAudit(currentUser?.name || 'System', 'UPDATE', 'CommissionPayout', existing.id, nextPayout, existing);
+        return {
+          ...prev,
+          commissionPayouts: prev.commissionPayouts.map(entry =>
+            entry.id === existing.id ? { ...existing, ...nextPayout, id: existing.id } : entry,
+          ),
+        };
+      }
+
+      logAudit(currentUser?.name || 'System', 'CREATE', 'CommissionPayout', nextPayout.id, nextPayout);
+      return {
+        ...prev,
+        commissionPayouts: [...prev.commissionPayouts, nextPayout],
+      };
+    });
+
+    try {
+      const row = commissionPayoutToRow(nextPayout);
+      await (supabase.from as any)('commission_payouts').upsert(row, { onConflict: 'job_id,recipient_role,payout_stage' });
+    } catch {}
+  }, [currentUser]);
+
+  const deleteCommissionPayout = useCallback(async (id: string) => {
+    setState(prev => {
+      const existing = prev.commissionPayouts.find(entry => entry.id === id);
+      if (existing) {
+        logAudit(currentUser?.name || 'System', 'DELETE', 'CommissionPayout', id, { id }, existing);
+      }
+      return {
+        ...prev,
+        commissionPayouts: prev.commissionPayouts.filter(entry => entry.id !== id),
+      };
+    });
+
+    try {
+      await (supabase.from as any)('commission_payouts').delete().eq('id', id);
+    } catch {}
+  }, [currentUser]);
+
   // --- Production ---
   const addProduction = useCallback(async (pr: ProductionRecord) => {
     setState(prev => ({ ...prev, production: [...prev.production, pr] }));
@@ -765,6 +839,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     <AppContext.Provider value={{
       ...state, addQuote, updateQuote, deleteQuote, restoreQuote, addDeal, updateDeal, deleteDeal,
       addInternalCost, updateInternalCost, addPayment, updatePayment, deletePayment,
+      upsertCommissionPayout, deleteCommissionPayout,
       addProduction, updateProduction, addFreight, updateFreight,
       addRFQ, updateRFQ, deleteRFQ,
       quickAddClient, quickAddVendor, addClient, updateClient, deleteClient,
