@@ -274,7 +274,7 @@ CREATE POLICY "Authenticated users can update stored documents"
 DROP POLICY IF EXISTS "Authenticated users can delete stored documents" ON public.stored_documents;
 CREATE POLICY "Authenticated users can delete stored documents"
   ON public.stored_documents FOR DELETE TO authenticated
-  USING (auth.uid() = uploaded_by);
+  USING (auth.uid()::text = uploaded_by::text);
 
 DROP POLICY IF EXISTS "Authenticated users can view steel cost data" ON public.steel_cost_data;
 CREATE POLICY "Authenticated users can view steel cost data"
