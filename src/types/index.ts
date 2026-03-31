@@ -2,12 +2,29 @@ export interface Client {
   id: string;
   clientId: string;
   clientName: string;
+  name?: string;
   jobIds: string[];
   contactEmail?: string;
   contactPhone?: string;
   notes?: string;
   createdAt: string;
 }
+
+export type DocumentType = 'rfq' | 'dealer_rfq' | 'internal_quote' | 'external_quote';
+export type WorkflowStatus =
+  | 'draft'
+  | 'submitted'
+  | 'estimate_needed'
+  | 'estimating'
+  | 'estimate_complete'
+  | 'internal_quote_in_progress'
+  | 'internal_quote_ready'
+  | 'external_quote_ready'
+  | 'quote_sent'
+  | 'won'
+  | 'lost'
+  | 'converted_to_deal'
+  | 'cancelled';
 
 export interface Quote {
   id: string;
@@ -52,6 +69,17 @@ export interface Quote {
   qst: number;
   grandTotal: number;
   status: QuoteStatus;
+  documentType: DocumentType;
+  workflowStatus: WorkflowStatus;
+  sourceDocumentId?: string | null;
+  assignedEstimatorUserId?: string | null;
+  assignedOperationsUserId?: string | null;
+  pdfStoragePath?: string;
+  pdfFileName?: string;
+  payload?: Record<string, unknown>;
+  createdByUserId?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
   isDeleted?: boolean;
 }
 
@@ -91,6 +119,8 @@ export interface Deal {
   productionStatus: ProductionStage;
   freightStatus: FreightStatus;
   insulationStatus: string;
+  cxPaymentStageOverride?: string;
+  factoryPaymentStageOverride?: string;
   deliveryDate: string;
   pickupDate: string;
   notes: string;
@@ -165,6 +195,7 @@ export interface FreightRecord {
   jobId: string;
   clientName: string;
   buildingSize: string;
+  province?: string;
   weight: number;
   pickupAddress: string;
   deliveryAddress: string;
@@ -173,7 +204,31 @@ export interface FreightRecord {
   actualFreight: number;
   paid: boolean;
   carrier: string;
+  assignedFreightUserId?: string | null;
   status: FreightStatus;
+}
+
+export interface Estimate {
+  id: string;
+  label: string;
+  date: string;
+  clientName: string;
+  clientId: string;
+  salesRep: string;
+  width: number;
+  length: number;
+  height: number;
+  pitch: number;
+  province: string;
+  grandTotal: number;
+  sqft: number;
+  estimatedTotal: number;
+  notes: string;
+  auditNotes: string[];
+  payload: Record<string, unknown>;
+  createdByUserId?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export type RFQStatus = 'Draft' | 'Sent' | 'Quoted' | 'Accepted' | 'Declined' | 'Expired';
@@ -240,12 +295,14 @@ export type ImportReviewStatus = 'pending' | 'approved' | 'needs_review' | 'corr
 
 export interface QuoteFileRecord {
   id: string;
+  documentId?: string | null;
   jobId: string;
   clientName: string;
   clientId: string;
   fileName: string;
   fileSize: number;
   fileType: string;
+  fileCategory?: 'generated_pdf' | 'cost_file' | 'support_file';
   storagePath: string;
   buildingLabel: string;
   extractionSource: string;
@@ -259,6 +316,17 @@ export interface QuoteFileRecord {
   gdriveFileId: string | null;
   uploadedBy: string | null;
   createdAt: string;
+}
+
+export interface UserProfileSettings {
+  userId: string;
+  phone: string;
+  address: string;
+  emailNotifications: boolean;
+  smsNotifications: boolean;
+  canViewAllFreightBoard: boolean;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface SteelCostEntry {

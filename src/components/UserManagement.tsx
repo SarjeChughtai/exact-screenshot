@@ -13,11 +13,12 @@ const ROLE_LABELS: Record<string, string> = {
   accounting: 'Accounting',
   operations: 'Operations',
   sales_rep: 'Sales Rep',
+  estimator: 'Estimator',
   freight: 'Freight',
   dealer: 'Dealer',
 };
 
-const ASSIGNABLE_ROLES = ['accounting', 'operations', 'sales_rep', 'freight', 'dealer'];
+const ASSIGNABLE_ROLES = ['accounting', 'operations', 'sales_rep', 'estimator', 'freight', 'dealer'];
 
 interface AccessRequest {
   id: string;

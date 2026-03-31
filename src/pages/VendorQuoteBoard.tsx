@@ -89,9 +89,9 @@ export default function VendorQuoteBoard() {
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight capitalize">{primaryRole} Quote Board</h1>
+        <h1 className="text-3xl font-bold tracking-tight capitalize">{primaryRole} Bid Board</h1>
         <p className="text-muted-foreground mt-2">
-          Review available jobs and submit your bids directly.
+          Review active bids and submit blind bids directly.
         </p>
       </div>
 

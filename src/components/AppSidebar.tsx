@@ -48,6 +48,7 @@ const menuGroups: MenuGroup[] = [
       { path: '/estimates-log', label: 'sidebar.estimatesLog', icon: List, module: 'estimator' },
       { path: '/quote-rfq', label: 'sidebar.quoteRfq', icon: Send, module: 'quote-log' },
       { path: '/quote-log', label: 'sidebar.quoteLog', icon: ClipboardList, module: 'quote-log' },
+      { path: '/internal-quote-log', label: 'sidebar.internalQuoteLog', icon: List, module: 'internal-quote-log' },
       { path: '/internal-quote-builder', label: 'sidebar.internalQuoteBuilder', icon: FileInput, module: 'internal-quote-builder' },
       { path: '/import-review', label: 'sidebar.importReview', icon: Eye, module: 'internal-quote-builder' },
       { path: '/draft-log', label: 'sidebar.draftLog', icon: FileText, module: 'draft-log' },
