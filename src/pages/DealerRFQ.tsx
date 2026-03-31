@@ -22,11 +22,6 @@ export default function DealerRFQ() {
   
   const dealerProfile = settings.dealers?.find(d => d.userId === user?.id);
 
-  useEffect(() => {
-    if (user && hasRole('dealer') && !dealerProfile) {
-      navigate('/settings');
-    }
-  }, [user, hasRole, dealerProfile, navigate]);
 
   const [form, setForm] = useState({
     clientName: '', 

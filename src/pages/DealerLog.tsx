@@ -32,15 +32,6 @@ export default function DealerLog() {
   const { user } = useAuth();
   const { hasRole } = useRoles();
 
-  useEffect(() => {
-    // Check if user is a dealer and needs profile setup
-    if (user && hasRole('dealer')) {
-      const hasProfile = settings.dealers?.some(d => d.userId === user.id);
-      if (!hasProfile) {
-        navigate('/settings');
-      }
-    }
-  }, [user, hasRole, settings.dealers, navigate]);
 
   useEffect(() => {
     try {

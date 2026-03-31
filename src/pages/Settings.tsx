@@ -16,6 +16,7 @@ import CRMSettings from '@/components/CRMSettings';
 import QBOSettings from '@/components/QBOSettings';
 import DataImportSettings from '@/components/DataImportSettings';
 import DealerProfileSettings from '@/components/DealerProfileSettings';
+import DealerManagement from '@/components/DealerManagement';
 import { useTranslation } from 'react-i18next';
 
 export default function Settings() {
@@ -104,6 +105,7 @@ export default function Settings() {
            {isAdmin && <TabsTrigger value="users">{t('settings.tabs.users')}</TabsTrigger>}
            {isAdmin && <TabsTrigger value="crm">{t('settings.tabs.crm')}</TabsTrigger>}
            {isAdmin && <TabsTrigger value="quickbooks">{t('settings.tabs.quickbooks')}</TabsTrigger>}
+           {isAdmin && <TabsTrigger value="dealer-management">{t('dealerManagement.title')}</TabsTrigger>}
            {!isDealer && <TabsTrigger value="data">{t('settings.tabs.data')}</TabsTrigger>}
         </TabsList>
 
@@ -289,6 +291,12 @@ export default function Settings() {
         {isAdmin && (
           <TabsContent value="quickbooks" className="space-y-4">
             <QBOSettings />
+          </TabsContent>
+        )}
+
+        {isAdmin && (
+          <TabsContent value="dealer-management" className="space-y-4">
+            <DealerManagement />
           </TabsContent>
         )}
 

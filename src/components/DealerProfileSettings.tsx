@@ -10,13 +10,19 @@ import { useAuth } from '@/context/AuthContext';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
+import { useRoles } from '@/context/RoleContext';
 
-export default function DealerProfileSettings() {
+export default function DealerProfileSettings({ userId: targetUserId }: { userId?: string }) {
   const { t } = useTranslation();
   const { settings, updateSettings } = useSettings();
-  const { user } = useAuth();
+  const { user: authUser } = useAuth();
+  const { hasAnyRole } = useRoles();
   const navigate = useNavigate();
   
+  const effectiveUserId = targetUserId || authUser?.id;
+  const isAdminEdit = !!targetUserId;
+  const canEditClientId = hasAnyRole('admin', 'owner');
+
   const [profile, setProfile] = useState({
     businessName: '',
     contactEmail: '',
@@ -28,37 +34,40 @@ export default function DealerProfileSettings() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (user && settings.dealers) {
-      const existing = settings.dealers.find(d => d.userId === user.id);
+    if (effectiveUserId && settings.dealers) {
+      const existing = settings.dealers.find(d => d.userId === effectiveUserId);
       if (existing) {
         setProfile({
           businessName: existing.businessName || '',
-          contactEmail: existing.contactEmail || user.email || '',
+          contactEmail: existing.contactEmail || (isAdminEdit ? '' : authUser?.email || ''),
           contactPhone: existing.contactPhone || '',
           clientId: existing.clientId || '',
           billingInfo: existing.billingInfo || '',
         });
-      } else {
-        setProfile(p => ({ ...p, contactEmail: user.email || '' }));
+      } else if (!isAdminEdit && authUser) {
+        setProfile(p => ({ ...p, contactEmail: authUser.email || '' }));
       }
     }
-  }, [user, settings.dealers]);
+  }, [effectiveUserId, settings.dealers, isAdminEdit, authUser]);
 
   const handleSave = async () => {
-    if (!user) return;
-    if (!profile.clientId.trim()) {
-      toast.error(t('dealerProfile.toast.clientIdRequired') || 'Client ID is required');
-      return;
-    }
+    if (!effectiveUserId) return;
     
     setLoading(true);
 
     const updatedDealers = [...(settings.dealers || [])];
-    const index = updatedDealers.findIndex(d => d.userId === user.id);
+    const index = updatedDealers.findIndex(d => d.userId === effectiveUserId);
     
+    // Auto-generate Client ID if missing and not provided
+    let finalClientId = profile.clientId.trim();
+    if (!finalClientId) {
+       finalClientId = `DLR-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+    }
+
     const newProfile = {
       ...profile,
-      userId: user.id,
+      clientId: finalClientId,
+      userId: effectiveUserId,
       updatedAt: new Date().toISOString(),
     };
 
@@ -75,8 +84,10 @@ export default function DealerProfileSettings() {
     setLoading(false);
     toast.success(t('dealerProfile.toast.success'));
     
-    // Redirect back to dealer-log if they were forced here
-    navigate('/dealer-log');
+    // Redirect if it's the dealer editing their own profile
+    if (!isAdminEdit) {
+      navigate('/dealer-log');
+    }
   };
 
   return (
@@ -108,14 +119,21 @@ export default function DealerProfileSettings() {
           <div className="space-y-2">
             <Label htmlFor="client-id" className="flex items-center gap-2">
               <Hash className="h-3.5 w-3.5" /> {t('dealerProfile.clientId')}
+              {!canEditClientId && profile.clientId && (
+                <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground uppercase">Read Only</span>
+              )}
             </Label>
             <Input 
               id="client-id" 
-              placeholder="DLR-XXXX"
+              placeholder={profile.clientId ? "" : "Auto-generated on save"}
               value={profile.clientId}
               onChange={e => setProfile({...profile, clientId: e.target.value})}
               className="input-blue"
+              disabled={!canEditClientId}
             />
+            {!canEditClientId && !profile.clientId && (
+              <p className="text-[10px] text-muted-foreground">{t('dealerRfq.clientIdNote')} (Pending Save)</p>
+            )}
           </div>
 
           <div className="space-y-2">

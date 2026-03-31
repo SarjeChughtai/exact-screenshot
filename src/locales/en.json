@@ -305,5 +305,22 @@
     "english": "English",
     "french": "French",
     "saving": "Saving..."
+  },
+  "onboarding": {
+    "completeProfile": "Complete Your Profile",
+    "promptText": "Please provide your business information to unlock automated tracking and custom billing for your RFQs.",
+    "skip": "Skip for Now",
+    "setup": "Setup Profile"
+  },
+  "dealerManagement": {
+    "title": "Dealer Management",
+    "subtitle": "Overview and administrative control for all approved dealers",
+    "headers": {
+      "business": "Business Name",
+      "clientId": "Client ID",
+      "actions": "Actions"
+    },
+    "editDealer": "Edit Dealer Profile",
+    "noDealers": "No dealer profiles found."
   }
 }

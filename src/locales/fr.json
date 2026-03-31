@@ -305,5 +305,22 @@
     "english": "Anglais",
     "french": "Français",
     "saving": "Enregistrement..."
+  },
+  "onboarding": {
+    "completeProfile": "Complétez votre profil",
+    "promptText": "Veuillez fournir les informations de votre entreprise pour déverrouiller le suivi automatisé et la facturation personnalisée de vos RFQ.",
+    "skip": "Passer pour l'instant",
+    "setup": "Configurer le profil"
+  },
+  "dealerManagement": {
+    "title": "Gestion des concessionnaires",
+    "subtitle": "Aperçu et contrôle administratif de tous les concessionnaires approuvés",
+    "headers": {
+      "business": "Entreprise",
+      "clientId": "ID Client",
+      "actions": "Actions"
+    },
+    "editDealer": "Modifier le profil concessionnaire",
+    "noDealers": "Aucun profil de concessionnaire trouvé."
   }
 }

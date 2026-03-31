@@ -5,6 +5,7 @@ import { NotificationBell } from '@/components/NotificationBell';
 import { LanguageToggle } from '@/components/LanguageToggle';
 import { ChevronRight } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import DealerOnboardingPrompt from './DealerOnboardingPrompt';
 
 const routeLabelKeys: Record<string, string> = {
   '/': 'layout.dashboard',
@@ -51,6 +52,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               <NotificationBell />
             </div>
           </header>
+          <DealerOnboardingPrompt />
           <main className="flex-1 overflow-y-auto p-4 lg:p-6">
             {children}
           </main>
