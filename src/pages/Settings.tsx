@@ -15,12 +15,17 @@ import { UserManagement } from '@/components/UserManagement';
 import CRMSettings from '@/components/CRMSettings';
 import QBOSettings from '@/components/QBOSettings';
 import DataImportSettings from '@/components/DataImportSettings';
+import DealerProfileSettings from '@/components/DealerProfileSettings';
+import DealerManagement from '@/components/DealerManagement';
+import { useTranslation } from 'react-i18next';
 
 export default function Settings() {
+  const { t } = useTranslation();
   const { settings, updateSettings } = useSettings();
   const appCtx = useAppContext();
   const { hasAnyRole } = useRoles();
   const isAdmin = hasAnyRole('admin', 'owner');
+  const isDealer = hasAnyRole('dealer');
 
   const [newPerson, setNewPerson] = useState({ name: '', email: '', roles: ['sales_rep'] as PersonnelEntry['roles'] });
 
@@ -32,11 +37,14 @@ export default function Settings() {
   };
 
   const addPerson = () => {
-    if (!newPerson.name || newPerson.roles.length === 0) { toast.error('Name and at least one role required'); return; }
+    if (!newPerson.name || newPerson.roles.length === 0) { 
+      toast.error(t('settings.personnel.toast.required')); 
+      return; 
+    }
     const entry: PersonnelEntry = { id: crypto.randomUUID(), name: newPerson.name, email: newPerson.email, role: newPerson.roles[0], roles: newPerson.roles };
     updateSettings({ personnel: [...settings.personnel, entry] });
     setNewPerson({ name: '', email: '', roles: ['sales_rep'] });
-    toast.success('Person added');
+    toast.success(t('settings.personnel.toast.added'));
   };
 
   const removePerson = (id: string) => {
@@ -54,7 +62,7 @@ export default function Settings() {
     const a = document.createElement('a');
     a.href = url; a.download = `canada_steel_backup_${new Date().toISOString().split('T')[0]}.json`;
     a.click(); URL.revokeObjectURL(url);
-    toast.success('Data exported');
+    toast.success(t('settings.data.toast.exported'));
   };
 
   const importData = () => {
@@ -69,9 +77,9 @@ export default function Settings() {
         if (data.state) localStorage.setItem('canada_steel_state', data.state);
         if (data.settings) localStorage.setItem('canada_steel_settings', data.settings);
         if (data.user) localStorage.setItem('canada_steel_user', data.user);
-        toast.success('Data imported — refreshing...');
+        toast.success(t('settings.data.toast.imported'));
         setTimeout(() => window.location.reload(), 500);
-      } catch { toast.error('Invalid backup file'); }
+      } catch { toast.error(t('settings.data.toast.invalid')); }
     };
     input.click();
   };
@@ -83,67 +91,69 @@ export default function Settings() {
   return (
     <div className="space-y-6 max-w-4xl">
       <div>
-        <h2 className="text-2xl font-bold text-foreground">Settings</h2>
-        <p className="text-sm text-muted-foreground mt-1">Global configuration for markups, statuses, and personnel</p>
+        <h2 className="text-2xl font-bold text-foreground">{t('settings.title')}</h2>
+        <p className="text-sm text-muted-foreground mt-1">{t('settings.subtitle')}</p>
       </div>
 
-      <Tabs defaultValue={isAdmin ? "markups" : "statuses"}>
+      <Tabs defaultValue={isAdmin ? "markups" : isDealer ? "dealer-profile" : "statuses"}>
         <TabsList>
-          {isAdmin && <TabsTrigger value="markups">Markup & Costs</TabsTrigger>}
-          {isAdmin && <TabsTrigger value="estimator">Estimator</TabsTrigger>}
-          <TabsTrigger value="statuses">Status Options</TabsTrigger>
-          <TabsTrigger value="personnel">Personnel</TabsTrigger>
-           {isAdmin && <TabsTrigger value="users">Users & Access</TabsTrigger>}
-           {isAdmin && <TabsTrigger value="crm">CRM</TabsTrigger>}
-           {isAdmin && <TabsTrigger value="quickbooks">QuickBooks</TabsTrigger>}
-           <TabsTrigger value="data">Data</TabsTrigger>
+          {isAdmin && <TabsTrigger value="markups">{t('settings.tabs.markups')}</TabsTrigger>}
+          {isAdmin && <TabsTrigger value="estimator">{t('settings.tabs.estimator')}</TabsTrigger>}
+          {isDealer && <TabsTrigger value="dealer-profile">{t('settings.tabs.dealerProfile')}</TabsTrigger>}
+          {!isDealer && <TabsTrigger value="statuses">{t('settings.tabs.statuses')}</TabsTrigger>}
+          {!isDealer && <TabsTrigger value="personnel">{t('settings.tabs.personnel')}</TabsTrigger>}
+           {isAdmin && <TabsTrigger value="users">{t('settings.tabs.users')}</TabsTrigger>}
+           {isAdmin && <TabsTrigger value="crm">{t('settings.tabs.crm')}</TabsTrigger>}
+           {isAdmin && <TabsTrigger value="quickbooks">{t('settings.tabs.quickbooks')}</TabsTrigger>}
+           {isAdmin && <TabsTrigger value="dealer-management">{t('dealerManagement.title')}</TabsTrigger>}
+           {!isDealer && <TabsTrigger value="data">{t('settings.tabs.data')}</TabsTrigger>}
         </TabsList>
 
         {isAdmin && (
           <TabsContent value="markups" className="space-y-4">
             <div className="bg-card border rounded-lg p-5 space-y-4">
-              <h3 className="text-sm font-semibold text-card-foreground">Markup & Cost Settings</h3>
+              <h3 className="text-sm font-semibold text-card-foreground">{t('settings.markups.title')}</h3>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                 <div>
-                  <Label className="text-xs">Supplier Increase %</Label>
+                  <Label className="text-xs">{t('settings.markups.supplierIncrease')}</Label>
                   <Input className="input-blue mt-1" type="number" value={settings.supplierIncreasePct} onChange={e => updateSettings({ supplierIncreasePct: parseFloat(e.target.value) || 0 })} />
                 </div>
                 <div>
-                  <Label className="text-xs">Minimum Margin ($)</Label>
+                  <Label className="text-xs">{t('settings.markups.minMargin')}</Label>
                   <Input className="input-blue mt-1" type="number" value={settings.minimumMargin} onChange={e => updateSettings({ minimumMargin: parseFloat(e.target.value) || 0 })} />
                 </div>
                 <div>
-                  <Label className="text-xs">Min Margin Threshold ($)</Label>
+                  <Label className="text-xs">{t('settings.markups.minMarginThreshold')}</Label>
                   <Input className="input-blue mt-1" type="number" value={settings.minimumMarginThreshold} onChange={e => updateSettings({ minimumMarginThreshold: parseFloat(e.target.value) || 0 })} />
                 </div>
                 <div>
-                  <Label className="text-xs">Drawings Markup ($)</Label>
+                  <Label className="text-xs">{t('settings.markups.drawingsMarkup')}</Label>
                   <Input className="input-blue mt-1" type="number" value={settings.drawingsMarkup} onChange={e => updateSettings({ drawingsMarkup: parseFloat(e.target.value) || 0 })} />
                 </div>
                 <div>
-                  <Label className="text-xs">Frost Wall Multiplier</Label>
+                  <Label className="text-xs">{t('settings.markups.frostWallMultiplier')}</Label>
                   <Input className="input-blue mt-1" type="number" step="0.01" value={settings.frostWallMultiplier} onChange={e => updateSettings({ frostWallMultiplier: parseFloat(e.target.value) || 1 })} />
                 </div>
                 <div>
-                  <Label className="text-xs">Gutter $/LF</Label>
+                  <Label className="text-xs">{t('settings.markups.gutterPerLF')}</Label>
                   <Input className="input-blue mt-1" type="number" value={settings.gutterPerLF} onChange={e => updateSettings({ gutterPerLF: parseFloat(e.target.value) || 0 })} />
                 </div>
                 <div>
-                  <Label className="text-xs">Liner $/sqft</Label>
+                  <Label className="text-xs">{t('settings.markups.linerPerSqft')}</Label>
                   <Input className="input-blue mt-1" type="number" step="0.01" value={settings.linerPerSqft} onChange={e => updateSettings({ linerPerSqft: parseFloat(e.target.value) || 0 })} />
                 </div>
                 <div>
-                  <Label className="text-xs">Freight Base ($/km)</Label>
+                  <Label className="text-xs">{t('settings.markups.freightBaseRate')}</Label>
                   <Input className="input-blue mt-1" type="number" value={settings.freightBaseRate} onChange={e => updateSettings({ freightBaseRate: parseFloat(e.target.value) || 0 })} />
                 </div>
                 <div>
-                  <Label className="text-xs">Freight Minimum ($)</Label>
+                  <Label className="text-xs">{t('settings.markups.freightMinimum')}</Label>
                   <Input className="input-blue mt-1" type="number" value={settings.freightMinimum} onChange={e => updateSettings({ freightMinimum: parseFloat(e.target.value) || 0 })} />
                 </div>
               </div>
 
               <div>
-                <Label className="text-xs font-semibold">Internal Markup Tiers</Label>
+                <Label className="text-xs font-semibold">{t('settings.markups.internalMarkupTiers')}</Label>
                 <div className="mt-2 space-y-1">
                   {settings.internalMarkupTiers.map((tier, i) => (
                     <div key={i} className="flex gap-2 items-center text-xs">
@@ -173,30 +183,36 @@ export default function Settings() {
         {isAdmin && (
           <TabsContent value="estimator" className="space-y-4">
             <div className="bg-card border rounded-lg p-5 space-y-4">
-              <h3 className="text-sm font-semibold text-card-foreground">Estimator Display</h3>
+              <h3 className="text-sm font-semibold text-card-foreground">{t('settings.estimator.title')}</h3>
               <div>
-                <Label className="text-xs">Internal Margin on Estimator (%)</Label>
+                <Label className="text-xs">{t('settings.estimator.internalMargin')}</Label>
                 <Input className="input-blue mt-1 w-32" type="number" value={settings.internalMarginOnEstimator} onChange={e => updateSettings({ internalMarginOnEstimator: parseFloat(e.target.value) || 0 })} />
               </div>
               <div className="flex items-center gap-3">
                 <Switch checked={settings.showMarkupOnEstimator} onCheckedChange={v => updateSettings({ showMarkupOnEstimator: v })} />
-                <Label className="text-xs">Show markup details on Quick Estimator</Label>
+                <Label className="text-xs">{t('settings.estimator.showMarkup')}</Label>
               </div>
-              <p className="text-xs text-muted-foreground">When OFF, the Quick Estimator shows final prices only with no mention of supplier increase %, internal margin %, or any markup labels.</p>
+              <p className="text-xs text-muted-foreground">{t('settings.estimator.showMarkupNote')}</p>
             </div>
+          </TabsContent>
+        )}
+
+        {isDealer && (
+          <TabsContent value="dealer-profile" className="space-y-4">
+            <DealerProfileSettings />
           </TabsContent>
         )}
 
         <TabsContent value="statuses" className="space-y-4">
           <div className="bg-card border rounded-lg p-5 space-y-4">
-            <h3 className="text-sm font-semibold text-card-foreground">Status Options (comma-separated)</h3>
+            <h3 className="text-sm font-semibold text-card-foreground">{t('settings.statuses.title')}</h3>
             {[
-              { key: 'dealStatuses', label: 'Deal Statuses' },
-              { key: 'clientPaymentStatuses', label: 'Client Payment Statuses' },
-              { key: 'factoryPaymentStatuses', label: 'Factory Payment Statuses' },
-              { key: 'productionStatuses', label: 'Production Statuses' },
-              { key: 'insulationStatuses', label: 'Insulation Statuses' },
-              { key: 'freightStatuses', label: 'Freight Statuses' },
+              { key: 'dealStatuses', label: t('settings.statuses.deal') },
+              { key: 'clientPaymentStatuses', label: t('settings.statuses.clientPayment') },
+              { key: 'factoryPaymentStatuses', label: t('settings.statuses.factoryPayment') },
+              { key: 'productionStatuses', label: t('settings.statuses.production') },
+              { key: 'insulationStatuses', label: t('settings.statuses.insulation') },
+              { key: 'freightStatuses', label: t('settings.statuses.freight') },
             ].map(({ key, label }) => (
               <div key={key}>
                 <Label className="text-xs">{label}</Label>
@@ -210,14 +226,14 @@ export default function Settings() {
 
         <TabsContent value="personnel" className="space-y-4">
           <div className="bg-card border rounded-lg p-5 space-y-4">
-            <h3 className="text-sm font-semibold text-card-foreground">Personnel Database</h3>
+            <h3 className="text-sm font-semibold text-card-foreground">{t('settings.personnel.title')}</h3>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b text-left text-muted-foreground">
-                    <th className="pb-2 font-medium text-xs">Name</th>
-                    <th className="pb-2 font-medium text-xs">Email</th>
-                    <th className="pb-2 font-medium text-xs">Role</th>
+                    <th className="pb-2 font-medium text-xs">{t('settings.personnel.headers.name')}</th>
+                    <th className="pb-2 font-medium text-xs">{t('settings.personnel.headers.email')}</th>
+                    <th className="pb-2 font-medium text-xs">{t('settings.personnel.headers.role')}</th>
                     {isAdmin && <th className="pb-2 font-medium text-xs w-10"></th>}
                   </tr>
                 </thead>
@@ -241,20 +257,20 @@ export default function Settings() {
             </div>
             {isAdmin && (
               <div className="flex flex-wrap gap-2 items-end">
-                <div><Label className="text-xs">Name</Label><Input className="input-blue mt-1 h-8" value={newPerson.name} onChange={e => setNewPerson(p => ({ ...p, name: e.target.value }))} /></div>
-                <div><Label className="text-xs">Email</Label><Input className="input-blue mt-1 h-8" value={newPerson.email} onChange={e => setNewPerson(p => ({ ...p, email: e.target.value }))} /></div>
+                <div><Label className="text-xs">{t('settings.personnel.headers.name')}</Label><Input className="input-blue mt-1 h-8" value={newPerson.name} onChange={e => setNewPerson(p => ({ ...p, name: e.target.value }))} /></div>
+                <div><Label className="text-xs">{t('settings.personnel.headers.email')}</Label><Input className="input-blue mt-1 h-8" value={newPerson.email} onChange={e => setNewPerson(p => ({ ...p, email: e.target.value }))} /></div>
                 <div>
-                  <Label className="text-xs">Roles</Label>
+                  <Label className="text-xs">{t('settings.personnel.headers.role')}</Label>
                   <div className="flex gap-2 mt-1">
                     {(['sales_rep', 'estimator', 'team_lead'] as const).map(r => (
                       <label key={r} className="flex items-center gap-1 text-xs cursor-pointer">
                         <input type="checkbox" checked={newPerson.roles.includes(r)} onChange={() => toggleNewRole(r)} className="rounded" />
-                        {r === 'sales_rep' ? 'Sales Rep' : r === 'estimator' ? 'Estimator' : 'Team Lead'}
+                        {r === 'sales_rep' ? t('auth.salesRep') : r === 'estimator' ? t('settings.tabs.estimator') : t('auth.teamLead') || 'Team Lead'}
                       </label>
                     ))}
                   </div>
                 </div>
-                <Button size="sm" onClick={addPerson}><Plus className="h-3 w-3 mr-1" />Add</Button>
+                <Button size="sm" onClick={addPerson}><Plus className="h-3 w-3 mr-1" />{t('settings.personnel.addPerson')}</Button>
               </div>
             )}
           </div>
@@ -278,19 +294,25 @@ export default function Settings() {
           </TabsContent>
         )}
 
+        {isAdmin && (
+          <TabsContent value="dealer-management" className="space-y-4">
+            <DealerManagement />
+          </TabsContent>
+        )}
+
         <TabsContent value="data" className="space-y-4">
           <DataImportSettings />
           <div className="bg-card border rounded-lg p-5 space-y-4">
-            <h3 className="text-sm font-semibold text-card-foreground">Backup & Restore</h3>
+            <h3 className="text-sm font-semibold text-card-foreground">{t('settings.data.backup')}</h3>
             <div className="flex gap-3">
               <Button variant="outline" onClick={exportAllData}>
-                <Download className="h-4 w-4 mr-2" />Export All Data
+                <Download className="h-4 w-4 mr-2" />{t('settings.data.export')}
               </Button>
               <Button variant="outline" onClick={importData}>
-                <Upload className="h-4 w-4 mr-2" />Import Backup
+                <Upload className="h-4 w-4 mr-2" />{t('settings.data.import')}
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground">Export downloads all deals, quotes, payments, costs, and settings as JSON. Import restores from a backup file.</p>
+            <p className="text-xs text-muted-foreground">{t('settings.data.note')}</p>
           </div>
         </TabsContent>
       </Tabs>

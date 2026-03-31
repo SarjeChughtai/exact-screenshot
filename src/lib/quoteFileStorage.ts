@@ -9,6 +9,8 @@ interface UploadQuoteFileParams {
   buildingLabel: string;
   aiOutput?: Record<string, unknown> | null;
   extractionSource?: 'ai' | 'regex' | 'unknown';
+  parseError?: string | null;
+  reviewStatus?: 'pending' | 'needs_review';
 }
 
 interface QuoteFileRecord {
@@ -97,6 +99,8 @@ export async function uploadQuoteFile({
         gdrive_status: 'pending',
         ai_output: aiOutput || null,
         extraction_source: extractionSource,
+        review_status: reviewStatus || (extractionSource === 'unknown' ? 'needs_review' : 'pending'),
+        parse_error: parseError || null,
       } as any)
       .select()
       .single();
@@ -172,6 +176,23 @@ export async function getQuoteFiles(jobId: string) {
 
   if (error) {
     console.error('Error fetching quote files:', error);
+    return [];
+  }
+  return data || [];
+}
+
+/**
+ * Retrieves the most recent uploaded files across all jobs.
+ */
+export async function getRecentQuoteFiles(limit = 20) {
+  const { data, error } = await supabase
+    .from('quote_files')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    console.error('Error fetching recent quote files:', error);
     return [];
   }
   return data || [];

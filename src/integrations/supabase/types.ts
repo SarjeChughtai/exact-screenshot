@@ -794,6 +794,7 @@ export type Database = {
           building_label: string
           client_id: string
           client_name: string
+          corrected_data: Json | null
           created_at: string
           extraction_source: string
           file_name: string
@@ -803,6 +804,10 @@ export type Database = {
           gdrive_status: string
           id: string
           job_id: string
+          parse_error: string | null
+          review_status: string
+          reviewed_at: string | null
+          reviewed_by: string | null
           storage_path: string
           uploaded_by: string | null
         }
@@ -811,6 +816,7 @@ export type Database = {
           building_label?: string
           client_id?: string
           client_name?: string
+          corrected_data?: Json | null
           created_at?: string
           extraction_source?: string
           file_name?: string
@@ -820,6 +826,10 @@ export type Database = {
           gdrive_status?: string
           id?: string
           job_id?: string
+          parse_error?: string | null
+          review_status?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
           storage_path?: string
           uploaded_by?: string | null
         }
@@ -828,6 +838,7 @@ export type Database = {
           building_label?: string
           client_id?: string
           client_name?: string
+          corrected_data?: Json | null
           created_at?: string
           extraction_source?: string
           file_name?: string
@@ -837,6 +848,10 @@ export type Database = {
           gdrive_status?: string
           id?: string
           job_id?: string
+          parse_error?: string | null
+          review_status?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
           storage_path?: string
           uploaded_by?: string | null
         }

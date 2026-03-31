@@ -3,6 +3,9 @@ export interface Client {
   clientId: string;
   clientName: string;
   jobIds: string[];
+  contactEmail?: string;
+  contactPhone?: string;
+  notes?: string;
   createdAt: string;
 }
 
@@ -49,6 +52,7 @@ export interface Quote {
   qst: number;
   grandTotal: number;
   status: QuoteStatus;
+  isDeleted?: boolean;
 }
 
 export type QuoteStatus = 'Draft' | 'Sent' | 'Follow Up' | 'Won' | 'Lost' | 'Expired';
@@ -110,15 +114,6 @@ export interface InternalCost {
 
 export type PaymentDirection = 'Client Payment IN' | 'Vendor Payment OUT' | 'Refund IN' | 'Refund OUT';
 export type PaymentType = 'Deposit' | 'Progress Payment' | 'Final Payment' | 'Freight' | 'Insulation' | 'Drawings' | 'Other';
-
-export interface Client {
-  id: string;
-  name: string;
-  contactEmail: string;
-  contactPhone: string;
-  notes: string;
-  createdAt: string;
-}
 
 export interface Vendor {
   id: string;
@@ -240,3 +235,55 @@ export interface ManufacturerBid {
   submittedAt: string;
 }
 
+// --- Import Review ---
+export type ImportReviewStatus = 'pending' | 'approved' | 'needs_review' | 'corrected' | 'rejected';
+
+export interface QuoteFileRecord {
+  id: string;
+  jobId: string;
+  clientName: string;
+  clientId: string;
+  fileName: string;
+  fileSize: number;
+  fileType: string;
+  storagePath: string;
+  buildingLabel: string;
+  extractionSource: string;
+  aiOutput: Record<string, unknown> | null;
+  reviewStatus: ImportReviewStatus;
+  parseError: string | null;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  correctedData: Record<string, unknown> | null;
+  gdriveStatus: string;
+  gdriveFileId: string | null;
+  uploadedBy: string | null;
+  createdAt: string;
+}
+
+export interface SteelCostEntry {
+  id: string;
+  quoteFileId: string | null;
+  jobId: string;
+  clientName: string;
+  clientId: string;
+  buildingLabel: string;
+  documentType: string;
+  fileName: string;
+  weightLbs: number;
+  costPerLb: number;
+  totalCost: number;
+  width: number | null;
+  length: number | null;
+  height: number | null;
+  roofPitch: number | null;
+  province: string | null;
+  city: string | null;
+  components: { name: string; weight?: number; cost: number }[] | null;
+  insulationTotal: number;
+  insulationGrade: string | null;
+  extractionSource: string;
+  aiRawOutput: Record<string, unknown> | null;
+  uploadedBy: string | null;
+  createdAt: string;
+}

@@ -16,6 +16,7 @@ import {
   SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem,
   SidebarHeader, SidebarFooter, useSidebar,
 } from '@/components/ui/sidebar';
+import { useTranslation } from 'react-i18next';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -35,72 +36,73 @@ interface MenuGroup {
 
 const menuGroups: MenuGroup[] = [
   {
-    label: 'Overview',
+    label: 'sidebar.overview',
     items: [
-      { path: '/', label: 'Dashboard', icon: BarChart3, module: 'dashboard' },
+      { path: '/', label: 'sidebar.dashboard', icon: BarChart3, module: 'dashboard' },
     ],
   },
   {
-    label: 'Quotes',
+    label: 'sidebar.quotes',
     items: [
-      { path: '/estimator', label: 'Quick Estimator', icon: Calculator, module: 'estimator' },
-      { path: '/quote-rfq', label: 'Quote RFQ', icon: Send, module: 'quote-log' },
-      { path: '/estimates-log', label: 'Estimates Log', icon: List, module: 'estimator' },
-      { path: '/quote-log', label: 'Quote Log', icon: ClipboardList, module: 'quote-log' },
-      { path: '/internal-quote-builder', label: 'Internal Quote Builder', icon: FileInput, module: 'internal-quote-builder' },
-      { path: '/draft-log', label: 'Draft Log', icon: FileText, module: 'draft-log' },
-      { path: '/quote-builder', label: 'Sales Quote Builder', icon: FileText, module: 'quote-builder' },
+      { path: '/estimator', label: 'sidebar.quickEstimator', icon: Calculator, module: 'estimator' },
+      { path: '/estimates-log', label: 'sidebar.estimatesLog', icon: List, module: 'estimator' },
+      { path: '/quote-rfq', label: 'sidebar.quoteRfq', icon: Send, module: 'quote-log' },
+      { path: '/quote-log', label: 'sidebar.quoteLog', icon: ClipboardList, module: 'quote-log' },
+      { path: '/internal-quote-builder', label: 'sidebar.internalQuoteBuilder', icon: FileInput, module: 'internal-quote-builder' },
+      { path: '/import-review', label: 'sidebar.importReview', icon: Eye, module: 'internal-quote-builder' },
+      { path: '/draft-log', label: 'sidebar.draftLog', icon: FileText, module: 'draft-log' },
+      { path: '/quote-builder', label: 'sidebar.salesQuoteBuilder', icon: FileText, module: 'quote-builder' },
     ],
   },
   {
-    label: 'Deals',
+    label: 'sidebar.deals',
     items: [
-      { path: '/deals', label: 'Master Deals', icon: Briefcase, module: 'deals' },
-      { path: '/production', label: 'Production Status', icon: Factory, module: 'production' },
-      { path: '/internal-costs', label: 'Internal Costs', icon: DollarSign, module: 'internal-costs' },
-      { path: '/commission', label: 'Commission & Profit', icon: Award, module: 'commission' },
-      { path: '/deal-pl', label: 'Deal Exposure', icon: BarChart3, module: 'deal-pl' },
+      { path: '/deals', label: 'sidebar.masterDeals', icon: Briefcase, module: 'deals' },
+      { path: '/production', label: 'sidebar.productionStatus', icon: Factory, module: 'production' },
+      { path: '/internal-costs', label: 'sidebar.internalCosts', icon: DollarSign, module: 'internal-costs' },
+      { path: '/commission', label: 'sidebar.commissionProfit', icon: Award, module: 'commission' },
+      { path: '/deal-pl', label: 'sidebar.dealExposure', icon: BarChart3, module: 'deal-pl' },
     ],
   },
   {
-    label: 'Financials',
+    label: 'sidebar.financials',
     items: [
-      { path: '/payment-ledger', label: 'Payment Ledger', icon: CreditCard, module: 'payment-ledger' },
-      { path: '/clients', label: 'Clients', icon: UserCircle, module: 'payment-ledger' },
-      { path: '/vendors', label: 'Vendors', icon: Package, module: 'payment-ledger' },
-      { path: '/client-payments', label: 'Client Payments', icon: Users, module: 'client-payments' },
-      { path: '/vendor-payments', label: 'Vendor Payments', icon: Receipt, module: 'vendor-payments' },
-      { path: '/financials', label: 'Projected Financials', icon: TrendingUp, module: 'financials' },
-      { path: '/monthly-hst', label: 'Monthly HST', icon: FileSpreadsheet, module: 'monthly-hst' },
-      { path: '/commission-statement', label: 'Commission Statement', icon: FileSpreadsheet, module: 'commission-statement' },
+      { path: '/payment-ledger', label: 'sidebar.paymentLedger', icon: CreditCard, module: 'payment-ledger' },
+      { path: '/clients', label: 'sidebar.clients', icon: UserCircle, module: 'payment-ledger' },
+      { path: '/vendors', label: 'sidebar.vendors', icon: Package, module: 'payment-ledger' },
+      { path: '/client-payments', label: 'sidebar.clientPayments', icon: Users, module: 'client-payments' },
+      { path: '/vendor-payments', label: 'sidebar.vendorPayments', icon: Receipt, module: 'vendor-payments' },
+      { path: '/financials', label: 'sidebar.projectedFinancials', icon: TrendingUp, module: 'financials' },
+      { path: '/monthly-hst', label: 'sidebar.monthlyHst', icon: FileSpreadsheet, module: 'monthly-hst' },
+      { path: '/commission-statement', label: 'sidebar.commissionStatement', icon: FileSpreadsheet, module: 'commission-statement' },
     ],
   },
   {
-    label: 'Freight',
+    label: 'sidebar.freight',
     items: [
-      { path: '/rfq', label: 'RFQ Board', icon: Send, module: 'rfq' },
-      { path: '/freight', label: 'Freight Board', icon: Truck, module: 'freight' },
+      { path: '/rfq', label: 'sidebar.rfqBoard', icon: Send, module: 'rfq' },
+      { path: '/freight', label: 'sidebar.freightBoard', icon: Truck, module: 'freight' },
     ],
   },
   {
-    label: 'Dealer',
+    label: 'sidebar.dealer',
     items: [
-      { path: '/dealer-rfq', label: 'Dealer RFQ', icon: Store, module: 'dealer-rfq' },
-      { path: '/dealer-log', label: 'My Requests', icon: ClipboardList, module: 'dealer-log' },
+      { path: '/dealer-log', label: 'sidebar.myRequests', icon: ClipboardList, module: 'dealer-log' },
+      { path: '/dealer-rfq', label: 'sidebar.dealerRfq', icon: Store, module: 'dealer-rfq' },
     ],
   },
   {
-    label: 'Vendor Portal',
+    label: 'sidebar.vendorPortal',
     items: [
-      { path: '/vendor-board', label: 'Quote Board', icon: Factory, module: 'vendor-board' },
+      { path: '/vendor-board', label: 'sidebar.quoteBoard', icon: Factory, module: 'vendor-board' },
     ],
   },
   {
-    label: 'System',
+    label: 'sidebar.system',
     items: [
-      { path: '/settings', label: 'Settings', icon: SettingsIcon, module: 'settings' },
-      { path: '/audit-log', label: 'Audit Log', icon: ClipboardList, module: 'settings' },
-      { path: '/master-data', label: 'Master Data', icon: Database, module: 'master-data' },
+      { path: '/settings', label: 'sidebar.settings', icon: SettingsIcon, module: 'settings' },
+      { path: '/audit-log', label: 'sidebar.auditLog', icon: ClipboardList, module: 'settings' },
+      { path: '/master-data', label: 'sidebar.masterData', icon: Database, module: 'master-data' },
     ],
   },
 ];
@@ -112,6 +114,7 @@ export function AppSidebar() {
   const location = useLocation();
   const { canAccess, viewAsRole, setViewAsRole, isImpersonating, actualRoles } = useRoles();
   const { user, userRoles, signOut } = useAuth();
+  const { t } = useTranslation();
   const canImpersonate = actualRoles.includes('admin') || actualRoles.includes('owner');
 
   const filteredGroups = menuGroups
@@ -129,7 +132,7 @@ export function AppSidebar() {
           {!collapsed && (
             <div className="min-w-0">
               <h1 className="text-xs font-bold tracking-wide text-sidebar-primary-foreground">CANADA STEEL</h1>
-              <p className="text-[9px] tracking-widest uppercase text-sidebar-muted">Buildings Platform</p>
+              <p className="text-[9px] tracking-widest uppercase text-sidebar-muted">{t('sidebar.buildingsPlatform')}</p>
             </div>
           )}
         </div>
@@ -137,11 +140,11 @@ export function AppSidebar() {
 
       <SidebarContent>
         {filteredGroups.map(group => (
-          <Collapsible key={group.label} defaultOpen={isGroupActive(group) || group.label === 'Overview'}>
+          <Collapsible key={group.label} defaultOpen={isGroupActive(group) || group.label === 'sidebar.overview'}>
             <SidebarGroup>
               <CollapsibleTrigger className="w-full">
                 <SidebarGroupLabel className="flex items-center justify-between cursor-pointer hover:text-sidebar-foreground transition-colors">
-                  {!collapsed && <span>{group.label}</span>}
+                  {!collapsed && <span>{t(group.label)}</span>}
                   {!collapsed && <ChevronDown className="h-3 w-3 transition-transform duration-200" />}
                 </SidebarGroupLabel>
               </CollapsibleTrigger>
@@ -153,7 +156,7 @@ export function AppSidebar() {
                         <SidebarMenuButton asChild>
                           <NavLink to={item.path} end={item.path === '/'} className="hover:bg-sidebar-accent/50" activeClassName="bg-sidebar-accent text-sidebar-primary-foreground font-medium">
                             <item.icon className="h-4 w-4 shrink-0" />
-                            {!collapsed && <span className="truncate">{item.label}</span>}
+                            {!collapsed && <span className="truncate">{t(item.label)}</span>}
                           </NavLink>
                         </SidebarMenuButton>
                       </SidebarMenuItem>
@@ -173,7 +176,7 @@ export function AppSidebar() {
               <div className="space-y-1">
                 <div className="flex items-center gap-1.5 text-[9px] font-medium text-sidebar-foreground/50 uppercase tracking-wider">
                   <Eye className="h-3 w-3" />
-                  View As
+                  {t('sidebar.viewAs')}
                 </div>
                 <Select
                   value={viewAsRole || '_none'}
@@ -217,7 +220,7 @@ export function AppSidebar() {
               className="w-full justify-start text-xs text-sidebar-foreground/60 hover:text-sidebar-foreground"
               onClick={() => signOut()}
             >
-              <LogOut className="h-3 w-3 mr-1.5" />Sign Out
+              <LogOut className="h-3 w-3 mr-1.5" />{t('sidebar.signOut')}
             </Button>
           </div>
         ) : (

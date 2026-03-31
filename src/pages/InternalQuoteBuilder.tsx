@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -15,9 +15,13 @@ import { toast } from 'sonner';
 import { Upload, FileText, CheckCircle2, AlertTriangle, Download, Mail, ChevronDown, X, Sparkles, Loader2, MapPin, Lightbulb, Trash2, Plus } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { uploadQuoteFile, saveSteelCostEntry } from '@/lib/quoteFileStorage';
+import { validateAIOutput } from '@/lib/aiOutputValidator';
 import { PersonnelSelect } from '@/components/PersonnelSelect';
 import { ClientSelect } from '@/components/ClientSelect';
 import { JobIdSelect } from '@/components/JobIdSelect';
+import { DocumentGallery } from '@/components/DocumentGallery';
+import { getQuoteFileUrl } from '@/lib/quoteFileStorage';
+import * as pdfjsLib from 'pdfjs-dist';
 
 interface CostFileData {
   steelWeightLbs: number;
@@ -66,7 +70,7 @@ export default function InternalQuoteBuilder() {
   const { addQuote, deals, quotes } = useAppContext();
   const { settings, getSalesReps } = useSettings();
 
-  const [form, setForm] = useState({
+  const getInitialForm = () => ({
     jobId: '', jobName: '', clientName: '', clientId: '',
     salesRep: '', estimator: '', province: 'ON',
     city: '', address: '', postalCode: '',
@@ -80,14 +84,61 @@ export default function InternalQuoteBuilder() {
     notes: '',
   });
 
-  const [supplierMarkupPct, setSupplierMarkupPct] = useState(String(settings.supplierIncreasePct));
+  const getInitialBuilding = (label = 'Building 1'): BuildingTab => ({
+    label,
+    costData: { steelWeightLbs: 0, supplierCostPerLb: 0, totalSupplierCost: 0, accessories: [] },
+    files: [],
+    width: '',
+    length: '',
+    height: '14',
+    pitch: '1',
+  });
+
+  const [form, setForm] = useState(() => {
+    const saved = localStorage.getItem('csb_internal_builder_active_state');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed.form) return parsed.form;
+      } catch (e) { console.error(e); }
+    }
+    return getInitialForm();
+  });
+
+  const [supplierMarkupPct, setSupplierMarkupPct] = useState(() => {
+    const saved = localStorage.getItem('csb_internal_builder_active_state');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed.supplierMarkupPct) return parsed.supplierMarkupPct;
+      } catch (e) { console.error(e); }
+    }
+    return String(settings.supplierIncreasePct);
+  });
+
   const [internalMarkupPct] = useState('0');
   const [showInternalMarkup, setShowInternalMarkup] = useState(true);
   const [bundleSupplierIntoSteel, setBundleSupplierIntoSteel] = useState(true);
-  const [buildings, setBuildings] = useState<BuildingTab[]>([
-    { label: 'Building 1', costData: { steelWeightLbs: 0, supplierCostPerLb: 0, totalSupplierCost: 0, accessories: [] }, files: [], width: '', length: '', height: '14', pitch: '1' },
-  ]);
-  const [activeBuildingIdx, setActiveBuildingIdx] = useState(0);
+  const [buildings, setBuildings] = useState<BuildingTab[]>(() => {
+    const saved = localStorage.getItem('csb_internal_builder_active_state');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed.buildings) return parsed.buildings;
+      } catch (e) { console.error(e); }
+    }
+    return [getInitialBuilding()];
+  });
+  const [activeBuildingIdx, setActiveBuildingIdx] = useState(() => {
+    const saved = localStorage.getItem('csb_internal_builder_active_state');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (typeof parsed.activeBuildingIdx === 'number') return parsed.activeBuildingIdx;
+      } catch (e) { console.error(e); }
+    }
+    return 0;
+  });
   const [quote, setQuote] = useState<Quote | null>(null);
   const [tieredMarkupInfo, setTieredMarkupInfo] = useState<{ rate: number; amount: number } | null>(null);
   const [dragActive, setDragActive] = useState(false);
@@ -95,9 +146,69 @@ export default function InternalQuoteBuilder() {
   const [aiProcessing, setAiProcessing] = useState(false);
   const [costSavingTips, setCostSavingTips] = useState<string[]>([]);
   const [locationSource, setLocationSource] = useState('');
-  const [singleSlope, setSingleSlope] = useState(false);
-  const [leftEaveHeight, setLeftEaveHeight] = useState('14');
-  const [rightEaveHeight, setRightEaveHeight] = useState('14');
+  const [singleSlope, setSingleSlope] = useState(() => {
+    const saved = localStorage.getItem('csb_internal_builder_active_state');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        return parsed.singleSlope || false;
+      } catch (e) { console.error(e); }
+    }
+    return false;
+  });
+  const [leftEaveHeight, setLeftEaveHeight] = useState(() => {
+    const saved = localStorage.getItem('csb_internal_builder_active_state');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        return parsed.leftEaveHeight || '14';
+      } catch (e) { console.error(e); }
+    }
+    return '14';
+  });
+  const [rightEaveHeight, setRightEaveHeight] = useState(() => {
+    const saved = localStorage.getItem('csb_internal_builder_active_state');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        return parsed.rightEaveHeight || '14';
+      } catch (e) { console.error(e); }
+    }
+    return '14';
+  });
+  const [isInitialized, setIsInitialized] = useState(false);
+
+  // Set initialized after first render (safeguard against accidental overwrites)
+  useEffect(() => {
+    setIsInitialized(true);
+  }, []);
+
+  // Load notification only (once per browser session)
+  useEffect(() => {
+    const saved = localStorage.getItem('csb_internal_builder_active_state');
+    const hasNotified = sessionStorage.getItem('csb_internal_builder_restored_notified');
+    
+    if (saved && !hasNotified) {
+      toast.info('Restored your previous session');
+      sessionStorage.setItem('csb_internal_builder_restored_notified', 'true');
+    }
+  }, []);
+
+  // Save to localStorage on changes
+  useEffect(() => {
+    if (!isInitialized) return;
+    const stateToSave = {
+      form,
+      buildings,
+      supplierMarkupPct,
+      singleSlope,
+      leftEaveHeight,
+      rightEaveHeight,
+      activeBuildingIdx,
+      updatedAt: new Date().toISOString()
+    };
+    localStorage.setItem('csb_internal_builder_active_state', JSON.stringify(stateToSave));
+  }, [form, buildings, supplierMarkupPct, singleSlope, leftEaveHeight, rightEaveHeight, activeBuildingIdx, isInitialized]);
 
   const handleEaveHeightChange = (side: 'left' | 'right', value: string) => {
     const left = side === 'left' ? value : leftEaveHeight;
@@ -159,6 +270,57 @@ export default function InternalQuoteBuilder() {
 
   const handleClientSelect = (client: { clientId: string; clientName: string }) => {
     setForm(f => ({ ...f, clientId: client.clientId, clientName: client.clientName }));
+  };
+
+  const handleSelectHistoricalFile = async (fileRecord: any) => {
+    setAiProcessing(true);
+    try {
+      // 1. Add to the building's file list so the user can see it and remove it
+      const newFile: ParsedFile = {
+        name: fileRecord.file_name,
+        type: fileRecord.file_type || 'unknown',
+        status: 'success',
+        buildingIndex: activeBuildingIdx,
+        data: fileRecord.ai_output
+      };
+      
+      setBuildings(prev => prev.map((b, i) => 
+        i === activeBuildingIdx ? { ...b, files: [...b.files, newFile] } : b
+      ));
+
+      // 2. Try to use existing AI output if available
+      if (fileRecord.ai_output) {
+        const aiResult = fileRecord.ai_output;
+        if (fileRecord.file_type === 'insulation') {
+          set('insulationCost', String(aiResult.insulation_total || 0));
+          if (aiResult.insulation_grade) set('insulationGrade', aiResult.insulation_grade);
+          toast.success(`Pulled insulation data from ${fileRecord.file_name}`);
+        } else {
+          applyAIData(aiResult);
+          const weight = aiResult.weight || 0;
+          const costPerLb = aiResult.cost_per_lb || (aiResult.total_cost && weight ? aiResult.total_cost / weight : 0);
+          const totalCost = aiResult.total_cost || weight * costPerLb;
+          const components = (aiResult.components || []).map((c: any) => ({ name: c.name, weight: c.weight || 0, cost: c.cost || 0 }));
+          setCostData({ steelWeightLbs: weight, supplierCostPerLb: costPerLb, totalSupplierCost: totalCost, accessories: components });
+          toast.success(`Pulled MBS data from ${fileRecord.file_name}`);
+        }
+      } else {
+        // 3. No stored data, must fetch and re-parse
+        toast.info('Re-parsing historical document...');
+        const url = await getQuoteFileUrl(fileRecord.storage_path);
+        if (!url) throw new Error('Could not get file URL');
+        
+        const response = await fetch(url);
+        const blob = await response.blob();
+        const file = new File([blob], fileRecord.file_name, { type: 'application/pdf' });
+        await handleFileUpload([file]);
+      }
+    } catch (e) {
+      console.error('Failed to pull historical data', e);
+      toast.error('Failed to pull data from this document');
+    } finally {
+      setAiProcessing(false);
+    }
   };
 
   const extractTextFromPdf = async (file: File): Promise<string[]> => {
@@ -253,17 +415,17 @@ export default function InternalQuoteBuilder() {
     return { weight, costPerLb, totalCost, pWidth, pLength, pHeight, pPitch, clientName, clientId, jobId, accessories, pLeftHeight, pRightHeight, pIsSingleSlope };
   };
 
-  const extractWithAI = async (text: string, filename: string) => {
+  const extractWithAI = async (text: string, filename: string): Promise<{ data: any; rawResponse: any; error: string | null }> => {
     try {
       const { data, error } = await supabase.functions.invoke('extract-quote-data', {
         body: { text, filename },
       });
-      if (error) throw error;
-      if (data?.success && data?.data) return data.data;
-      return null;
-    } catch (e) {
+      if (error) return { data: null, rawResponse: null, error: error.message || 'Edge function error' };
+      if (data?.success && data?.data) return { data: data.data, rawResponse: data, error: null };
+      return { data: null, rawResponse: data, error: 'AI returned no extractable data' };
+    } catch (e: any) {
       console.error('AI extraction error:', e);
-      return null;
+      return { data: null, rawResponse: null, error: e.message || 'Unknown AI error' };
     }
   };
 
@@ -322,15 +484,32 @@ export default function InternalQuoteBuilder() {
           continue;
         }
 
-        const aiResult = await extractWithAI(fullText, file.name);
+        const aiResponse = await extractWithAI(fullText, file.name);
+        const aiResult = aiResponse.data;
+        const resolvedJobId = aiResult?.job_id || form.jobId || '';
+        const resolvedClientName = aiResult?.client_name || form.clientName || '';
+        const resolvedClientId = aiResult?.client_id || form.clientId || '';
 
-        // Track extraction source and resolved document type for upload
+        // Track extraction source, resolved document type, and review state for upload
         let extractionSource: 'ai' | 'regex' | 'unknown' = 'unknown';
         let resolvedDocType: 'mbs' | 'insulation' | 'unknown' = 'unknown';
+        let parseError: string | null = aiResponse.error;
+        let reviewStatus: 'pending' | 'needs_review' = aiResponse.error ? 'needs_review' : 'pending';
 
         if (aiResult) {
           extractionSource = 'ai';
           const docType = aiResult.document_type || 'unknown';
+
+          // Validate AI output before applying
+          const detectedType = docType === 'mbs' ? 'mbs' : docType === 'insulation' ? 'insulation' : 'unknown' as const;
+          const validation = validateAIOutput(aiResult, detectedType);
+          if (!validation.isValid) {
+            reviewStatus = 'needs_review';
+            parseError = `AI validation failed: ${validation.errors.join('; ')}`;
+          }
+          if (validation.warnings.length > 0) {
+            validation.warnings.forEach(w => toast.warning(w, { duration: 5000 }));
+          }
 
           if (docType === 'insulation') {
             resolvedDocType = 'insulation';
@@ -338,7 +517,7 @@ export default function InternalQuoteBuilder() {
             set('insulationCost', String(total));
             if (aiResult.insulation_grade) set('insulationGrade', aiResult.insulation_grade);
             newParsedFiles.push({ name: file.name, type: 'insulation', status: 'success', data: aiResult, buildingIndex: activeBuildingIdx });
-            toast.success(`🤖 AI extracted insulation: ${formatCurrency(total)}`);
+            toast.success(`AI extracted insulation: ${formatCurrency(total)}`);
           } else if (docType === 'mbs') {
             resolvedDocType = 'mbs';
             applyAIData(aiResult);
@@ -350,7 +529,7 @@ export default function InternalQuoteBuilder() {
             }));
             setCostData({ steelWeightLbs: weight, supplierCostPerLb: costPerLb, totalSupplierCost: totalCost, accessories: components });
             newParsedFiles.push({ name: file.name, type: 'mbs', status: 'success', data: aiResult, buildingIndex: activeBuildingIdx });
-            toast.success(`🤖 AI extracted MBS: ${formatNumber(weight)} lbs @ $${costPerLb.toFixed(2)}/lb`);
+            toast.success(`AI extracted MBS: ${formatNumber(weight)} lbs @ $${costPerLb.toFixed(2)}/lb`);
           } else {
             applyAIData(aiResult);
             if (aiResult.weight && aiResult.total_cost) {
@@ -362,13 +541,15 @@ export default function InternalQuoteBuilder() {
                 accessories: (aiResult.components || []).map((c: any) => ({ name: c.name, weight: c.weight || 0, cost: c.cost || 0 })),
               });
               newParsedFiles.push({ name: file.name, type: 'mbs', status: 'success', data: aiResult, buildingIndex: activeBuildingIdx });
-              toast.success(`🤖 AI extracted data from ${file.name}`);
+              toast.success(`AI extracted data from ${file.name}`);
             } else if (aiResult.insulation_total) {
               resolvedDocType = 'insulation';
               set('insulationCost', String(aiResult.insulation_total));
               newParsedFiles.push({ name: file.name, type: 'insulation', status: 'success', data: aiResult, buildingIndex: activeBuildingIdx });
-              toast.success(`🤖 AI extracted insulation: ${formatCurrency(aiResult.insulation_total)}`);
+              toast.success(`AI extracted insulation: ${formatCurrency(aiResult.insulation_total)}`);
             } else {
+              reviewStatus = 'needs_review';
+              if (!parseError) parseError = 'AI could not extract useful data';
               newParsedFiles.push({ name: file.name, type: 'unknown', status: 'failed', buildingIndex: activeBuildingIdx });
               toast.error(`AI could not extract useful data from ${file.name}`);
             }
@@ -378,6 +559,7 @@ export default function InternalQuoteBuilder() {
             toast.info(`AI note: ${aiResult.notes}`, { duration: 5000 });
           }
         } else {
+          // AI failed — try regex fallback
           const pages = fullText.split('\n');
           if (detectInsulationPdf(fullText)) {
             extractionSource = 'regex';
@@ -408,6 +590,8 @@ export default function InternalQuoteBuilder() {
               newParsedFiles.push({ name: file.name, type: 'mbs', status: 'success', data: parsed, buildingIndex: activeBuildingIdx });
               toast.success(`MBS (regex): ${formatNumber(parsed.weight)} lbs`);
             } else {
+              reviewStatus = 'needs_review';
+              if (!parseError) parseError = 'Neither AI nor regex could extract data';
               newParsedFiles.push({ name: file.name, type: 'unknown', status: 'failed', buildingIndex: activeBuildingIdx });
               toast.error(`Could not parse: ${file.name}`);
             }
@@ -415,28 +599,31 @@ export default function InternalQuoteBuilder() {
         }
 
         // Always upload dropped file to Supabase Storage (regardless of parse success)
+        // Store AI raw response even on failure so it can be reviewed later
         const lastParsed = newParsedFiles[newParsedFiles.length - 1];
         uploadQuoteFile({
           file,
           fileType: lastParsed?.type || 'unknown',
-          jobId: form.jobId || '',
-          clientName: form.clientName || '',
-          clientId: form.clientId || '',
+          jobId: resolvedJobId,
+          clientName: resolvedClientName,
+          clientId: resolvedClientId,
           buildingLabel: buildings[activeBuildingIdx]?.label || 'Building 1',
-          aiOutput: aiResult || null,
+          aiOutput: aiResponse.rawResponse || aiResult || null,
           extractionSource,
+          parseError,
+          reviewStatus,
         }).then(result => {
           if (result) {
-            toast.success(`📁 ${file.name} stored & backup queued`);
+            toast.success(`${file.name} stored & backup queued`);
 
-            // Save extracted data to the steel cost database
+            // Save extracted data to the steel cost database (only on successful parse)
             if (lastParsed?.status === 'success') {
               const extractedData = lastParsed.data || {};
               saveSteelCostEntry({
                 quoteFileId: result.id || undefined,
-                jobId: form.jobId || '',
-                clientName: form.clientName || '',
-                clientId: form.clientId || '',
+                jobId: resolvedJobId,
+                clientName: resolvedClientName,
+                clientId: resolvedClientId,
                 buildingLabel: buildings[activeBuildingIdx]?.label || 'Building 1',
                 documentType: resolvedDocType,
                 fileName: file.name,
@@ -453,7 +640,7 @@ export default function InternalQuoteBuilder() {
                 insulationTotal: extractedData.insulation_total || extractedData.total || 0,
                 insulationGrade: extractedData.insulation_grade || undefined,
                 extractionSource: extractionSource === 'unknown' ? 'ai' : extractionSource,
-                aiRawOutput: aiResult || null,
+                aiRawOutput: aiResponse.rawResponse || aiResult || null,
               }).then(entryId => {
                 if (entryId) {
                   console.log('Steel cost entry saved:', entryId);
@@ -478,11 +665,31 @@ export default function InternalQuoteBuilder() {
         toast.error(`Error parsing ${file.name}`);
       }
     }
-    setBuildings(prev => prev.map((b, i) => i === activeBuildingIdx ? { ...b, files: [...b.files, ...newParsedFiles] } : b));
+    const updatedBuildings = buildings.map((b, i) => i === activeBuildingIdx ? { ...b, files: [...b.files, ...newParsedFiles] } : b);
+    setBuildings(updatedBuildings);
     setAiProcessing(false);
+
+    // Auto-save draft after file upload
+    if (newParsedFiles.some(f => f.status === 'success')) {
+      saveDraft(updatedBuildings);
+      toast.success('Draft auto-saved to Draft Log');
+    }
   };
 
   const removeFile = (fileIndex: number) => {
+    const fileToRemove = parsedFiles[fileIndex];
+    if (fileToRemove) {
+      // If it's MBS, ask to clear cost data too
+      if (fileToRemove.type === 'mbs') {
+        if (confirm(`Do you want to clear the steel cost data associated with ${fileToRemove.name}?`)) {
+          setCostData({ steelWeightLbs: 0, supplierCostPerLb: 0, totalSupplierCost: 0, accessories: [] });
+        }
+      } else if (fileToRemove.type === 'insulation') {
+        if (confirm(`Do you want to clear the insulation cost data associated with ${fileToRemove.name}?`)) {
+          set('insulationCost', '0');
+        }
+      }
+    }
     setBuildings(prev => prev.map((b, i) => i === activeBuildingIdx ? { ...b, files: b.files.filter((_, fi) => fi !== fileIndex) } : b));
     toast.info('File removed');
   };
@@ -503,6 +710,24 @@ export default function InternalQuoteBuilder() {
     setActiveBuildingIdx(Math.max(0, activeBuildingIdx - 1));
   };
 
+  const resetBuilder = (message = 'Start a new quote? This clears the current screen and all uploaded file sets for this quote.') => {
+    if (!confirm(message)) return;
+    setForm(getInitialForm());
+    setSupplierMarkupPct(String(settings.supplierIncreasePct));
+    setBuildings([getInitialBuilding()]);
+    setActiveBuildingIdx(0);
+    setQuote(null);
+    setTieredMarkupInfo(null);
+    setComplianceNotes([]);
+    setCostSavingTips([]);
+    setLocationSource('');
+    setSingleSlope(false);
+    setLeftEaveHeight('14');
+    setRightEaveHeight('14');
+    localStorage.removeItem('csb_internal_builder_active_state');
+    toast.success('Started a new quote');
+  };
+
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setDragActive(false);
@@ -515,6 +740,32 @@ export default function InternalQuoteBuilder() {
     const h = parseFloat(form.height) || 0;
     if (w && l) return `${w}'x${l}'x${h}'`;
     return '';
+  };
+
+  const saveDraft = (currentBuildings = buildings, currentForm = form) => {
+    try {
+      const draft = {
+        id: crypto.randomUUID(),
+        savedAt: new Date().toISOString(),
+        jobId: currentForm.jobId,
+        jobName: currentForm.jobName || getDefaultJobName(),
+        clientName: currentForm.clientName,
+        salesRep: currentForm.salesRep,
+        buildings: currentBuildings,
+        form: currentForm,
+        supplierMarkupPct: supplierMarkupPct,
+        singleSlope: singleSlope,
+        leftEaveHeight: leftEaveHeight,
+        rightEaveHeight: rightEaveHeight,
+        grandTotal: quote?.grandTotal || 0,
+        province: currentForm.province,
+      };
+      const existing = JSON.parse(localStorage.getItem('csb_draft_quotes') || '[]');
+      existing.push(draft);
+      localStorage.setItem('csb_draft_quotes', JSON.stringify(existing.slice(-100)));
+    } catch (e) {
+      console.error('Failed to save to draft log', e);
+    }
   };
 
   const generate = () => {
@@ -593,23 +844,7 @@ export default function InternalQuoteBuilder() {
     setQuote(q);
 
     // Auto-save to draft log
-    try {
-      const draft = {
-        id: crypto.randomUUID(),
-        savedAt: new Date().toISOString(),
-        jobId: form.jobId,
-        jobName: form.jobName,
-        clientName: form.clientName,
-        salesRep: form.salesRep,
-        buildings: buildings.map(b => ({ label: b.label, width: b.width || form.width, length: b.length || form.length, height: b.height || form.height, pitch: b.pitch || form.pitch })),
-        totalSupplierCost: costData.totalSupplierCost,
-        grandTotal: totalPlusCont,
-        province: form.province,
-      };
-      const existing = JSON.parse(localStorage.getItem('csb_draft_quotes') || '[]');
-      existing.push(draft);
-      localStorage.setItem('csb_draft_quotes', JSON.stringify(existing.slice(-100)));
-    } catch {}
+    saveDraft(buildings, form);
 
     // Generate cost-saving tips
     setCostSavingTips(generateCostSavingTips(form, costData, q));
@@ -620,6 +855,13 @@ export default function InternalQuoteBuilder() {
     addQuote(quote);
 
     toast.success('Quote saved to Quote Log — convert to Deal from the Quote Log when ready');
+  };
+
+  const saveToLogAndNew = () => {
+    if (!quote) return;
+    addQuote(quote);
+    toast.success('Quote saved to Quote Log');
+    resetBuilder('Save is complete. Start a new quote and clear this screen?');
   };
 
   const downloadPdf = () => {
@@ -728,6 +970,13 @@ export default function InternalQuoteBuilder() {
                 </label>
               </>
             )}
+          </div>
+
+          <div className="bg-card border rounded-lg p-5">
+            <DocumentGallery 
+              jobId={form.jobId} 
+              onSelectFile={handleSelectHistoricalFile} 
+            />
           </div>
 
           {/* Parsed files list with remove option */}
@@ -929,6 +1178,9 @@ export default function InternalQuoteBuilder() {
           <Button onClick={generate} className="w-full" size="lg">
             <FileText className="h-4 w-4 mr-2" />Generate Internal Quote
           </Button>
+          <Button onClick={() => resetBuilder()} className="w-full" size="lg" variant="destructive">
+            <Trash2 className="h-4 w-4 mr-2" />New Quote (Clear Screen)
+          </Button>
         </div>
 
         {/* Quote Output */}
@@ -941,6 +1193,7 @@ export default function InternalQuoteBuilder() {
                   <Button onClick={downloadPdf} size="sm" variant="outline"><Download className="h-3 w-3 mr-1" />PDF</Button>
                   <Button onClick={emailQuote} size="sm" variant="outline"><Mail className="h-3 w-3 mr-1" />Email</Button>
                   <Button onClick={saveToLog} size="sm" variant="outline">Save to Log</Button>
+                  <Button onClick={saveToLogAndNew} size="sm">Save & New</Button>
                 </div>
               </div>
 
