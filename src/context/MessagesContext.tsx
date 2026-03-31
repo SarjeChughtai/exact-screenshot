@@ -542,9 +542,20 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
     if (userRoles.includes('accounting')) teamKeys.add('accounting');
     if (userRoles.includes('freight')) teamKeys.add('freight');
 
-    void Promise.all(Array.from(teamKeys).map(teamKey =>
-      (supabase.rpc as any)('ensure_team_conversation', { _team_key: teamKey }).catch(() => null),
-    )).then(() => refreshConversations());
+    const ensureTeamConversations = async () => {
+      await Promise.all(Array.from(teamKeys).map(async teamKey => {
+        try {
+          await (supabase.rpc as any)('ensure_team_conversation', { _team_key: teamKey });
+        } catch {
+          return null;
+        }
+        return null;
+      }));
+
+      await refreshConversations();
+    };
+
+    void ensureTeamConversations();
   }, [isMessagingEnabled, refreshConversations, user?.id, userRoles]);
 
   useEffect(() => {
