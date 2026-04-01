@@ -1,5 +1,4 @@
 import JSZip from 'jszip';
-import * as XLSX from 'xlsx-js-style';
 import { supabase } from '@/integrations/supabase/client';
 import {
   insulationCostDataFromRow,
@@ -24,6 +23,7 @@ import {
 import { buildDuplicateDocumentGroupKey } from '@/lib/importReview';
 import { resolveCanonicalJobId } from '@/lib/jobIds';
 import { normalizeStructureType } from '@/lib/internalQuoteNormalization';
+import { loadXlsxJsStyle } from '@/lib/documentDependencyLoaders';
 
 export interface CostDocumentImportContext {
   fileName: string;
@@ -397,11 +397,15 @@ export async function importSeedJsonObject(seedData: any, fileName = 'seed.json'
   return { storedDocuments: 1, steelRows: steelRows.length, insulationRows: insulationRows.length, skippedFiles: [] };
 }
 
-function rowsFromWorkbook(file: File, workbook: XLSX.WorkBook): Record<string, unknown>[] {
+function rowsFromWorkbook(
+  file: File,
+  workbook: { SheetNames: string[]; Sheets: Record<string, unknown> },
+  xlsx: typeof import('xlsx-js-style'),
+): Record<string, unknown>[] {
   const rows: Record<string, unknown>[] = [];
   for (const sheetName of workbook.SheetNames) {
     const sheet = workbook.Sheets[sheetName];
-    rows.push(...(XLSX.utils.sheet_to_json(sheet, { defval: '' }) as Record<string, unknown>[]));
+    rows.push(...(xlsx.utils.sheet_to_json(sheet as any, { defval: '' }) as Record<string, unknown>[]));
   }
   return rows;
 }
@@ -447,9 +451,10 @@ export async function importStructuredDataFile(file: File): Promise<ImportedCost
   }
 
   if (extension === 'csv' || extension === 'xlsx' || extension === 'xls') {
+    const XLSX = await loadXlsxJsStyle();
     const arrayBuffer = await file.arrayBuffer();
     const workbook = XLSX.read(arrayBuffer, { type: 'array' });
-    return importTabularRows(rowsFromWorkbook(file, workbook), file.name, extension === 'csv' ? 'seed_csv' : 'seed_xlsx');
+    return importTabularRows(rowsFromWorkbook(file, workbook, XLSX), file.name, extension === 'csv' ? 'seed_csv' : 'seed_xlsx');
   }
 
   if (extension === 'zip') {
