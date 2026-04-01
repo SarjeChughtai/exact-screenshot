@@ -1,4 +1,12 @@
-import type { InsulationCostDataRecord, QuoteFileRecord, SteelCostDataRecord, StoredDocument } from '@/types';
+import type {
+  InsulationCostDataRecord,
+  QuoteFileRecord,
+  SteelCostDataRecord,
+  StoredDocument,
+  StructureType,
+} from '@/types';
+import { normalizeStructureType, summarizeInternalQuoteComponents } from '@/lib/internalQuoteNormalization';
+import { resolveCanonicalJobId } from '@/lib/jobIds';
 
 export interface HistoricalQuoteFileSnapshot {
   documentType: 'mbs' | 'insulation' | 'unknown';
@@ -13,11 +21,15 @@ export interface HistoricalQuoteFileSnapshot {
   province?: string | null;
   city?: string | null;
   postalCode?: string | null;
+  structureType?: StructureType | null;
   insulationGrade?: string | null;
   insulationTotal?: number | null;
   weightLbs?: number | null;
   costPerLb?: number | null;
   totalSupplierCost?: number | null;
+  guttersDownspoutsTotal?: number | null;
+  roofLinerPanelsTotal?: number | null;
+  wallLinerPanelsTotal?: number | null;
   components?: Array<{ name: string; weight?: number; cost: number }>;
 }
 
@@ -65,8 +77,9 @@ function firstNonNull<T>(...values: Array<T | null | undefined>) {
 function buildStructuredFallbackSnapshot(input: {
   file: QuoteFileRecord;
   storedDocument?: StoredDocument | null;
+  preferredJobId?: string | null;
 }) {
-  const { file, storedDocument } = input;
+  const { file, storedDocument, preferredJobId } = input;
   const fallback = (
     file.correctedData ||
     storedDocument?.parsedData ||
@@ -78,6 +91,8 @@ function buildStructuredFallbackSnapshot(input: {
     pickString(fallback, ['document_type', 'documentType', 'file_type', 'fileType']) ||
     file.fileType
   )?.toLowerCase();
+  const components = parseComponents(pickValue(fallback, ['components', 'component_rows', 'componentRows']));
+  const componentBreakdown = summarizeInternalQuoteComponents(components as Array<Record<string, unknown>>);
 
   return {
     documentType: resolvedDocumentType === 'insulation'
@@ -89,7 +104,13 @@ function buildStructuredFallbackSnapshot(input: {
       : file.fileType === 'mbs'
       ? 'mbs'
       : 'unknown',
-    jobId: pickString(fallback, ['job_id', 'jobId', 'project_id', 'projectId']) || file.jobId || null,
+    jobId: resolveCanonicalJobId(
+      preferredJobId,
+      pickString(fallback, ['job_id', 'jobId', 'project_id', 'projectId']),
+      storedDocument?.jobId,
+      storedDocument?.projectId,
+      file.jobId,
+    ),
     clientName: pickString(fallback, ['client_name', 'clientName']) || file.clientName || null,
     clientId: pickString(fallback, ['client_id', 'clientId']) || file.clientId || null,
     jobName: pickString(fallback, ['job_name', 'jobName', 'project_name', 'projectName']),
@@ -100,12 +121,27 @@ function buildStructuredFallbackSnapshot(input: {
     province: pickString(fallback, ['province']),
     city: pickString(fallback, ['city']),
     postalCode: pickString(fallback, ['postal_code', 'postalCode']),
+    structureType: normalizeStructureType(
+      pickString(fallback, ['structure_type', 'structureType']) || storedDocument?.structureType || 'steel_building',
+    ),
     insulationGrade: pickString(fallback, ['insulation_grade', 'insulationGrade', 'grade']),
     insulationTotal: pickNumber(fallback, ['insulation_total', 'insulationTotal', 'total_insulation_cost', 'totalCost']),
     weightLbs: pickNumber(fallback, ['weight', 'weight_lb', 'weightLbs', 'steel_weight_lbs', 'steelWeightLbs', 'total_weight_lb', 'totalWeightLb']),
     costPerLb: pickNumber(fallback, ['cost_per_lb', 'costPerLb', 'price_per_lb', 'pricePerLb', 'supplier_cost_per_lb', 'supplierCostPerLb']),
     totalSupplierCost: pickNumber(fallback, ['total_cost', 'totalCost', 'supplier_total_cost', 'supplierTotalCost']),
-    components: parseComponents(pickValue(fallback, ['components', 'component_rows', 'componentRows'])),
+    guttersDownspoutsTotal: firstNonNull(
+      pickNumber(fallback, ['gutters_downspouts_total', 'guttersDownspoutsTotal']),
+      componentBreakdown.guttersDownspoutsTotal,
+    ),
+    roofLinerPanelsTotal: firstNonNull(
+      pickNumber(fallback, ['roof_liner_panels_total', 'roofLinerPanelsTotal']),
+      componentBreakdown.roofLinerPanelsTotal,
+    ),
+    wallLinerPanelsTotal: firstNonNull(
+      pickNumber(fallback, ['wall_liner_panels_total', 'wallLinerPanelsTotal']),
+      componentBreakdown.wallLinerPanelsTotal,
+    ),
+    components,
   } satisfies HistoricalQuoteFileSnapshot;
 }
 
@@ -114,9 +150,10 @@ export function buildHistoricalQuoteFileSnapshot(input: {
   steelWarehouseEntry?: SteelCostDataRecord | null;
   insulationWarehouseEntry?: InsulationCostDataRecord | null;
   storedDocument?: StoredDocument | null;
+  preferredJobId?: string | null;
 }): HistoricalQuoteFileSnapshot {
-  const { file, steelWarehouseEntry, insulationWarehouseEntry, storedDocument } = input;
-  const fallbackSnapshot = buildStructuredFallbackSnapshot({ file, storedDocument });
+  const { file, steelWarehouseEntry, insulationWarehouseEntry, storedDocument, preferredJobId } = input;
+  const fallbackSnapshot = buildStructuredFallbackSnapshot({ file, storedDocument, preferredJobId });
 
   if (steelWarehouseEntry) {
     const warehouseRaw = (steelWarehouseEntry.rawExtraction || {}) as Record<string, unknown>;
@@ -125,10 +162,18 @@ export function buildHistoricalQuoteFileSnapshot(input: {
       weight: component.weight ? Number(component.weight) : undefined,
       cost: Number(component.cost || 0),
     }));
+    const resolvedComponents = warehouseComponents.length > 0 ? warehouseComponents : (fallbackSnapshot.components || []);
+    const componentBreakdown = summarizeInternalQuoteComponents(resolvedComponents as Array<Record<string, unknown>>);
 
     return {
       documentType: 'mbs',
-      jobId: firstNonNull(steelWarehouseEntry.jobId, steelWarehouseEntry.projectId, fallbackSnapshot.jobId, file.jobId),
+      jobId: resolveCanonicalJobId(
+        preferredJobId,
+        steelWarehouseEntry.jobId,
+        steelWarehouseEntry.projectId,
+        fallbackSnapshot.jobId,
+        file.jobId,
+      ),
       clientName: firstNonNull(fallbackSnapshot.clientName, file.clientName),
       clientId: firstNonNull(fallbackSnapshot.clientId, file.clientId),
       jobName: firstNonNull(
@@ -145,10 +190,28 @@ export function buildHistoricalQuoteFileSnapshot(input: {
         pickString(warehouseRaw, ['postal_code', 'postalCode']),
         fallbackSnapshot.postalCode,
       ),
+      structureType: normalizeStructureType(
+        steelWarehouseEntry.structureType
+        || pickString(warehouseRaw, ['structure_type', 'structureType'])
+        || fallbackSnapshot.structureType
+        || 'steel_building',
+      ),
       weightLbs: firstNonNull(steelWarehouseEntry.totalWeightLb, fallbackSnapshot.weightLbs),
       costPerLb: firstNonNull(steelWarehouseEntry.pricePerLb, fallbackSnapshot.costPerLb),
       totalSupplierCost: firstNonNull(steelWarehouseEntry.totalCost, fallbackSnapshot.totalSupplierCost),
-      components: warehouseComponents.length > 0 ? warehouseComponents : (fallbackSnapshot.components || []),
+      guttersDownspoutsTotal: firstNonNull(
+        componentBreakdown.guttersDownspoutsTotal,
+        fallbackSnapshot.guttersDownspoutsTotal,
+      ),
+      roofLinerPanelsTotal: firstNonNull(
+        componentBreakdown.roofLinerPanelsTotal,
+        fallbackSnapshot.roofLinerPanelsTotal,
+      ),
+      wallLinerPanelsTotal: firstNonNull(
+        componentBreakdown.wallLinerPanelsTotal,
+        fallbackSnapshot.wallLinerPanelsTotal,
+      ),
+      components: resolvedComponents,
     };
   }
 
@@ -157,7 +220,13 @@ export function buildHistoricalQuoteFileSnapshot(input: {
 
     return {
       documentType: 'insulation',
-      jobId: firstNonNull(insulationWarehouseEntry.jobId, insulationWarehouseEntry.projectId, fallbackSnapshot.jobId, file.jobId),
+      jobId: resolveCanonicalJobId(
+        preferredJobId,
+        insulationWarehouseEntry.jobId,
+        insulationWarehouseEntry.projectId,
+        fallbackSnapshot.jobId,
+        file.jobId,
+      ),
       clientName: firstNonNull(fallbackSnapshot.clientName, file.clientName),
       clientId: firstNonNull(fallbackSnapshot.clientId, file.clientId),
       jobName: firstNonNull(
@@ -173,6 +242,12 @@ export function buildHistoricalQuoteFileSnapshot(input: {
       postalCode: firstNonNull(
         pickString(warehouseRaw, ['postal_code', 'postalCode']),
         fallbackSnapshot.postalCode,
+      ),
+      structureType: normalizeStructureType(
+        insulationWarehouseEntry.structureType
+        || pickString(warehouseRaw, ['structure_type', 'structureType'])
+        || fallbackSnapshot.structureType
+        || 'steel_building',
       ),
       insulationGrade: firstNonNull(insulationWarehouseEntry.grade, fallbackSnapshot.insulationGrade),
       insulationTotal: firstNonNull(insulationWarehouseEntry.totalCost, fallbackSnapshot.insulationTotal),

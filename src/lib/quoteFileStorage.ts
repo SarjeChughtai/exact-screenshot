@@ -2,6 +2,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { upsertStoredDocument } from '@/lib/costDataWarehouse';
 import { quoteFileFromRow } from '@/lib/supabaseMappers';
 import { buildDuplicateDocumentGroupKey, getVisibleOperatorQuoteFiles } from '@/lib/importReview';
+import type { StructureType } from '@/types';
 
 interface UploadQuoteFileParams {
   file: File;
@@ -9,6 +10,7 @@ interface UploadQuoteFileParams {
   jobId: string;
   clientName: string;
   clientId: string;
+  structureType?: StructureType | null;
   buildingLabel: string;
   documentId?: string | null;
   fileCategory?: 'generated_pdf' | 'cost_file' | 'support_file';
@@ -60,6 +62,7 @@ export async function uploadQuoteFile({
   jobId,
   clientName,
   clientId,
+  structureType = null,
   buildingLabel,
   documentId = null,
   fileCategory = 'support_file',
@@ -139,6 +142,7 @@ export async function uploadQuoteFile({
         documentId: documentId || null,
         jobId: jobId || null,
         clientId: clientId || null,
+        structureType,
         fileName: file.name,
         fileSize: file.size,
         fileType: file.type || fileType,

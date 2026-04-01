@@ -86,14 +86,24 @@ describe('historical quote file snapshot', () => {
         lengthFt: 100,
         eaveHeightFt: 18,
         roofSlope: 1,
-        components: [{ name: 'Framed openings', cost: 1000 }],
+        structureType: 'container_cover',
+        components: [
+          { name: 'Framed openings', cost: 1000 },
+          { name: 'Gutters and Downspouts', cost: 600 },
+          { name: 'Roof Liner Panels', cost: 1200 },
+          { name: 'Wall Liner Panels', cost: 900 },
+        ],
       },
     });
 
     expect(snapshot.weightLbs).toBe(15000);
     expect(snapshot.totalSupplierCost).toBe(31500);
     expect(snapshot.costPerLb).toBe(2.1);
-    expect(snapshot.components).toHaveLength(1);
+    expect(snapshot.structureType).toBe('container_cover');
+    expect(snapshot.guttersDownspoutsTotal).toBe(600);
+    expect(snapshot.roofLinerPanelsTotal).toBe(1200);
+    expect(snapshot.wallLinerPanelsTotal).toBe(900);
+    expect(snapshot.components).toHaveLength(4);
   });
 
   it('merges warehouse steel rows with richer fallback job and location data', () => {
@@ -175,6 +185,28 @@ describe('historical quote file snapshot', () => {
     expect(snapshot.weightLbs).toBe(22000);
     expect(snapshot.costPerLb).toBe(2.4);
     expect(snapshot.totalSupplierCost).toBe(52800);
+  });
+
+  it('prefers the already-selected job id over extracted project aliases in ad hoc uploads', () => {
+    const snapshot = buildHistoricalQuoteFileSnapshot({
+      preferredJobId: 'JOB-777',
+      file: buildQuoteFile({
+        jobId: 'JOB-100',
+        correctedData: {
+          projectId: 'PROJECT-123',
+          structureType: 'canopy',
+          components: [
+            { name: 'Downspouts', cost: 250 },
+            { name: 'Roof liner', cost: 450 },
+          ],
+        },
+      }),
+    });
+
+    expect(snapshot.jobId).toBe('JOB-777');
+    expect(snapshot.structureType).toBe('canopy');
+    expect(snapshot.guttersDownspoutsTotal).toBe(250);
+    expect(snapshot.roofLinerPanelsTotal).toBe(450);
   });
 
   it('hydrates insulation data from warehouse rows without overwriting steel-only fields', () => {

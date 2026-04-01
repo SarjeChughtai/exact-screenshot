@@ -85,7 +85,7 @@ function buildDocumentLines(quote: Quote) {
   lines.push(`Adjusted Steel: ${formatCurrency(quote.adjustedSteel)}`);
   lines.push(`Engineering: ${formatCurrency(quote.engineering)}`);
   lines.push(`Foundation: ${formatCurrency(quote.foundation)}`);
-  lines.push(`Gutters: ${formatCurrency(quote.gutters)}`);
+  lines.push(`Gutters & Downspouts: ${formatCurrency(quote.gutters)}`);
   lines.push(`Liners: ${formatCurrency(quote.liners)}`);
   lines.push(`Insulation: ${formatCurrency(quote.insulation)}`);
   lines.push(`Freight: ${formatCurrency(quote.freight)}`);

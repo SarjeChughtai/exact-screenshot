@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,7 +11,7 @@ import { useAppContext } from '@/context/AppContext';
 import { useSettings } from '@/context/SettingsContext';
 import { formatCurrency, formatNumber, PROVINCES, getProvinceTax, calcFreight, calcEngineeringFromFactor, lookupFoundation, calcMarkup, getMarkupRate, autoComplexityFactor } from '@/lib/calculations';
 import { estimateFreightFromLocation } from '@/lib/freightEstimate';
-import type { Quote, QuoteFileRecord } from '@/types';
+import type { FoundationType, Quote, QuoteFileRecord, StructureType } from '@/types';
 import { toast } from 'sonner';
 import { Upload, FileText, CheckCircle2, AlertTriangle, Download, Mail, ChevronDown, X, Sparkles, Loader2, MapPin, Lightbulb, Trash2, Plus } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
@@ -33,6 +33,13 @@ import {
 } from '@/lib/pdfParsers';
 import { persistParsedCostDocument } from '@/lib/costDataWarehouse';
 import { buildHistoricalQuoteFileSnapshot } from '@/lib/historicalQuoteFiles';
+import {
+  buildInternalQuoteBreakdownFromQuote,
+  getCombinedLinerTotal,
+  normalizeStructureType,
+  STRUCTURE_TYPE_OPTIONS,
+} from '@/lib/internalQuoteNormalization';
+import { jobIdsMatch, resolveCanonicalJobId } from '@/lib/jobIds';
 
 interface CostFileData {
   steelWeightLbs: number;
@@ -79,7 +86,16 @@ function generateCostSavingTips(form: any, costData: CostFileData, quote: Quote 
 
 export default function InternalQuoteBuilder() {
   const [searchParams] = useSearchParams();
-  const { addQuote, updateQuote, deals, quotes, allocateJobId } = useAppContext();
+  const {
+    addQuote,
+    updateQuote,
+    deals,
+    quotes,
+    steelCostData,
+    insulationCostData,
+    storedDocuments,
+    allocateJobId,
+  } = useAppContext();
   const { settings, getSalesReps } = useSettings();
   const editingQuoteId = searchParams.get('quoteId');
   const sourceDocumentId = searchParams.get('sourceDocumentId');
@@ -93,9 +109,12 @@ export default function InternalQuoteBuilder() {
     width: '', length: '', height: '14',
     pitch: '1',
     distance: '200', remoteLevel: 'none',
-    foundationType: 'slab' as 'slab' | 'frost_wall',
+    foundationType: 'slab' as FoundationType,
+    structureType: 'steel_building' as StructureType,
     insulationCost: '0', insulationGrade: '',
-    gutters: '0', liners: '0',
+    guttersDownspouts: '0',
+    roofLinerPanels: '0',
+    wallLinerPanels: '0',
     contingencyPct: '5',
     notes: '',
   });
@@ -132,7 +151,18 @@ export default function InternalQuoteBuilder() {
     return String(settings.supplierIncreasePct);
   });
 
-  const [internalMarkupPct] = useState('0');
+  const [internalMarkupPct, setInternalMarkupPct] = useState(() => {
+    const saved = localStorage.getItem('csb_internal_builder_active_state');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        return parsed.internalMarkupPct ?? '';
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    return '';
+  });
   const [showInternalMarkup, setShowInternalMarkup] = useState(true);
   const [bundleSupplierIntoSteel, setBundleSupplierIntoSteel] = useState(true);
   const [buildings, setBuildings] = useState<BuildingTab[]>(() => {
@@ -217,6 +247,7 @@ export default function InternalQuoteBuilder() {
       form,
       buildings,
       supplierMarkupPct,
+      internalMarkupPct,
       singleSlope,
       leftEaveHeight,
       rightEaveHeight,
@@ -224,11 +255,12 @@ export default function InternalQuoteBuilder() {
       updatedAt: new Date().toISOString()
     };
     localStorage.setItem('csb_internal_builder_active_state', JSON.stringify(stateToSave));
-  }, [form, buildings, supplierMarkupPct, singleSlope, leftEaveHeight, rightEaveHeight, activeBuildingIdx, isInitialized]);
+  }, [form, buildings, supplierMarkupPct, internalMarkupPct, singleSlope, leftEaveHeight, rightEaveHeight, activeBuildingIdx, isInitialized]);
 
   useEffect(() => {
     if (!existingQuote) return;
     const payload = (existingQuote.payload || {}) as Record<string, any>;
+    const breakdown = buildInternalQuoteBreakdownFromQuote(existingQuote);
     const incomingBuildings = Array.isArray(payload.buildings) && payload.buildings.length
       ? payload.buildings.map((building: any, index: number) => ({
           ...getInitialBuilding(String(building?.label || `Building ${index + 1}`)),
@@ -260,10 +292,12 @@ export default function InternalQuoteBuilder() {
       distance: String(payload.distance ?? 200),
       remoteLevel: String(payload.remoteLevel ?? 'none'),
       foundationType: existingQuote.foundationType,
+      structureType: normalizeStructureType(payload.structureType ?? 'steel_building'),
       insulationCost: String(existingQuote.insulation || 0),
       insulationGrade: existingQuote.insulationGrade || '',
-      gutters: String(existingQuote.gutters || 0),
-      liners: String(existingQuote.liners || 0),
+      guttersDownspouts: String(breakdown.guttersDownspoutsTotal || 0),
+      roofLinerPanels: String(breakdown.roofLinerPanelsTotal || 0),
+      wallLinerPanels: String(breakdown.wallLinerPanelsTotal || 0),
       contingencyPct: String(existingQuote.contingencyPct || 5),
       notes: String(payload.notes || ''),
     });
@@ -272,12 +306,14 @@ export default function InternalQuoteBuilder() {
     setSingleSlope(Boolean(payload.singleSlope ?? existingQuote.isSingleSlope));
     setLeftEaveHeight(String(payload.leftEaveHeight ?? existingQuote.leftEaveHeight ?? existingQuote.height ?? 14));
     setRightEaveHeight(String(payload.rightEaveHeight ?? existingQuote.rightEaveHeight ?? existingQuote.height ?? 14));
+    setInternalMarkupPct(payload.internalMarkupPct != null ? String(payload.internalMarkupPct) : '');
     setQuote(existingQuote);
   }, [existingQuote]);
 
   useEffect(() => {
     if (existingQuote || !sourceQuote) return;
     const payload = (sourceQuote.payload || {}) as Record<string, any>;
+    const breakdown = buildInternalQuoteBreakdownFromQuote(sourceQuote);
     const importedBuildings = Array.isArray(payload.buildings) && payload.buildings.length
       ? payload.buildings.map((building: any, index: number) => ({
           ...getInitialBuilding(String(building?.label || `Building ${index + 1}`)),
@@ -314,15 +350,18 @@ export default function InternalQuoteBuilder() {
       distance: String(payload.distance ?? 200),
       remoteLevel: String(payload.remoteLevel ?? 'none'),
       foundationType: sourceQuote.foundationType,
+      structureType: normalizeStructureType(payload.structureType ?? 'steel_building'),
       insulationCost: String(sourceQuote.insulation || 0),
       insulationGrade: sourceQuote.insulationGrade || '',
-      gutters: String(sourceQuote.gutters || 0),
-      liners: String(sourceQuote.liners || 0),
+      guttersDownspouts: String(breakdown.guttersDownspoutsTotal || 0),
+      roofLinerPanels: String(breakdown.roofLinerPanelsTotal || 0),
+      wallLinerPanels: String(breakdown.wallLinerPanelsTotal || 0),
       contingencyPct: String(sourceQuote.contingencyPct || 5),
       notes: Array.isArray(payload.notes) ? payload.notes.join('\n') : String(payload.notes || ''),
     });
     setBuildings(importedBuildings);
     setActiveBuildingIdx(0);
+    setInternalMarkupPct(payload.internalMarkupPct != null ? String(payload.internalMarkupPct) : '');
   }, [existingQuote, sourceQuote]);
 
   const handleEaveHeightChange = (side: 'left' | 'right', value: string) => {
@@ -336,12 +375,44 @@ export default function InternalQuoteBuilder() {
 
   const costData = buildings[activeBuildingIdx]?.costData || { steelWeightLbs: 0, supplierCostPerLb: 0, totalSupplierCost: 0, accessories: [] };
   const parsedFiles = buildings[activeBuildingIdx]?.files || [];
+  const linerBreakdownPreview = useMemo(() => ({
+    guttersDownspoutsTotal: parseFloat(form.guttersDownspouts) || 0,
+    roofLinerPanelsTotal: parseFloat(form.roofLinerPanels) || 0,
+    wallLinerPanelsTotal: parseFloat(form.wallLinerPanels) || 0,
+  }), [form.guttersDownspouts, form.roofLinerPanels, form.wallLinerPanels]);
+  const combinedLinerPreview = getCombinedLinerTotal(linerBreakdownPreview);
 
   const setCostData = (updater: CostFileData | ((d: CostFileData) => CostFileData)) => {
     setBuildings(prev => prev.map((b, i) => i === activeBuildingIdx ? { ...b, costData: typeof updater === 'function' ? updater(b.costData) : updater } : b));
   };
 
   const set = (key: string, val: string) => setForm(f => ({ ...f, [key]: val }));
+
+  const pickText = (...values: Array<unknown>) => {
+    for (const value of values) {
+      if (typeof value !== 'string') continue;
+      const trimmed = value.trim();
+      if (trimmed) return trimmed;
+    }
+    return '';
+  };
+
+  const pickNumeric = (...values: Array<unknown>) => {
+    for (const value of values) {
+      if (value == null || value === '') continue;
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+    return null;
+  };
+
+  const selectLatestRecord = <T extends { createdAt?: string; dateAdded?: string | null }>(records: T[]) => {
+    return [...records].sort((left, right) => {
+      const leftDate = left.createdAt || left.dateAdded || '';
+      const rightDate = right.createdAt || right.dateAdded || '';
+      return rightDate.localeCompare(leftDate);
+    })[0] || null;
+  };
 
   // Location lookup for auto-populating distance/province
   const handleLocationLookup = async () => {
@@ -362,24 +433,271 @@ export default function InternalQuoteBuilder() {
 
   // Auto-populate from Job ID
   const handleJobIdChange = (jobId: string) => {
-    set('jobId', jobId);
-    const deal = deals.find(d => d.jobId === jobId);
-    if (deal) {
-      setForm(f => ({
-        ...f, jobId, jobName: deal.jobName, clientName: deal.clientName, clientId: deal.clientId,
-        salesRep: deal.salesRep, estimator: deal.estimator, province: deal.province,
-        city: deal.city, address: deal.address, postalCode: deal.postalCode,
-        width: String(deal.width || ''), length: String(deal.length || ''), height: String(deal.height || '14'),
-      }));
+    const canonicalJobId = resolveCanonicalJobId(jobId) || jobId.trim();
+    if (!canonicalJobId) return;
+
+    const deal = deals.find(d => jobIdsMatch(d.jobId, canonicalJobId));
+    const q = quotes.find(item => jobIdsMatch(item.jobId, canonicalJobId));
+    const steelMatch = selectLatestRecord(steelCostData.filter(item => jobIdsMatch(item.jobId || item.projectId, canonicalJobId)));
+    const insulationMatch = selectLatestRecord(insulationCostData.filter(item => jobIdsMatch(item.jobId || item.projectId, canonicalJobId)));
+    const storedDocumentMatch = selectLatestRecord(storedDocuments.filter(item => jobIdsMatch(item.jobId || item.projectId, canonicalJobId)));
+    const steelRaw = (steelMatch?.rawExtraction || {}) as Record<string, unknown>;
+    const insulationRaw = (insulationMatch?.rawExtraction || {}) as Record<string, unknown>;
+    const storedParsed = (storedDocumentMatch?.parsedData || {}) as Record<string, unknown>;
+
+    setForm(current => ({
+      ...current,
+      jobId: canonicalJobId,
+      jobName: pickText(
+        deal?.jobName,
+        q?.jobName,
+        steelRaw.job_name,
+        steelRaw.jobName,
+        steelRaw.project_name,
+        steelRaw.projectName,
+        insulationRaw.job_name,
+        insulationRaw.jobName,
+        storedParsed.job_name,
+        storedParsed.jobName,
+        current.jobName,
+      ),
+      clientName: pickText(
+        deal?.clientName,
+        q?.clientName,
+        steelRaw.client_name,
+        steelRaw.clientName,
+        insulationRaw.client_name,
+        insulationRaw.clientName,
+        storedParsed.client_name,
+        storedParsed.clientName,
+        current.clientName,
+      ),
+      clientId: pickText(
+        deal?.clientId,
+        q?.clientId,
+        steelMatch?.clientId,
+        insulationMatch?.clientId,
+        storedDocumentMatch?.clientId,
+        storedParsed.client_id,
+        storedParsed.clientId,
+        current.clientId,
+      ),
+      salesRep: pickText(
+        deal?.salesRep,
+        q?.salesRep,
+        steelRaw.sales_rep,
+        steelRaw.salesRep,
+        storedParsed.sales_rep,
+        storedParsed.salesRep,
+        current.salesRep,
+      ),
+      estimator: pickText(
+        deal?.estimator,
+        q?.estimator,
+        steelRaw.estimator,
+        insulationRaw.estimator,
+        storedParsed.estimator,
+        current.estimator,
+      ),
+      province: pickText(
+        deal?.province,
+        q?.province,
+        steelMatch?.province,
+        steelRaw.province,
+        insulationRaw.province,
+        storedParsed.province,
+        current.province,
+      ) || current.province,
+      city: pickText(
+        deal?.city,
+        q?.city,
+        steelMatch?.city,
+        steelRaw.city,
+        insulationRaw.city,
+        storedParsed.city,
+        current.city,
+      ),
+      address: pickText(
+        deal?.address,
+        q?.address,
+        steelRaw.address,
+        steelRaw.delivery_address,
+        insulationRaw.address,
+        storedParsed.address,
+        current.address,
+      ),
+      postalCode: pickText(
+        deal?.postalCode,
+        q?.postalCode,
+        steelRaw.postal_code,
+        steelRaw.postalCode,
+        insulationRaw.postal_code,
+        insulationRaw.postalCode,
+        storedParsed.postal_code,
+        storedParsed.postalCode,
+        current.postalCode,
+      ),
+      width: String(
+        pickNumeric(
+          deal?.width,
+          q?.width,
+          steelMatch?.widthFt,
+          insulationMatch?.widthFt,
+          steelRaw.width,
+          steelRaw.widthFt,
+          storedParsed.width,
+          storedParsed.width_ft,
+          current.width,
+        ) ?? '',
+      ),
+      length: String(
+        pickNumeric(
+          deal?.length,
+          q?.length,
+          steelMatch?.lengthFt,
+          insulationMatch?.lengthFt,
+          steelRaw.length,
+          steelRaw.lengthFt,
+          storedParsed.length,
+          storedParsed.length_ft,
+          current.length,
+        ) ?? '',
+      ),
+      height: String(
+        pickNumeric(
+          deal?.height,
+          q?.height,
+          steelMatch?.eaveHeightFt,
+          insulationMatch?.eaveHeightFt,
+          steelRaw.height,
+          steelRaw.heightFt,
+          steelRaw.eave_height_ft,
+          steelRaw.eaveHeightFt,
+          storedParsed.height,
+          storedParsed.height_ft,
+          current.height,
+        ) ?? '14',
+      ),
+      pitch: String(
+        pickNumeric(
+          q?.pitch,
+          steelMatch?.roofSlope,
+          insulationMatch?.roofSlope,
+          steelRaw.roof_pitch,
+          steelRaw.roofPitch,
+          steelRaw.roof_slope,
+          steelRaw.roofSlope,
+          storedParsed.roof_pitch,
+          storedParsed.roofPitch,
+          current.pitch,
+        ) ?? 1,
+      ),
+      structureType: normalizeStructureType(
+        steelMatch?.structureType
+        || insulationMatch?.structureType
+        || storedDocumentMatch?.structureType
+        || steelRaw.structure_type
+        || steelRaw.structureType
+        || insulationRaw.structure_type
+        || insulationRaw.structureType
+        || storedParsed.structure_type
+        || storedParsed.structureType
+        || current.structureType
+        || 'steel_building',
+      ),
+      insulationCost: String(
+        pickNumeric(
+          insulationMatch?.totalCost,
+          insulationRaw.total_cost,
+          insulationRaw.totalCost,
+          storedParsed.insulation_total,
+          storedParsed.insulationTotal,
+          current.insulationCost,
+        ) ?? 0,
+      ),
+      insulationGrade: pickText(
+        q?.insulationGrade,
+        insulationMatch?.grade,
+        insulationRaw.insulation_grade,
+        insulationRaw.insulationGrade,
+        insulationRaw.grade,
+        storedParsed.insulation_grade,
+        storedParsed.insulationGrade,
+        current.insulationGrade,
+      ),
+    }));
+
+    if (steelMatch) {
+      const snapshot = buildHistoricalQuoteFileSnapshot({
+        file: {
+          id: `job-${canonicalJobId}-steel`,
+          documentId: steelMatch.documentId ?? null,
+          storedDocumentId: steelMatch.storedDocumentId ?? null,
+          jobId: canonicalJobId,
+          clientName: q?.clientName || deal?.clientName || '',
+          clientId: q?.clientId || deal?.clientId || '',
+          fileName: steelMatch.sourceFileName || 'historical-steel',
+          fileSize: 0,
+          fileType: 'mbs',
+          fileCategory: 'cost_file',
+          storagePath: steelMatch.sourceFilePath || '',
+          buildingLabel: buildings[activeBuildingIdx]?.label || 'Building 1',
+          extractionSource: 'ai',
+          aiOutput: steelMatch.rawExtraction || null,
+          reviewStatus: steelMatch.reviewStatus || 'approved',
+          parseError: null,
+          reviewedBy: steelMatch.reviewedBy || null,
+          reviewedAt: steelMatch.reviewedAt || null,
+          correctedData: steelMatch.rawExtraction || null,
+          duplicateGroupKey: null,
+          isPrimaryDocument: true,
+          gdriveStatus: 'pending',
+          gdriveFileId: null,
+          uploadedBy: steelMatch.addedBy || null,
+          createdAt: steelMatch.createdAt || '',
+        },
+        steelWarehouseEntry: steelMatch,
+        insulationWarehouseEntry: insulationMatch,
+        storedDocument: storedDocumentMatch,
+      });
+      applyHistoricalSnapshot(snapshot);
+      return;
     }
-    const q = quotes.find(q => q.jobId === jobId);
-    if (q && !deal) {
-      setForm(f => ({
-        ...f, jobId, jobName: q.jobName, clientName: q.clientName, clientId: q.clientId,
-        salesRep: q.salesRep, estimator: q.estimator, province: q.province,
-        city: q.city, address: q.address, postalCode: q.postalCode,
-        width: String(q.width || ''), length: String(q.length || ''), height: String(q.height || '14'),
-      }));
+
+    if (insulationMatch || storedDocumentMatch) {
+      const snapshot = buildHistoricalQuoteFileSnapshot({
+        file: {
+          id: `job-${canonicalJobId}-historical`,
+          documentId: insulationMatch?.documentId ?? storedDocumentMatch?.documentId ?? null,
+          storedDocumentId: insulationMatch?.storedDocumentId ?? storedDocumentMatch?.id ?? null,
+          jobId: canonicalJobId,
+          clientName: q?.clientName || deal?.clientName || '',
+          clientId: q?.clientId || deal?.clientId || '',
+          fileName: insulationMatch?.sourceFileName || storedDocumentMatch?.fileName || 'historical-document',
+          fileSize: 0,
+          fileType: insulationMatch ? 'insulation' : 'unknown',
+          fileCategory: 'cost_file',
+          storagePath: insulationMatch?.sourceFilePath || storedDocumentMatch?.storagePath || '',
+          buildingLabel: buildings[activeBuildingIdx]?.label || 'Building 1',
+          extractionSource: 'ai',
+          aiOutput: insulationMatch?.rawExtraction || storedDocumentMatch?.parsedData || null,
+          reviewStatus: insulationMatch?.reviewStatus || storedDocumentMatch?.reviewStatus || 'approved',
+          parseError: null,
+          reviewedBy: insulationMatch?.reviewedBy || storedDocumentMatch?.reviewedBy || null,
+          reviewedAt: insulationMatch?.reviewedAt || storedDocumentMatch?.reviewedAt || null,
+          correctedData: insulationMatch?.rawExtraction || storedDocumentMatch?.parsedData || null,
+          duplicateGroupKey: null,
+          isPrimaryDocument: true,
+          gdriveStatus: 'pending',
+          gdriveFileId: null,
+          uploadedBy: insulationMatch?.addedBy || storedDocumentMatch?.uploadedBy || null,
+          createdAt: insulationMatch?.createdAt || storedDocumentMatch?.createdAt || '',
+        },
+        steelWarehouseEntry: null,
+        insulationWarehouseEntry: insulationMatch,
+        storedDocument: storedDocumentMatch,
+      });
+      applyHistoricalSnapshot(snapshot);
     }
   };
 
@@ -388,7 +706,8 @@ export default function InternalQuoteBuilder() {
   };
 
   const applyHistoricalSnapshot = (snapshot: ReturnType<typeof buildHistoricalQuoteFileSnapshot>) => {
-    if (snapshot.jobId) handleJobIdChange(snapshot.jobId);
+    const effectiveJobId = resolveCanonicalJobId(form.jobId, snapshot.jobId);
+    if (effectiveJobId) set('jobId', effectiveJobId);
     if (snapshot.clientName) set('clientName', snapshot.clientName);
     if (snapshot.clientId) set('clientId', snapshot.clientId);
     if (snapshot.jobName) set('jobName', snapshot.jobName);
@@ -399,6 +718,10 @@ export default function InternalQuoteBuilder() {
     if (snapshot.province) set('province', snapshot.province);
     if (snapshot.city) set('city', snapshot.city);
     if (snapshot.postalCode) set('postalCode', snapshot.postalCode);
+    if (snapshot.structureType) set('structureType', snapshot.structureType);
+    if (snapshot.guttersDownspoutsTotal != null) set('guttersDownspouts', String(snapshot.guttersDownspoutsTotal));
+    if (snapshot.roofLinerPanelsTotal != null) set('roofLinerPanels', String(snapshot.roofLinerPanelsTotal));
+    if (snapshot.wallLinerPanelsTotal != null) set('wallLinerPanels', String(snapshot.wallLinerPanelsTotal));
 
     if (snapshot.documentType === 'insulation') {
       if (snapshot.insulationTotal != null) set('insulationCost', String(snapshot.insulationTotal));
@@ -428,6 +751,9 @@ export default function InternalQuoteBuilder() {
       snapshot.weightLbs != null ||
       snapshot.costPerLb != null ||
       snapshot.totalSupplierCost != null ||
+      snapshot.guttersDownspoutsTotal != null ||
+      snapshot.roofLinerPanelsTotal != null ||
+      snapshot.wallLinerPanelsTotal != null ||
       snapshot.insulationTotal != null ||
       (snapshot.components && snapshot.components.length > 0),
     );
@@ -509,6 +835,7 @@ export default function InternalQuoteBuilder() {
     documentType: 'mbs' | 'insulation' | 'unknown',
     fileName: string,
   ) => buildHistoricalQuoteFileSnapshot({
+    preferredJobId: form.jobId,
     file: {
       id: `adhoc-${fileName}`,
       documentId: null,
@@ -579,7 +906,13 @@ export default function InternalQuoteBuilder() {
 
         const aiResponse = await extractWithAI(fullText, file.name);
         const aiResult = aiResponse.data;
-        let resolvedJobId = aiResult?.job_id || aiResult?.project_id || aiResult?.projectId || form.jobId || '';
+        let resolvedJobId = resolveCanonicalJobId(
+          form.jobId,
+          aiResult?.job_id,
+          aiResult?.jobId,
+          aiResult?.project_id,
+          aiResult?.projectId,
+        ) || '';
         let resolvedClientName = aiResult?.client_name || aiResult?.clientName || form.clientName || '';
         let resolvedClientId = aiResult?.client_id || aiResult?.clientId || form.clientId || '';
 
@@ -694,6 +1027,7 @@ export default function InternalQuoteBuilder() {
           jobId: resolvedJobId,
           clientName: resolvedClientName,
           clientId: resolvedClientId,
+          structureType: normalizeStructureType(form.structureType || 'steel_building'),
           buildingLabel: buildings[activeBuildingIdx]?.label || 'Building 1',
           aiOutput: aiResponse.rawResponse || aiResult || null,
           extractionSource,
@@ -742,8 +1076,9 @@ export default function InternalQuoteBuilder() {
                   await persistParsedCostDocument({
                     quoteFileId: result.id,
                     documentId: existingQuote?.id || null,
-                    jobId: resolvedJobId || (extractedData.projectId ?? extractedData.jobId) || null,
+                    jobId: resolveCanonicalJobId(resolvedJobId, extractedData.jobId, extractedData.projectId),
                     projectId: (extractedData.projectId ?? extractedData.jobId) || null,
+                    structureType: normalizeStructureType(form.structureType || extractedData.structureType || extractedData.structure_type || 'steel_building'),
                     clientId: resolvedClientId || null,
                     fileName: file.name,
                     fileSize: file.size,
@@ -764,8 +1099,9 @@ export default function InternalQuoteBuilder() {
                   await persistParsedCostDocument({
                     quoteFileId: result.id,
                     documentId: existingQuote?.id || null,
-                    jobId: resolvedJobId || extractedData.projectId || null,
+                    jobId: resolveCanonicalJobId(resolvedJobId, extractedData.jobId, extractedData.projectId),
                     projectId: extractedData.projectId || resolvedJobId || null,
+                    structureType: normalizeStructureType(form.structureType || extractedData.structureType || extractedData.structure_type || 'steel_building'),
                     clientId: resolvedClientId || null,
                     fileName: file.name,
                     fileSize: file.size,
@@ -792,6 +1128,7 @@ export default function InternalQuoteBuilder() {
                   quoteFileId: result.id,
                   documentId: existingQuote?.id || null,
                   jobId: resolvedJobId || null,
+                  structureType: normalizeStructureType(form.structureType || 'steel_building'),
                   clientId: resolvedClientId || null,
                   fileName: file.name,
                   fileSize: file.size,
@@ -872,6 +1209,7 @@ export default function InternalQuoteBuilder() {
     if (!confirm(message)) return;
     setForm(getInitialForm());
     setSupplierMarkupPct(String(settings.supplierIncreasePct));
+    setInternalMarkupPct('');
     setBuildings([getInitialBuilding()]);
     setActiveBuildingIdx(0);
     setQuote(null);
@@ -912,6 +1250,7 @@ export default function InternalQuoteBuilder() {
         buildings: currentBuildings,
         form: currentForm,
         supplierMarkupPct: supplierMarkupPct,
+        internalMarkupPct: internalMarkupPct,
         singleSlope: singleSlope,
         leftEaveHeight: leftEaveHeight,
         rightEaveHeight: rightEaveHeight,
@@ -939,11 +1278,16 @@ export default function InternalQuoteBuilder() {
 
     const weight = costData.steelWeightLbs;
     const supplierMarkup = parseFloat(supplierMarkupPct) / 100;
+    const manualInternalMarkupPct = internalMarkupPct.trim() ? parseFloat(internalMarkupPct) : Number.NaN;
 
     const adjustedCostPerLb = costData.supplierCostPerLb * (1 + supplierMarkup);
     const steelAfterSupplierMarkup = adjustedCostPerLb * weight;
-    const tieredMarkupAmount = calcMarkup(steelAfterSupplierMarkup);
-    const tieredRate = getMarkupRate(steelAfterSupplierMarkup);
+    const tieredRate = Number.isFinite(manualInternalMarkupPct)
+      ? manualInternalMarkupPct / 100
+      : getMarkupRate(steelAfterSupplierMarkup);
+    const tieredMarkupAmount = Number.isFinite(manualInternalMarkupPct)
+      ? steelAfterSupplierMarkup * tieredRate
+      : calcMarkup(steelAfterSupplierMarkup);
     
     // Adjusted steel = steel after supplier markup + tiered markup
     const adjustedSteel = steelAfterSupplierMarkup + tieredMarkupAmount;
@@ -953,8 +1297,10 @@ export default function InternalQuoteBuilder() {
     const engineering = calcEngineeringFromFactor(complexity.factor);
     const foundation = lookupFoundation(sqft, form.foundationType);
     const insulation = parseFloat(form.insulationCost) || 0;
-    const guttersVal = parseFloat(form.gutters) || 0;
-    const linersVal = parseFloat(form.liners) || 0;
+    const guttersVal = parseFloat(form.guttersDownspouts) || 0;
+    const roofLinerPanelsVal = parseFloat(form.roofLinerPanels) || 0;
+    const wallLinerPanelsVal = parseFloat(form.wallLinerPanels) || 0;
+    const linersVal = roofLinerPanelsVal + wallLinerPanelsVal;
     const freight = calcFreight(parseFloat(form.distance) || 0, weight, form.remoteLevel);
 
     const combinedTotal = adjustedSteel + engineering + foundation + insulation + guttersVal + linersVal + freight;
@@ -969,11 +1315,15 @@ export default function InternalQuoteBuilder() {
     const notes: string[] = [
       `Base Steel (from MBS): ${formatCurrency(costData.totalSupplierCost)} at ${formatNumber(weight)} lbs = $${costData.supplierCostPerLb.toFixed(2)}/lb`,
       `+${supplierMarkupPct}% Supplier: $/lb goes from $${costData.supplierCostPerLb.toFixed(2)} to $${adjustedCostPerLb.toFixed(2)} → steel becomes ${formatCurrency(steelAfterSupplierMarkup)}`,
-      `Tiered Markup: tier = ${(tieredRate * 100).toFixed(1)}%, amount = ${formatCurrency(tieredMarkupAmount)}${tieredMarkupAmount === 3000 ? ' ($3K minimum applied)' : ''}`,
+      `${Number.isFinite(manualInternalMarkupPct) ? 'Manual' : 'Tiered'} Internal Markup: ${(tieredRate * 100).toFixed(1)}%, amount = ${formatCurrency(tieredMarkupAmount)}${!Number.isFinite(manualInternalMarkupPct) && tieredMarkupAmount === 3000 ? ' ($3K minimum applied)' : ''}`,
       `Adjusted Steel: ${formatCurrency(adjustedSteel)} → final $/lb = $${finalPerLb.toFixed(2)} (${finalPerLb >= 2.15 && finalPerLb <= 2.30 ? 'IN RANGE' : 'CHECK'} vs $2.15–$2.30)`,
       `Engineering: auto-complexity = ${complexity.factor} (${complexity.reason}) → ${formatCurrency(engineering)}`,
-      `Foundation: sqft=${formatNumber(sqft)}, type=${form.foundationType}, base=${formatCurrency(foundation - 500)} + $500 = ${formatCurrency(foundation)}`,
+      form.foundationType === 'none'
+        ? 'Foundation: none selected → $0.00'
+        : `Foundation: sqft=${formatNumber(sqft)}, type=${form.foundationType}, base=${formatCurrency(foundation - 500)} + $500 = ${formatCurrency(foundation)}`,
       `Insulation: ${formatCurrency(insulation)} (pass-through, no markup)`,
+      `Gutters & Downspouts: ${formatCurrency(guttersVal)}`,
+      `Liners: roof = ${formatCurrency(roofLinerPanelsVal)}, wall = ${formatCurrency(wallLinerPanelsVal)}, combined = ${formatCurrency(linersVal)}`,
       `Freight: MAX($4,000, ${form.distance}km × $4) + remote(${form.remoteLevel}) + overweight = ${formatCurrency(freight)}`,
       `Tax: EXCLUDED from internal quote`,
       `ALL FIGURES SOURCE: 143 MBS projects for steel tiers, 48 Silvercote quotes for insulation, foundation schedule v1`,
@@ -1015,6 +1365,11 @@ export default function InternalQuoteBuilder() {
         distance: form.distance,
         remoteLevel: form.remoteLevel,
         pitch: form.pitch,
+        structureType: normalizeStructureType(form.structureType || 'steel_building'),
+        internalMarkupPct: Number.isFinite(manualInternalMarkupPct) ? manualInternalMarkupPct : null,
+        guttersDownspoutsTotal: guttersVal,
+        roofLinerPanelsTotal: roofLinerPanelsVal,
+        wallLinerPanelsTotal: wallLinerPanelsVal,
       },
     };
     setQuote(q);
@@ -1163,6 +1518,38 @@ export default function InternalQuoteBuilder() {
             </Button>
           </div>
 
+          <div className="bg-card border rounded-lg p-5 space-y-4">
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Upload Association</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs">Associate Upload To Job ID</Label>
+                <JobIdSelect
+                  value={form.jobId}
+                  onValueChange={handleJobIdChange}
+                  placeholder="Select or create a shared job ID"
+                  triggerTestId="internal-quote-upload-job-id"
+                />
+                <p className="mt-1 text-[10px] text-muted-foreground">
+                  Uploaded documents are stored against this job ID. If one is selected here, it overrides file-extracted job IDs.
+                </p>
+              </div>
+              <div>
+                <Label className="text-xs">Structure Type</Label>
+                <Select value={form.structureType} onValueChange={value => set('structureType', value)}>
+                  <SelectTrigger className="input-blue mt-1"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {STRUCTURE_TYPE_OPTIONS.map(option => (
+                      <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="mt-1 text-[10px] text-muted-foreground">
+                  Stored for internal estimator data quality so different structure types stay segmented.
+                </p>
+              </div>
+            </div>
+          </div>
+
           {/* Multi-file Upload */}
           <div
             className={`bg-card border-2 border-dashed rounded-lg p-6 text-center transition-colors ${dragActive ? 'border-accent bg-accent/5' : aiProcessing ? 'border-primary bg-primary/5' : 'border-border'}`}
@@ -1262,6 +1649,20 @@ export default function InternalQuoteBuilder() {
               <Label className="text-xs">Supplier Markup on $/lb (%)</Label>
               <Input className="input-blue mt-1" type="number" step="0.5" value={supplierMarkupPct} onChange={e => setSupplierMarkupPct(e.target.value)} />
             </div>
+            <div>
+              <Label className="text-xs">Internal Markup (%)</Label>
+              <Input
+                className="input-blue mt-1"
+                type="number"
+                step="0.1"
+                value={internalMarkupPct}
+                onChange={e => setInternalMarkupPct(e.target.value)}
+                placeholder="Leave blank for auto tiered"
+              />
+              <p className="mt-1 text-[10px] text-muted-foreground">
+                Blank uses the tiered internal markup schedule. Enter a value to override it for this quote.
+              </p>
+            </div>
             <div className="flex items-center justify-between">
               <Label className="text-xs">Bundle supplier increase into steel cost</Label>
               <Switch checked={bundleSupplierIntoSteel} onCheckedChange={setBundleSupplierIntoSteel} />
@@ -1288,10 +1689,10 @@ export default function InternalQuoteBuilder() {
           <div className="bg-card border rounded-lg p-5 space-y-4">
             <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Project Info</h3>
             <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label className="text-xs">Job ID</Label>
-                <JobIdSelect value={form.jobId} onValueChange={handleJobIdChange} allowedStates={['rfq', 'internal_quote']} placeholder="Auto / type to search" triggerTestId="internal-quote-job-id" />
-              </div>
+          <div>
+            <Label className="text-xs">Job ID</Label>
+            <JobIdSelect value={form.jobId} onValueChange={handleJobIdChange} placeholder="Auto / type to search" triggerTestId="internal-quote-job-id" />
+          </div>
               <div>
                 <Label className="text-xs">Job Name</Label>
                 <Input className="input-blue mt-1" value={form.jobName} onChange={e => set('jobName', e.target.value)} placeholder={getDefaultJobName() || 'Auto from dimensions'} />
@@ -1385,6 +1786,7 @@ export default function InternalQuoteBuilder() {
                   <SelectContent>
                     <SelectItem value="slab">Slab</SelectItem>
                     <SelectItem value="frost_wall">Frost Wall</SelectItem>
+                    <SelectItem value="none">None</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -1394,6 +1796,23 @@ export default function InternalQuoteBuilder() {
               <div><Label className="text-xs">Insulation ($)</Label><Input className="input-blue mt-1" value={form.insulationCost} onChange={e => set('insulationCost', e.target.value)} /></div>
               <div><Label className="text-xs">Insulation Grade</Label><Input className="input-blue mt-1" value={form.insulationGrade} onChange={e => set('insulationGrade', e.target.value)} /></div>
             </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <Label className="text-xs">Gutters & Downspouts ($)</Label>
+                <Input className="input-blue mt-1" value={form.guttersDownspouts} onChange={e => set('guttersDownspouts', e.target.value)} />
+              </div>
+              <div>
+                <Label className="text-xs">Roof Liner Panels ($)</Label>
+                <Input className="input-blue mt-1" value={form.roofLinerPanels} onChange={e => set('roofLinerPanels', e.target.value)} />
+              </div>
+              <div>
+                <Label className="text-xs">Wall Liner Panels ($)</Label>
+                <Input className="input-blue mt-1" value={form.wallLinerPanels} onChange={e => set('wallLinerPanels', e.target.value)} />
+              </div>
+            </div>
+            <p className="text-[10px] text-muted-foreground">
+              Combined liner value shown on the quote: {formatCurrency(combinedLinerPreview)}
+            </p>
           </div>
 
           <Button onClick={generate} className="w-full" size="lg">
@@ -1442,7 +1861,7 @@ export default function InternalQuoteBuilder() {
                 <QRow label="Steel" value={quote.adjustedSteel} bold />
                 <QRow label="Engineering Drawings" value={quote.engineering} />
                 <QRow label="Foundation Drawing" value={quote.foundation} />
-                {quote.gutters > 0 && <QRow label="Gutters" value={quote.gutters} />}
+                {quote.gutters > 0 && <QRow label="Gutters & Downspouts" value={quote.gutters} />}
                 {quote.liners > 0 && <QRow label="Liners" value={quote.liners} />}
                 {quote.insulation > 0 && <QRow label="Insulation" value={quote.insulation} />}
                 <QRow label={`Freight Estimate (${form.distance}km, ${form.remoteLevel})`} value={quote.freight} />

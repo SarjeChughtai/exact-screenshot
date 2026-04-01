@@ -10,6 +10,9 @@ export interface Client {
   createdAt: string;
 }
 
+export type FoundationType = 'slab' | 'frost_wall' | 'none';
+export type StructureType = 'steel_building' | 'container_cover' | 'canopy' | 'other';
+
 export type DocumentType = 'rfq' | 'dealer_rfq' | 'internal_quote' | 'external_quote';
 export type WorkflowStatus =
   | 'draft'
@@ -54,7 +57,7 @@ export interface Quote {
   adjustedSteel: number;
   engineering: number;
   foundation: number;
-  foundationType: 'slab' | 'frost_wall';
+  foundationType: FoundationType;
   gutters: number;
   liners: number;
   insulation: number;
@@ -484,6 +487,7 @@ export interface StoredDocument {
   projectId?: string | null;
   clientId?: string | null;
   vendorId?: string | null;
+  structureType?: StructureType | null;
   sourceType: 'uploaded' | 'seed_json' | 'seed_csv' | 'seed_xlsx' | 'seed_zip' | 'legacy_backfill';
   sourceFilename?: string | null;
   sourceFileExtension?: string | null;
@@ -517,6 +521,7 @@ export interface SteelCostDataRecord {
   projectId?: string | null;
   clientId?: string | null;
   vendorId?: string | null;
+  structureType?: StructureType | null;
   widthFt?: number | null;
   lengthFt?: number | null;
   eaveHeightFt?: number | null;
@@ -557,6 +562,7 @@ export interface InsulationCostDataRecord {
   projectId?: string | null;
   clientId?: string | null;
   vendorId?: string | null;
+  structureType?: StructureType | null;
   widthFt?: number | null;
   lengthFt?: number | null;
   eaveHeightFt?: number | null;
