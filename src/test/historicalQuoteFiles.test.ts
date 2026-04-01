@@ -96,6 +96,34 @@ describe('historical quote file snapshot', () => {
     expect(snapshot.components).toHaveLength(1);
   });
 
+  it('merges warehouse steel rows with richer fallback job and location data', () => {
+    const snapshot = buildHistoricalQuoteFileSnapshot({
+      file: buildQuoteFile({
+        correctedData: {
+          projectId: 'JOB-321',
+          city: 'Regina',
+          postalCode: 'S4P 3Y2',
+          client_name: 'Merged Client',
+        },
+      }),
+      steelWarehouseEntry: {
+        id: 'steel-2',
+        quoteFileId: 'file-1',
+        totalWeightLb: 18000,
+        totalCost: 37800,
+        pricePerLb: 2.1,
+        widthFt: 80,
+      },
+    });
+
+    expect(snapshot.jobId).toBe('JOB-321');
+    expect(snapshot.clientName).toBe('Merged Client');
+    expect(snapshot.city).toBe('Regina');
+    expect(snapshot.postalCode).toBe('S4P 3Y2');
+    expect(snapshot.width).toBe(80);
+    expect(snapshot.weightLbs).toBe(18000);
+  });
+
   it('prefers corrected quote-file data over stale ai output', () => {
     const snapshot = buildHistoricalQuoteFileSnapshot({
       file: buildQuoteFile({

@@ -55,6 +55,13 @@ function parseComponents(value: unknown) {
   });
 }
 
+function firstNonNull<T>(...values: Array<T | null | undefined>) {
+  for (const value of values) {
+    if (value !== undefined && value !== null && value !== '') return value;
+  }
+  return null;
+}
+
 function buildStructuredFallbackSnapshot(input: {
   file: QuoteFileRecord;
   storedDocument?: StoredDocument | null;
@@ -82,7 +89,7 @@ function buildStructuredFallbackSnapshot(input: {
       : file.fileType === 'mbs'
       ? 'mbs'
       : 'unknown',
-    jobId: pickString(fallback, ['job_id', 'jobId']) || file.jobId || null,
+    jobId: pickString(fallback, ['job_id', 'jobId', 'project_id', 'projectId']) || file.jobId || null,
     clientName: pickString(fallback, ['client_name', 'clientName']) || file.clientName || null,
     clientId: pickString(fallback, ['client_id', 'clientId']) || file.clientId || null,
     jobName: pickString(fallback, ['job_name', 'jobName', 'project_name', 'projectName']),
@@ -109,50 +116,68 @@ export function buildHistoricalQuoteFileSnapshot(input: {
   storedDocument?: StoredDocument | null;
 }): HistoricalQuoteFileSnapshot {
   const { file, steelWarehouseEntry, insulationWarehouseEntry, storedDocument } = input;
+  const fallbackSnapshot = buildStructuredFallbackSnapshot({ file, storedDocument });
 
   if (steelWarehouseEntry) {
+    const warehouseRaw = (steelWarehouseEntry.rawExtraction || {}) as Record<string, unknown>;
+    const warehouseComponents = (steelWarehouseEntry.components || []).map(component => ({
+      name: String(component.name || 'Component'),
+      weight: component.weight ? Number(component.weight) : undefined,
+      cost: Number(component.cost || 0),
+    }));
+
     return {
       documentType: 'mbs',
-      jobId: steelWarehouseEntry.jobId || file.jobId,
-      clientName: file.clientName,
-      clientId: file.clientId,
-      jobName: pickString((steelWarehouseEntry.rawExtraction || {}) as Record<string, unknown>, ['job_name', 'jobName']),
-      width: steelWarehouseEntry.widthFt,
-      length: steelWarehouseEntry.lengthFt,
-      height: steelWarehouseEntry.eaveHeightFt,
-      roofPitch: steelWarehouseEntry.roofSlope,
-      province: steelWarehouseEntry.province,
-      city: steelWarehouseEntry.city,
-      postalCode: pickString((steelWarehouseEntry.rawExtraction || {}) as Record<string, unknown>, ['postal_code', 'postalCode']),
-      weightLbs: steelWarehouseEntry.totalWeightLb,
-      costPerLb: steelWarehouseEntry.pricePerLb,
-      totalSupplierCost: steelWarehouseEntry.totalCost,
-      components: (steelWarehouseEntry.components || []).map(component => ({
-        name: String(component.name || 'Component'),
-        weight: component.weight ? Number(component.weight) : undefined,
-        cost: Number(component.cost || 0),
-      })),
+      jobId: firstNonNull(steelWarehouseEntry.jobId, steelWarehouseEntry.projectId, fallbackSnapshot.jobId, file.jobId),
+      clientName: firstNonNull(fallbackSnapshot.clientName, file.clientName),
+      clientId: firstNonNull(fallbackSnapshot.clientId, file.clientId),
+      jobName: firstNonNull(
+        pickString(warehouseRaw, ['job_name', 'jobName', 'project_name', 'projectName']),
+        fallbackSnapshot.jobName,
+      ),
+      width: firstNonNull(steelWarehouseEntry.widthFt, fallbackSnapshot.width),
+      length: firstNonNull(steelWarehouseEntry.lengthFt, fallbackSnapshot.length),
+      height: firstNonNull(steelWarehouseEntry.eaveHeightFt, fallbackSnapshot.height),
+      roofPitch: firstNonNull(steelWarehouseEntry.roofSlope, fallbackSnapshot.roofPitch),
+      province: firstNonNull(steelWarehouseEntry.province, fallbackSnapshot.province),
+      city: firstNonNull(steelWarehouseEntry.city, fallbackSnapshot.city),
+      postalCode: firstNonNull(
+        pickString(warehouseRaw, ['postal_code', 'postalCode']),
+        fallbackSnapshot.postalCode,
+      ),
+      weightLbs: firstNonNull(steelWarehouseEntry.totalWeightLb, fallbackSnapshot.weightLbs),
+      costPerLb: firstNonNull(steelWarehouseEntry.pricePerLb, fallbackSnapshot.costPerLb),
+      totalSupplierCost: firstNonNull(steelWarehouseEntry.totalCost, fallbackSnapshot.totalSupplierCost),
+      components: warehouseComponents.length > 0 ? warehouseComponents : (fallbackSnapshot.components || []),
     };
   }
 
   if (insulationWarehouseEntry) {
+    const warehouseRaw = (insulationWarehouseEntry.rawExtraction || {}) as Record<string, unknown>;
+
     return {
       documentType: 'insulation',
-      jobId: insulationWarehouseEntry.jobId || file.jobId,
-      clientName: file.clientName,
-      clientId: file.clientId,
-      jobName: pickString((insulationWarehouseEntry.rawExtraction || {}) as Record<string, unknown>, ['job_name', 'jobName']),
-      width: insulationWarehouseEntry.widthFt,
-      length: insulationWarehouseEntry.lengthFt,
-      height: insulationWarehouseEntry.eaveHeightFt,
-      roofPitch: insulationWarehouseEntry.roofSlope,
-      province: pickString((insulationWarehouseEntry.rawExtraction || {}) as Record<string, unknown>, ['province']),
-      city: pickString((insulationWarehouseEntry.rawExtraction || {}) as Record<string, unknown>, ['city']),
-      postalCode: pickString((insulationWarehouseEntry.rawExtraction || {}) as Record<string, unknown>, ['postal_code', 'postalCode']),
-      insulationGrade: insulationWarehouseEntry.grade,
-      insulationTotal: insulationWarehouseEntry.totalCost,
+      jobId: firstNonNull(insulationWarehouseEntry.jobId, insulationWarehouseEntry.projectId, fallbackSnapshot.jobId, file.jobId),
+      clientName: firstNonNull(fallbackSnapshot.clientName, file.clientName),
+      clientId: firstNonNull(fallbackSnapshot.clientId, file.clientId),
+      jobName: firstNonNull(
+        pickString(warehouseRaw, ['job_name', 'jobName', 'project_name', 'projectName']),
+        fallbackSnapshot.jobName,
+      ),
+      width: firstNonNull(insulationWarehouseEntry.widthFt, fallbackSnapshot.width),
+      length: firstNonNull(insulationWarehouseEntry.lengthFt, fallbackSnapshot.length),
+      height: firstNonNull(insulationWarehouseEntry.eaveHeightFt, fallbackSnapshot.height),
+      roofPitch: firstNonNull(insulationWarehouseEntry.roofSlope, fallbackSnapshot.roofPitch),
+      province: firstNonNull(pickString(warehouseRaw, ['province']), fallbackSnapshot.province),
+      city: firstNonNull(pickString(warehouseRaw, ['city']), fallbackSnapshot.city),
+      postalCode: firstNonNull(
+        pickString(warehouseRaw, ['postal_code', 'postalCode']),
+        fallbackSnapshot.postalCode,
+      ),
+      insulationGrade: firstNonNull(insulationWarehouseEntry.grade, fallbackSnapshot.insulationGrade),
+      insulationTotal: firstNonNull(insulationWarehouseEntry.totalCost, fallbackSnapshot.insulationTotal),
     };
   }
 
-  return buildStructuredFallbackSnapshot({ file, storedDocument });
+  return fallbackSnapshot;
 }

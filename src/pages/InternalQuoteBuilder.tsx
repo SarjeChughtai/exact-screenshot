@@ -11,7 +11,7 @@ import { useAppContext } from '@/context/AppContext';
 import { useSettings } from '@/context/SettingsContext';
 import { formatCurrency, formatNumber, PROVINCES, getProvinceTax, calcFreight, calcEngineeringFromFactor, lookupFoundation, calcMarkup, getMarkupRate, autoComplexityFactor } from '@/lib/calculations';
 import { estimateFreightFromLocation } from '@/lib/freightEstimate';
-import type { Quote } from '@/types';
+import type { Quote, QuoteFileRecord } from '@/types';
 import { toast } from 'sonner';
 import { Upload, FileText, CheckCircle2, AlertTriangle, Download, Mail, ChevronDown, X, Sparkles, Loader2, MapPin, Lightbulb, Trash2, Plus } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
@@ -504,21 +504,39 @@ export default function InternalQuoteBuilder() {
     }
   };
 
-  const applyAIData = (aiData: any) => {
-    if (aiData.width) set('width', String(aiData.width));
-    if (aiData.length) set('length', String(aiData.length));
-    if (aiData.height) set('height', String(aiData.height));
-    if (aiData.roof_pitch) set('pitch', String(aiData.roof_pitch));
-    if (aiData.client_name) set('clientName', aiData.client_name);
-    if (aiData.client_id) set('clientId', aiData.client_id);
-    if (aiData.job_id) handleJobIdChange(aiData.job_id);
-    if (aiData.job_name) set('jobName', aiData.job_name);
-    if (aiData.province) set('province', aiData.province);
-    if (aiData.city) set('city', aiData.city);
-    if (aiData.address) set('address', aiData.address);
-    if (aiData.postal_code) set('postalCode', aiData.postal_code);
-    if (aiData.insulation_grade) set('insulationGrade', aiData.insulation_grade);
-  };
+  const buildAdHocHistoricalSnapshot = (
+    data: Record<string, unknown>,
+    documentType: 'mbs' | 'insulation' | 'unknown',
+    fileName: string,
+  ) => buildHistoricalQuoteFileSnapshot({
+    file: {
+      id: `adhoc-${fileName}`,
+      documentId: null,
+      storedDocumentId: null,
+      jobId: form.jobId,
+      clientName: form.clientName,
+      clientId: form.clientId,
+      fileName,
+      fileSize: 0,
+      fileType: documentType,
+      fileCategory: 'cost_file',
+      storagePath: '',
+      buildingLabel: buildings[activeBuildingIdx]?.label || 'Building 1',
+      extractionSource: 'ai',
+      aiOutput: data,
+      reviewStatus: 'approved',
+      parseError: null,
+      reviewedBy: null,
+      reviewedAt: null,
+      correctedData: data,
+      duplicateGroupKey: null,
+      isPrimaryDocument: true,
+      gdriveStatus: 'pending',
+      gdriveFileId: null,
+      uploadedBy: null,
+      createdAt: '',
+    } satisfies QuoteFileRecord,
+  });
 
   const handleFileUpload = async (files: FileList | File[]) => {
     const fileArr = Array.from(files);
@@ -561,9 +579,9 @@ export default function InternalQuoteBuilder() {
 
         const aiResponse = await extractWithAI(fullText, file.name);
         const aiResult = aiResponse.data;
-        const resolvedJobId = aiResult?.job_id || form.jobId || '';
-        const resolvedClientName = aiResult?.client_name || form.clientName || '';
-        const resolvedClientId = aiResult?.client_id || form.clientId || '';
+        let resolvedJobId = aiResult?.job_id || aiResult?.project_id || aiResult?.projectId || form.jobId || '';
+        let resolvedClientName = aiResult?.client_name || aiResult?.clientName || form.clientName || '';
+        let resolvedClientId = aiResult?.client_id || aiResult?.clientId || form.clientId || '';
 
         // Track extraction source, resolved document type, and review state for upload
         let extractionSource: 'ai' | 'regex' | 'unknown' = 'unknown';
@@ -588,40 +606,36 @@ export default function InternalQuoteBuilder() {
 
           if (docType === 'insulation') {
             resolvedDocType = 'insulation';
-            const total = aiResult.insulation_total || 0;
-            set('insulationCost', String(total));
-            if (aiResult.insulation_grade) set('insulationGrade', aiResult.insulation_grade);
+            const snapshot = buildAdHocHistoricalSnapshot(aiResult, 'insulation', file.name);
+            applyHistoricalSnapshot(snapshot);
+            resolvedJobId = snapshot.jobId || resolvedJobId;
+            resolvedClientName = snapshot.clientName || resolvedClientName;
+            resolvedClientId = snapshot.clientId || resolvedClientId;
             newParsedFiles.push({ name: file.name, type: 'insulation', status: 'success', data: aiResult, buildingIndex: activeBuildingIdx });
-            toast.success(`AI extracted insulation: ${formatCurrency(total)}`);
+            toast.success(`AI extracted insulation: ${formatCurrency(snapshot.insulationTotal || 0)}`);
           } else if (docType === 'mbs') {
             resolvedDocType = 'mbs';
-            applyAIData(aiResult);
-            const weight = aiResult.weight || 0;
-            const costPerLb = aiResult.cost_per_lb || (aiResult.total_cost && weight ? aiResult.total_cost / weight : 0);
-            const totalCost = aiResult.total_cost || weight * costPerLb;
-            const components = (aiResult.components || []).map((c: any) => ({
-              name: c.name, weight: c.weight || 0, cost: c.cost || 0,
-            }));
-            setCostData({ steelWeightLbs: weight, supplierCostPerLb: costPerLb, totalSupplierCost: totalCost, accessories: components });
+            const snapshot = buildAdHocHistoricalSnapshot(aiResult, 'mbs', file.name);
+            applyHistoricalSnapshot(snapshot);
+            resolvedJobId = snapshot.jobId || resolvedJobId;
+            resolvedClientName = snapshot.clientName || resolvedClientName;
+            resolvedClientId = snapshot.clientId || resolvedClientId;
             newParsedFiles.push({ name: file.name, type: 'mbs', status: 'success', data: aiResult, buildingIndex: activeBuildingIdx });
-            toast.success(`AI extracted MBS: ${formatNumber(weight)} lbs @ $${costPerLb.toFixed(2)}/lb`);
+            toast.success(`AI extracted MBS: ${formatNumber(snapshot.weightLbs || 0)} lbs @ $${Number(snapshot.costPerLb || 0).toFixed(2)}/lb`);
           } else {
-            applyAIData(aiResult);
-            if (aiResult.weight && aiResult.total_cost) {
+            const snapshot = buildAdHocHistoricalSnapshot(aiResult, 'unknown', file.name);
+            applyHistoricalSnapshot(snapshot);
+            resolvedJobId = snapshot.jobId || resolvedJobId;
+            resolvedClientName = snapshot.clientName || resolvedClientName;
+            resolvedClientId = snapshot.clientId || resolvedClientId;
+            if (snapshot.weightLbs != null && snapshot.totalSupplierCost != null) {
               resolvedDocType = 'mbs';
-              setCostData({
-                steelWeightLbs: aiResult.weight,
-                supplierCostPerLb: aiResult.cost_per_lb || aiResult.total_cost / aiResult.weight,
-                totalSupplierCost: aiResult.total_cost,
-                accessories: (aiResult.components || []).map((c: any) => ({ name: c.name, weight: c.weight || 0, cost: c.cost || 0 })),
-              });
               newParsedFiles.push({ name: file.name, type: 'mbs', status: 'success', data: aiResult, buildingIndex: activeBuildingIdx });
               toast.success(`AI extracted data from ${file.name}`);
-            } else if (aiResult.insulation_total) {
+            } else if (snapshot.insulationTotal != null) {
               resolvedDocType = 'insulation';
-              set('insulationCost', String(aiResult.insulation_total));
               newParsedFiles.push({ name: file.name, type: 'insulation', status: 'success', data: aiResult, buildingIndex: activeBuildingIdx });
-              toast.success(`AI extracted insulation: ${formatCurrency(aiResult.insulation_total)}`);
+              toast.success(`AI extracted insulation: ${formatCurrency(snapshot.insulationTotal || 0)}`);
             } else {
               reviewStatus = 'needs_review';
               if (!parseError) parseError = 'AI could not extract useful data';
@@ -636,39 +650,33 @@ export default function InternalQuoteBuilder() {
         } else {
           // AI failed — try regex fallback
           const pages = fullText.split('\n');
-          if (isInsulationQuoteText(fullText)) {
+        if (isInsulationQuoteText(fullText)) {
+          extractionSource = 'regex';
+          resolvedDocType = 'insulation';
+          const parsedInsulation = parseSilvercoteQuotePages(pages);
+          const snapshot = buildAdHocHistoricalSnapshot((parsedInsulation || {}) as Record<string, unknown>, 'insulation', file.name);
+          applyHistoricalSnapshot(snapshot);
+          resolvedJobId = snapshot.jobId || resolvedJobId;
+          resolvedClientName = snapshot.clientName || resolvedClientName;
+          resolvedClientId = snapshot.clientId || resolvedClientId;
+          newParsedFiles.push({ name: file.name, type: 'insulation', status: 'success', data: parsedInsulation || { total: snapshot.insulationTotal || 0 }, buildingIndex: activeBuildingIdx });
+          toast.success(`Insulation (regex): ${formatCurrency(snapshot.insulationTotal || 0)}`);
+        } else {
+          const parsed = parseMbsQuotePages(pages);
+          if (parsed?.totalWeightLb && parsed.totalWeightLb > 0) {
             extractionSource = 'regex';
-            resolvedDocType = 'insulation';
-            const parsedInsulation = parseSilvercoteQuotePages(pages);
-            const insulationTotal = parsedInsulation?.totalCost || 0;
-            set('insulationCost', String(insulationTotal));
-            if (parsedInsulation?.grade) set('insulationGrade', parsedInsulation.grade);
-            newParsedFiles.push({ name: file.name, type: 'insulation', status: 'success', data: parsedInsulation || { total: insulationTotal }, buildingIndex: activeBuildingIdx });
-            toast.success(`Insulation (regex): ${formatCurrency(insulationTotal)}`);
+            resolvedDocType = 'mbs';
+            const snapshot = buildAdHocHistoricalSnapshot(parsed as unknown as Record<string, unknown>, 'mbs', file.name);
+            applyHistoricalSnapshot(snapshot);
+            resolvedJobId = snapshot.jobId || resolvedJobId;
+            resolvedClientName = snapshot.clientName || resolvedClientName;
+            resolvedClientId = snapshot.clientId || resolvedClientId;
+            if (parsed.leftEaveHeightFt) setLeftEaveHeight(String(parsed.leftEaveHeightFt));
+            if (parsed.rightEaveHeightFt) setRightEaveHeight(String(parsed.rightEaveHeightFt));
+            if (parsed.isSingleSlope) setSingleSlope(true);
+            newParsedFiles.push({ name: file.name, type: 'mbs', status: 'success', data: parsed, buildingIndex: activeBuildingIdx });
+            toast.success(`MBS (regex): ${formatNumber(snapshot.weightLbs || 0)} lbs`);
           } else {
-            const parsed = parseMbsQuotePages(pages);
-            if (parsed?.totalWeightLb && parsed.totalWeightLb > 0) {
-              extractionSource = 'regex';
-              resolvedDocType = 'mbs';
-              if (parsed.widthFt) set('width', String(parsed.widthFt));
-              if (parsed.lengthFt) set('length', String(parsed.lengthFt));
-              if (parsed.eaveHeightFt) set('height', String(parsed.eaveHeightFt));
-              if (parsed.leftEaveHeightFt) setLeftEaveHeight(String(parsed.leftEaveHeightFt));
-              if (parsed.rightEaveHeightFt) setRightEaveHeight(String(parsed.rightEaveHeightFt));
-              if (parsed.isSingleSlope) setSingleSlope(true);
-              if (parsed.roofSlope) set('pitch', String(parsed.roofSlope));
-              if (parsed.clientName) set('clientName', parsed.clientName);
-              if (parsed.clientId) set('clientId', parsed.clientId);
-              if (parsed.projectId) handleJobIdChange(parsed.projectId);
-              setCostData({
-                steelWeightLbs: parsed.totalWeightLb,
-                supplierCostPerLb: parsed.pricePerLb || (parsed.totalWeightLb && parsed.totalCost ? parsed.totalCost / parsed.totalWeightLb : 0),
-                totalSupplierCost: parsed.totalCost || 0,
-                accessories: parsed.components.map(component => ({ name: component.name, weight: component.weight || 0, cost: component.cost })),
-              });
-              newParsedFiles.push({ name: file.name, type: 'mbs', status: 'success', data: parsed, buildingIndex: activeBuildingIdx });
-              toast.success(`MBS (regex): ${formatNumber(parsed.totalWeightLb)} lbs`);
-            } else {
               reviewStatus = 'needs_review';
               if (!parseError) parseError = 'Neither AI nor regex could extract data';
               newParsedFiles.push({ name: file.name, type: 'unknown', status: 'failed', buildingIndex: activeBuildingIdx });
@@ -710,10 +718,10 @@ export default function InternalQuoteBuilder() {
                 weightLbs: extractedData.weight || extractedData.steelWeightLbs || 0,
                 costPerLb: extractedData.cost_per_lb || extractedData.costPerLb || extractedData.supplierCostPerLb || 0,
                 totalCost: extractedData.total_cost || extractedData.totalCost || extractedData.totalSupplierCost || 0,
-                width: extractedData.width || (form.width ? parseFloat(form.width) : undefined),
-                length: extractedData.length || (form.length ? parseFloat(form.length) : undefined),
-                height: extractedData.height || (form.height ? parseFloat(form.height) : undefined),
-                roofPitch: extractedData.roof_pitch || extractedData.pPitch || undefined,
+                width: extractedData.width || extractedData.widthFt || (form.width ? parseFloat(form.width) : undefined),
+                length: extractedData.length || extractedData.lengthFt || (form.length ? parseFloat(form.length) : undefined),
+                height: extractedData.height || extractedData.heightFt || extractedData.eaveHeightFt || (form.height ? parseFloat(form.height) : undefined),
+                roofPitch: extractedData.roof_pitch || extractedData.roofSlope || extractedData.pPitch || undefined,
                 province: extractedData.province || form.province || undefined,
                 city: extractedData.city || form.city || undefined,
                 components: extractedData.components || extractedData.accessories || [],
@@ -1282,7 +1290,7 @@ export default function InternalQuoteBuilder() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label className="text-xs">Job ID</Label>
-                <JobIdSelect value={form.jobId} onValueChange={handleJobIdChange} deals={deals} allowedStates={['rfq', 'internal_quote']} placeholder="Auto / type to search" triggerTestId="internal-quote-job-id" />
+                <JobIdSelect value={form.jobId} onValueChange={handleJobIdChange} allowedStates={['rfq', 'internal_quote']} placeholder="Auto / type to search" triggerTestId="internal-quote-job-id" />
               </div>
               <div>
                 <Label className="text-xs">Job Name</Label>

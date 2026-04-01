@@ -47,10 +47,11 @@ export function JobIdSelect({
 }: JobIdSelectProps) {
   const [open, setOpen] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const shouldLimitToDeals = !allowedStates?.length || allowedStates.every(state => state === 'deal');
 
   const limitToJobIds = useMemo(
-    () => deals?.map(deal => deal.jobId).filter(Boolean),
-    [deals],
+    () => shouldLimitToDeals ? deals?.map(deal => deal.jobId).filter(Boolean) : undefined,
+    [deals, shouldLimitToDeals],
   );
 
   const { allJobs, visibleJobs } = useSharedJobs({ allowedStates, limitToJobIds });
