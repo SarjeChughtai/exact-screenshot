@@ -178,7 +178,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
 
     return Array.from(productionByJobId.values());
-  }, [buildAuthoritativeProductionState, state.rfqs]);
+  }, []);
 
   const ensureManualPersonnelEntry = useCallback(async (name: string, roles: PersonnelRole[]) => {
     const trimmedName = name.trim();
