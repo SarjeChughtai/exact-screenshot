@@ -46,6 +46,10 @@ import {
   buildOpportunityFromDeal,
   buildOpportunityFromQuote,
 } from '@/lib/opportunities';
+import {
+  buildProductionShadowRecord,
+  deriveDealProductionStatusFromRecord,
+} from '@/lib/productionLifecycle';
 
 interface AppState {
   quotes: Quote[];
@@ -520,6 +524,41 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } catch {}
   }, [currentUser?.id, state.dealMilestones]);
 
+  const syncProductionShadow = useCallback(async (
+    input: Pick<Deal, 'jobId' | 'productionStatus' | 'insulationStatus'>,
+  ) => {
+    const shadowRecord = buildProductionShadowRecord(input);
+
+    setState(prev => ({
+      ...prev,
+      production: [
+        ...prev.production.filter(record => record.jobId !== shadowRecord.jobId),
+        shadowRecord,
+      ],
+    }));
+
+    try {
+      const { data } = await supabase
+        .from('production')
+        .upsert(productionToRow(shadowRecord) as any, { onConflict: 'job_id' })
+        .select()
+        .single();
+
+      if (data) {
+        const mapped = productionFromRow(data);
+        setState(prev => ({
+          ...prev,
+          production: [
+            ...prev.production.filter(record => record.jobId !== mapped.jobId),
+            mapped,
+          ],
+        }));
+      }
+    } catch {}
+
+    return shadowRecord;
+  }, []);
+
   // --- Quotes ---
   const addQuote = useCallback(async (q: Quote) => {
     const opportunity = await upsertOpportunityRecord(q, 'quote');
@@ -666,12 +705,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const row = dealToRow(nextDeal);
       await supabase.from('deals').insert(row as any).select().single();
     } catch {}
+    void syncProductionShadow(nextDeal);
     // Upsert client record with the new job ID
     if (nextDeal.clientName || nextDeal.clientId) {
       const cId = nextDeal.clientId || `C-${Date.now().toString(36).toUpperCase()}`;
       await upsertClientJob(cId, nextDeal.clientName, nextDeal.jobId);
     }
-  }, [currentUser, upsertClientJob, upsertOpportunityRecord]);
+  }, [currentUser, syncProductionShadow, upsertClientJob, upsertOpportunityRecord]);
 
   const updateDeal = useCallback(async (jobId: string, updates: Partial<Deal>) => {
     const existingDeal = state.deals.find(d => d.jobId === jobId);
@@ -686,12 +726,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
     if (nextDeal) {
       void upsertOpportunityRecord(nextDeal, 'deal');
+      void syncProductionShadow(nextDeal);
     }
     try {
       const row = dealToRow(updates);
       await supabase.from('deals').update(row as any).eq('job_id', jobId);
     } catch {}
-  }, [currentUser, state.deals, upsertOpportunityRecord]);
+  }, [currentUser, state.deals, syncProductionShadow, upsertOpportunityRecord]);
 
   const deleteDeal = useCallback(async (jobId: string) => {
     setState(prev => {
@@ -701,10 +742,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         ...prev,
         deals: prev.deals.filter(d => d.jobId !== jobId),
         dealMilestones: prev.dealMilestones.filter(milestone => milestone.jobId !== jobId),
+        production: prev.production.filter(record => record.jobId !== jobId),
       };
     });
     try {
       await supabase.from('deals').delete().eq('job_id', jobId);
+      await supabase.from('production').delete().eq('job_id', jobId);
     } catch {}
   }, [currentUser]);
 
@@ -825,26 +868,56 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // --- Production ---
   const addProduction = useCallback(async (pr: ProductionRecord) => {
-    setState(prev => ({ ...prev, production: [...prev.production, pr] }));
+    const nextStatus = deriveDealProductionStatusFromRecord(pr);
+    setState(prev => ({
+      ...prev,
+      production: [...prev.production.filter(record => record.jobId !== pr.jobId), pr],
+      deals: prev.deals.map(deal => deal.jobId === pr.jobId ? {
+        ...deal,
+        productionStatus: nextStatus,
+        insulationStatus: pr.insulationStatus || deal.insulationStatus,
+      } : deal),
+    }));
     logAudit(currentUser?.name || 'System', 'CREATE', 'Production', pr.jobId, pr);
     try {
       const row = productionToRow(pr);
-      await supabase.from('production').insert(row as any).select().single();
+      await supabase.from('production').upsert(row as any, { onConflict: 'job_id' }).select().single();
+      await supabase.from('deals').update({
+        production_status: nextStatus,
+        insulation_status: pr.insulationStatus || '',
+      } as any).eq('job_id', pr.jobId);
     } catch {}
   }, [currentUser]);
 
   const updateProduction = useCallback(async (jobId: string, updates: Partial<ProductionRecord>) => {
+    let nextRecord: ProductionRecord | null = null;
+    let nextStatus: ReturnType<typeof deriveDealProductionStatusFromRecord> = 'Submitted';
     setState(prev => {
       const existing = prev.production.find(p => p.jobId === jobId);
       if (existing) logAudit(currentUser?.name || 'System', 'UPDATE', 'Production', jobId, updates, existing);
+      nextRecord = existing ? { ...existing, ...updates } : null;
+      if (nextRecord) {
+        nextStatus = deriveDealProductionStatusFromRecord(nextRecord);
+      }
       return {
         ...prev,
         production: prev.production.map(p => p.jobId === jobId ? { ...p, ...updates } : p),
+        deals: prev.deals.map(deal => deal.jobId === jobId && nextRecord ? {
+          ...deal,
+          productionStatus: nextStatus,
+          insulationStatus: nextRecord.insulationStatus || deal.insulationStatus,
+        } : deal),
       };
     });
     try {
       const row = productionToRow(updates);
       await supabase.from('production').update(row as any).eq('job_id', jobId);
+      if (nextRecord) {
+        await supabase.from('deals').update({
+          production_status: nextStatus,
+          insulation_status: nextRecord.insulationStatus || '',
+        } as any).eq('job_id', jobId);
+      }
     } catch {}
   }, [currentUser]);
 

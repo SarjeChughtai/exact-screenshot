@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useAppContext } from '@/context/AppContext';
 import { useSettings } from '@/context/SettingsContext';
 import { formatNumber } from '@/lib/calculations';
@@ -6,6 +7,8 @@ import { useRoles } from '@/context/RoleContext';
 import { useSharedJobs } from '@/lib/sharedJobs';
 import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { getProductionProgressPct, normalizeProductionStage } from '@/lib/productionLifecycle';
+import { isDealFreightReady } from '@/lib/opportunities';
 
 function derivePaymentStage(count: number, stages: string[]) {
   if (!count || stages.length === 0) return '';
@@ -13,28 +16,41 @@ function derivePaymentStage(count: number, stages: string[]) {
 }
 
 export default function ProductionStatus() {
-  const { deals, updateDeal, payments } = useAppContext();
+  const { deals, dealMilestones, updateDeal, payments } = useAppContext();
   const { settings } = useSettings();
   const { hasAnyRole } = useRoles();
   const { visibleJobIds } = useSharedJobs({ allowedStates: ['deal'] });
   const canEdit = hasAnyRole('admin', 'owner', 'operations');
 
-  const activeDeals = deals.filter(deal =>
-    visibleJobIds.has(deal.jobId) && !['Cancelled', 'Lead', 'Quoted'].includes(deal.dealStatus),
-  );
+  const activeDeals = useMemo(() => {
+    return deals.filter(deal =>
+      visibleJobIds.has(deal.jobId) && !['Cancelled', 'Lead', 'Quoted'].includes(deal.dealStatus),
+    );
+  }, [deals, visibleJobIds]);
 
-  const getProgressPct = (status: string) => {
-    const idx = settings.productionStatuses.indexOf(status);
-    if (idx < 0) return 0;
-    return Math.round(((idx + 1) / settings.productionStatuses.length) * 100);
-  };
+  const summary = useMemo(() => {
+    const freightReady = activeDeals.filter(deal =>
+      isDealFreightReady(dealMilestones.filter(item => item.jobId === deal.jobId)),
+    ).length;
+    const delivered = activeDeals.filter(deal => normalizeProductionStage(deal.productionStatus) === 'Delivered').length;
+    const inProduction = activeDeals.filter(deal => normalizeProductionStage(deal.productionStatus) === 'In Production').length;
+
+    return {
+      total: activeDeals.length,
+      freightReady,
+      delivered,
+      inProduction,
+    };
+  }, [activeDeals, dealMilestones]);
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-foreground">Production Status</h2>
-          <p className="text-sm text-muted-foreground mt-1">Persistent production tracking with manual payment-stage overrides.</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            Live production state is driven from the deal record. Legacy production rows are treated as a shadow mirror only.
+          </p>
         </div>
         {canEdit && (
           <a href="/deals" className="inline-flex items-center gap-1 text-sm text-primary hover:underline">
@@ -43,20 +59,41 @@ export default function ProductionStatus() {
         )}
       </div>
 
+      <div className="grid gap-4 md:grid-cols-4">
+        <div className="rounded-lg border bg-card p-4">
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">Active Jobs</p>
+          <p className="mt-2 text-2xl font-semibold">{summary.total}</p>
+        </div>
+        <div className="rounded-lg border bg-card p-4">
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">In Production</p>
+          <p className="mt-2 text-2xl font-semibold">{summary.inProduction}</p>
+        </div>
+        <div className="rounded-lg border bg-card p-4">
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">Freight Ready</p>
+          <p className="mt-2 text-2xl font-semibold">{summary.freightReady}</p>
+        </div>
+        <div className="rounded-lg border bg-card p-4">
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">Delivered</p>
+          <p className="mt-2 text-2xl font-semibold">{summary.delivered}</p>
+        </div>
+      </div>
+
       <div className="bg-card border rounded-lg overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-primary text-primary-foreground text-xs">
-              {['Job ID', 'Client', 'Building', 'Production', 'Insulation', 'Freight', 'CX Payment', 'Factory Payment', 'Progress'].map(header => (
+              {['Job ID', 'Client', 'Building', 'Production', 'Insulation', 'Freight', 'Freight Ready', 'CX Payment', 'Factory Payment', 'Progress'].map(header => (
                 <th key={header} className="px-3 py-2 text-left font-medium whitespace-nowrap">{header}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {activeDeals.length === 0 ? (
-              <tr><td colSpan={9} className="px-3 py-8 text-center text-muted-foreground">No active production</td></tr>
+              <tr><td colSpan={10} className="px-3 py-8 text-center text-muted-foreground">No active production</td></tr>
             ) : activeDeals.map(deal => {
-              const progress = getProgressPct(deal.productionStatus);
+              const progress = getProductionProgressPct(deal.productionStatus, settings.productionStatuses);
+              const milestonesForJob = dealMilestones.filter(item => item.jobId === deal.jobId);
+              const freightReady = isDealFreightReady(milestonesForJob);
               const clientPaymentCount = payments.filter(payment => payment.jobId === deal.jobId && payment.direction === 'Client Payment IN').length;
               const factoryPaymentCount = payments.filter(payment => payment.jobId === deal.jobId && payment.direction === 'Vendor Payment OUT').length;
               const clientStage = deal.cxPaymentStageOverride || derivePaymentStage(clientPaymentCount, settings.clientPaymentStatuses);
@@ -90,6 +127,11 @@ export default function ProductionStatus() {
                         <SelectContent>{settings.freightStatuses.map(status => <SelectItem key={status} value={status}>{status}</SelectItem>)}</SelectContent>
                       </Select>
                     ) : <span className="text-xs">{deal.freightStatus}</span>}
+                  </td>
+                  <td className="px-3 py-2">
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${freightReady ? 'status-paid' : 'status-partial'}`}>
+                      {freightReady ? 'Ready' : 'Blocked'}
+                    </span>
                   </td>
                   <td className="px-3 py-2">
                     {canEdit ? (

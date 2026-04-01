@@ -58,6 +58,7 @@ export default function MasterDeals() {
   const canEdit = hasAnyRole('admin', 'owner', 'operations');
   const isAdminOwner = hasAnyRole('admin', 'owner');
   const isSalesRep = !hasAnyRole('admin', 'owner', 'accounting', 'operations', 'freight');
+  const canManageFreightWorkflow = hasAnyRole('admin', 'owner', 'operations', 'freight');
 
   const visibleDeals = deals.filter(deal =>
     visibleJobIds.has(deal.jobId) && stateByJobId[deal.jobId] === 'deal',
@@ -419,6 +420,16 @@ export default function MasterDeals() {
                         </div>
                         <div className="mt-3">
                           <div className="mb-3 flex justify-end">
+                            {canManageFreightWorkflow && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="mr-2"
+                                onClick={() => navigate(`/freight?freightMode=execution&freightJobId=${encodeURIComponent(d.jobId)}`)}
+                              >
+                                Open Freight Posting
+                              </Button>
+                            )}
                             <Button
                               size="sm"
                               variant="outline"

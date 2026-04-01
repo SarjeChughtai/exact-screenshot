@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Edit, Plus, Truck } from 'lucide-react';
 import { toast } from 'sonner';
+import { useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -62,6 +63,7 @@ export default function FreightBoard() {
     addFreight,
     updateFreight,
   } = useAppContext();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { currentUser, hasAnyRole } = useRoles();
   const { profile } = useSettings();
   const { visibleJobIds: executionVisibleJobIds } = useSharedJobs({ allowedStates: ['deal'] });
@@ -247,6 +249,39 @@ export default function FreightBoard() {
       assignToCurrentUser: existing ? existing.assignedFreightUserId === currentUser.id : current.assignToCurrentUser,
     }));
   };
+
+  useEffect(() => {
+    const freightMode = searchParams.get('freightMode');
+    const freightJobId = searchParams.get('freightJobId');
+    if (!freightMode && !freightJobId) return;
+
+    const nextMode: FreightMode = freightMode === 'execution' ? 'execution' : 'pre_sale';
+    const existing = freightJobId ? freightByJobId[freightJobId] : undefined;
+    const source = freightJobId ? jobSourceById[freightJobId] : undefined;
+    const resolvedLocation = [source?.address, source?.city, source?.province, source?.postalCode].filter(Boolean).join(', ');
+
+    setEditingJobId(existing?.jobId || null);
+    setForm({
+      jobId: freightJobId || '',
+      mode: existing?.mode || nextMode,
+      carrier: existing?.carrier || '',
+      status: existing?.status || 'Pending',
+      pickupDate: existing?.pickupDate || '',
+      deliveryDate: existing?.deliveryDate || '',
+      dropOffLocation: existing?.dropOffLocation || existing?.deliveryAddress || resolvedLocation,
+      estDistance: existing?.estDistance ? String(existing.estDistance) : '',
+      estFreight: existing?.estFreight ? String(existing.estFreight) : '',
+      actualFreight: existing?.actualFreight ? String(existing.actualFreight) : '',
+      paid: existing?.paid || false,
+      assignToCurrentUser: existing ? existing.assignedFreightUserId === currentUser.id : hasAnyRole('freight') || nextMode === 'execution',
+    });
+    setDialogOpen(true);
+
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('freightMode');
+    nextParams.delete('freightJobId');
+    setSearchParams(nextParams, { replace: true });
+  }, [currentUser.id, freightByJobId, hasAnyRole, jobSourceById, searchParams, setSearchParams]);
 
   const handleSaveFreight = async () => {
     if (!form.jobId) {

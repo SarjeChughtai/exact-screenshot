@@ -53,6 +53,7 @@ export function DocumentLogTable({
   const [showTrash, setShowTrash] = useState(false);
   const [filesByDocumentId, setFilesByDocumentId] = useState<Record<string, QuoteFileRecord[]>>({});
   const canManageOpportunityStatus = hasAnyRole('admin', 'owner', 'operations', 'sales_rep');
+  const canManageFreightWorkflow = hasAnyRole('admin', 'owner', 'operations', 'freight');
 
   const expectedStateByType: Record<DocumentType, SharedJobState> = {
     rfq: 'rfq',
@@ -335,6 +336,16 @@ export function DocumentLogTable({
                           Convert to Deal
                         </Button>
                       )
+                    )}
+                    {quote.documentType === 'external_quote' && !existingDeal && canManageFreightWorkflow && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 px-2 text-xs"
+                        onClick={() => navigate(`/freight?freightMode=pre_sale&freightJobId=${encodeURIComponent(quote.jobId)}`)}
+                      >
+                        Pre-Sale Freight
+                      </Button>
                     )}
                     {quote.documentType === 'internal_quote' && (
                       <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => navigate(`/quote-builder?sourceDocumentId=${quote.id}`)}>
