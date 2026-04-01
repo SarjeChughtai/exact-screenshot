@@ -9,6 +9,7 @@ import type {
   DocumentType,
   FreightRecord,
   InsulationCostDataRecord,
+  PaymentEntry,
   Quote,
   SharedJobRecord,
   SharedJobState,
@@ -85,6 +86,7 @@ export function buildSharedJobRecords({
   quotes,
   deals,
   freight,
+  payments,
   steelCostData,
   insulationCostData,
   storedDocuments,
@@ -93,6 +95,7 @@ export function buildSharedJobRecords({
   quotes: Quote[];
   deals: Deal[];
   freight: FreightRecord[];
+  payments: PaymentEntry[];
   steelCostData: SteelCostDataRecord[];
   insulationCostData: InsulationCostDataRecord[];
   storedDocuments: StoredDocument[];
@@ -143,6 +146,15 @@ export function buildSharedJobRecords({
     const record = ensureRecord(records, jobId);
     record.clientName = record.clientName || freightRecord.clientName || '';
     record.assignedFreightUserId = record.assignedFreightUserId || freightRecord.assignedFreightUserId || null;
+  }
+
+  for (const payment of payments) {
+    const jobId = resolveCanonicalJobId(payment.jobId);
+    if (!jobId) continue;
+
+    const record = ensureRecord(records, jobId);
+    record.clientName = record.clientName || payment.clientVendorName || '';
+    setStateIfHigher(record, 'estimate');
   }
 
   const mergeWarehouseJob = (
@@ -370,12 +382,12 @@ function mergeSharedJobRecordCollections(...collections: SharedJobRecord[][]): S
 }
 
 export function useSharedJobs(options?: { allowedStates?: SharedJobState[]; limitToJobIds?: string[] }) {
-  const { quotes, deals, freight, steelCostData, insulationCostData, storedDocuments, clients } = useAppContext();
+  const { quotes, deals, freight, payments, steelCostData, insulationCostData, storedDocuments, clients } = useAppContext();
   const { currentUser } = useRoles();
 
   const localAllJobs = useMemo(
-    () => buildSharedJobRecords({ quotes, deals, freight, steelCostData, insulationCostData, storedDocuments, clients }),
-    [clients, deals, freight, insulationCostData, quotes, steelCostData, storedDocuments],
+    () => buildSharedJobRecords({ quotes, deals, freight, payments, steelCostData, insulationCostData, storedDocuments, clients }),
+    [clients, deals, freight, payments, insulationCostData, quotes, steelCostData, storedDocuments],
   );
 
   const visibleJobsQuery = useQuery({

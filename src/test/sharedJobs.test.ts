@@ -8,6 +8,7 @@ describe('shared job registry', () => {
       quotes: [],
       deals: [],
       freight: [],
+      payments: [],
       clients: [],
       steelCostData: [
         {
@@ -54,6 +55,7 @@ describe('shared job registry', () => {
       quotes: [],
       deals: [],
       freight: [],
+      payments: [],
       clients: [
         {
           id: 'client-1',
@@ -81,5 +83,42 @@ describe('shared job registry', () => {
     expect(records.map(record => record.jobId)).toEqual(expect.arrayContaining(['C26-1008', 'C26_1009']));
     expect(records.find(record => record.jobId === 'C26-1008')?.clientName).toBe('Client Registry');
     expect(records.find(record => record.jobId === 'C26_1009')?.state).toBe('estimate');
+  });
+
+  it('includes jobs that only exist in payment ledger entries', () => {
+    const records = buildSharedJobRecords({
+      quotes: [],
+      deals: [],
+      freight: [],
+      payments: [
+        {
+          id: 'payment-1',
+          date: '2026-04-01',
+          jobId: 'PAY - 100',
+          clientVendorName: 'North Farm',
+          direction: 'Client Payment IN',
+          type: 'Deposit',
+          amountExclTax: 1000,
+          province: 'ON',
+          taxRate: 0.13,
+          taxAmount: 130,
+          totalInclTax: 1130,
+          taxOverride: false,
+          paymentMethod: 'EFT',
+          referenceNumber: 'ABC',
+          qbSynced: false,
+          notes: '',
+        },
+      ],
+      clients: [],
+      steelCostData: [],
+      insulationCostData: [],
+      storedDocuments: [],
+    });
+
+    expect(records.find(record => record.jobId === 'PAY-100')).toMatchObject({
+      clientName: 'North Farm',
+      state: 'estimate',
+    });
   });
 });

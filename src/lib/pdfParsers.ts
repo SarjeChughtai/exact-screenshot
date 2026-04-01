@@ -1,4 +1,4 @@
-import * as pdfjsLib from 'pdfjs-dist';
+import { loadPdfJs } from '@/lib/documentDependencyLoaders';
 
 export const COST_PARSER_VERSION = '2026-03-31';
 
@@ -103,11 +103,7 @@ function matchText(text: string, pattern: RegExp): string | null {
 }
 
 export async function extractTextFromPdf(file: File): Promise<string[]> {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-    'pdfjs-dist/build/pdf.worker.mjs',
-    import.meta.url,
-  ).toString();
-
+  const pdfjsLib = await loadPdfJs();
   const arrayBuffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
   const pages: string[] = [];

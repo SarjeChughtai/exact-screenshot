@@ -1,3 +1,5 @@
+import { loadPdfJs, loadXlsxJsStyle } from '@/lib/documentDependencyLoaders';
+
 export interface CostLineItem {
   description: string;
   category: string;
@@ -166,13 +168,7 @@ export async function processDocumentWithAI(
 }
 
 export async function extractTextFromPDF(file: File): Promise<string> {
-  const pdfjsLib = await import('pdfjs-dist');
-
-  // Use the bundled worker
-  pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-    'pdfjs-dist/build/pdf.worker.mjs',
-    import.meta.url
-  ).toString();
+  const pdfjsLib = await loadPdfJs();
 
   const arrayBuffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
@@ -195,7 +191,7 @@ export async function extractTextFromCSV(file: File): Promise<string> {
 }
 
 export async function extractTextFromXLSX(file: File): Promise<string> {
-  const XLSX = await import('xlsx-js-style');
+  const XLSX = await loadXlsxJsStyle();
   const arrayBuffer = await file.arrayBuffer();
   const workbook = XLSX.read(arrayBuffer, { type: 'array' });
 

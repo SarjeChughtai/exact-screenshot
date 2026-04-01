@@ -1,3 +1,4 @@
+import { Suspense, lazy } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { SpeedInsights } from "@vercel/speed-insights/react";
@@ -13,44 +14,45 @@ import { MessagesProvider } from "@/context/MessagesContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import ModuleRoute from "@/components/ModuleRoute";
 import Layout from "@/components/Layout";
-import Auth from "@/pages/Auth";
-import ResetPassword from "@/pages/ResetPassword";
-import PendingApproval from "@/pages/PendingApproval";
-import Dashboard from "@/pages/Dashboard";
-import QuickEstimator from "@/pages/QuickEstimator";
-import QuoteBuilder from "@/pages/QuoteBuilder";
-import InternalQuoteBuilder from "@/pages/InternalQuoteBuilder";
-import InternalQuoteLog from "@/pages/InternalQuoteLog";
-import QuoteLog from "@/pages/QuoteLog";
-import EstimatesLog from "@/pages/EstimatesLog";
-import Opportunities from "@/pages/Opportunities";
-import MasterDeals from "@/pages/MasterDeals";
-import InternalCosts from "@/pages/InternalCosts";
-import ProjectedFinancials from "@/pages/ProjectedFinancials";
-import PaymentLedger from "@/pages/PaymentLedger";
-import ClientPayments from "@/pages/ClientPayments";
-import VendorPayments from "@/pages/VendorPayments";
-import DealPL from "@/pages/DealPL";
-import MonthlyHST from "@/pages/MonthlyHST";
-import FreightBoard from "@/pages/FreightBoard";
-import RFQWorkflow from "@/pages/RFQWorkflow";
-import QuoteRFQ from "@/pages/QuoteRFQ";
-import ProductionStatus from "@/pages/ProductionStatus";
-import CommissionProfit from "@/pages/CommissionProfit";
-import CommissionStatement from "@/pages/CommissionStatement";
-import AuditLog from "@/pages/AuditLog";
-import Settings from "@/pages/Settings";
-import DealerRFQ from "@/pages/DealerRFQ";
-import DealerLog from "@/pages/DealerLog";
-import DraftLog from "@/pages/DraftLog";
-import MasterData from "@/pages/MasterData";
-import Clients from "@/pages/Clients";
-import Vendors from "@/pages/Vendors";
-import VendorQuoteBoard from "@/pages/VendorQuoteBoard";
-import ImportReview from "@/pages/ImportReview";
-import CostData from "@/pages/CostData";
-import Messages from "@/pages/Messages";
-import NotFound from "@/pages/NotFound";
+
+const Auth = lazy(() => import("@/pages/Auth"));
+const ResetPassword = lazy(() => import("@/pages/ResetPassword"));
+const PendingApproval = lazy(() => import("@/pages/PendingApproval"));
+const Dashboard = lazy(() => import("@/pages/Dashboard"));
+const QuickEstimator = lazy(() => import("@/pages/QuickEstimator"));
+const QuoteBuilder = lazy(() => import("@/pages/QuoteBuilder"));
+const InternalQuoteBuilder = lazy(() => import("@/pages/InternalQuoteBuilder"));
+const InternalQuoteLog = lazy(() => import("@/pages/InternalQuoteLog"));
+const QuoteLog = lazy(() => import("@/pages/QuoteLog"));
+const EstimatesLog = lazy(() => import("@/pages/EstimatesLog"));
+const Opportunities = lazy(() => import("@/pages/Opportunities"));
+const MasterDeals = lazy(() => import("@/pages/MasterDeals"));
+const InternalCosts = lazy(() => import("@/pages/InternalCosts"));
+const ProjectedFinancials = lazy(() => import("@/pages/ProjectedFinancials"));
+const PaymentLedger = lazy(() => import("@/pages/PaymentLedger"));
+const ClientPayments = lazy(() => import("@/pages/ClientPayments"));
+const VendorPayments = lazy(() => import("@/pages/VendorPayments"));
+const DealPL = lazy(() => import("@/pages/DealPL"));
+const MonthlyHST = lazy(() => import("@/pages/MonthlyHST"));
+const FreightBoard = lazy(() => import("@/pages/FreightBoard"));
+const RFQWorkflow = lazy(() => import("@/pages/RFQWorkflow"));
+const QuoteRFQ = lazy(() => import("@/pages/QuoteRFQ"));
+const ProductionStatus = lazy(() => import("@/pages/ProductionStatus"));
+const CommissionProfit = lazy(() => import("@/pages/CommissionProfit"));
+const CommissionStatement = lazy(() => import("@/pages/CommissionStatement"));
+const AuditLog = lazy(() => import("@/pages/AuditLog"));
+const Settings = lazy(() => import("@/pages/Settings"));
+const DealerRFQ = lazy(() => import("@/pages/DealerRFQ"));
+const DealerLog = lazy(() => import("@/pages/DealerLog"));
+const DraftLog = lazy(() => import("@/pages/DraftLog"));
+const MasterData = lazy(() => import("@/pages/MasterData"));
+const Clients = lazy(() => import("@/pages/Clients"));
+const Vendors = lazy(() => import("@/pages/Vendors"));
+const VendorQuoteBoard = lazy(() => import("@/pages/VendorQuoteBoard"));
+const ImportReview = lazy(() => import("@/pages/ImportReview"));
+const CostData = lazy(() => import("@/pages/CostData"));
+const Messages = lazy(() => import("@/pages/Messages"));
+const NotFound = lazy(() => import("@/pages/NotFound"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -61,7 +63,15 @@ const queryClient = new QueryClient({
 });
 
 const withModule = (module: string, element: React.ReactNode) => (
-  <ModuleRoute module={module}>{element}</ModuleRoute>
+  <ModuleRoute module={module}>
+    <Suspense fallback={<RouteLoading />}>{element}</Suspense>
+  </ModuleRoute>
+);
+
+const RouteLoading = () => (
+  <div className="flex min-h-[40vh] items-center justify-center text-sm text-muted-foreground">
+    Loading...
+  </div>
 );
 
 const App = () => (
@@ -78,9 +88,9 @@ const App = () => (
               <SpeedInsights />
               <BrowserRouter>
                 <Routes>
-                  <Route path="/auth" element={<Auth />} />
-                  <Route path="/reset-password" element={<ResetPassword />} />
-                  <Route path="/pending" element={<PendingApproval />} />
+                  <Route path="/auth" element={<Suspense fallback={<RouteLoading />}><Auth /></Suspense>} />
+                  <Route path="/reset-password" element={<Suspense fallback={<RouteLoading />}><ResetPassword /></Suspense>} />
+                  <Route path="/pending" element={<Suspense fallback={<RouteLoading />}><PendingApproval /></Suspense>} />
                   <Route path="*" element={
                     <ProtectedRoute>
                       <Layout>
