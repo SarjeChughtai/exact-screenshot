@@ -9,6 +9,7 @@ import type {
   DocumentType,
   FreightRecord,
   InsulationCostDataRecord,
+  JobProfile,
   PaymentEntry,
   Quote,
   SharedJobRecord,
@@ -90,6 +91,7 @@ export function buildSharedJobRecords({
   steelCostData,
   insulationCostData,
   storedDocuments,
+  jobProfiles = [],
   clients = [],
 }: {
   quotes: Quote[];
@@ -99,6 +101,7 @@ export function buildSharedJobRecords({
   steelCostData: SteelCostDataRecord[];
   insulationCostData: InsulationCostDataRecord[];
   storedDocuments: StoredDocument[];
+  jobProfiles?: JobProfile[];
   clients?: Client[];
 }): SharedJobRecord[] {
   const records = new Map<string, SharedJobRecord>();
@@ -154,6 +157,18 @@ export function buildSharedJobRecords({
 
     const record = ensureRecord(records, jobId);
     record.clientName = record.clientName || payment.clientVendorName || '';
+    setStateIfHigher(record, 'estimate');
+  }
+
+  for (const profile of jobProfiles) {
+    const jobId = resolveCanonicalJobId(profile.jobId);
+    if (!jobId) continue;
+
+    const record = ensureRecord(records, jobId);
+    record.clientName = record.clientName || profile.clientName || '';
+    record.jobName = record.jobName || profile.jobName || '';
+    record.salesRep = record.salesRep || profile.salesRep || '';
+    record.estimator = record.estimator || profile.estimator || '';
     setStateIfHigher(record, 'estimate');
   }
 
@@ -382,12 +397,12 @@ function mergeSharedJobRecordCollections(...collections: SharedJobRecord[][]): S
 }
 
 export function useSharedJobs(options?: { allowedStates?: SharedJobState[]; limitToJobIds?: string[] }) {
-  const { quotes, deals, freight, payments, steelCostData, insulationCostData, storedDocuments, clients } = useAppContext();
+  const { quotes, deals, freight, payments, steelCostData, insulationCostData, storedDocuments, jobProfiles, clients } = useAppContext();
   const { currentUser } = useRoles();
 
   const localAllJobs = useMemo(
-    () => buildSharedJobRecords({ quotes, deals, freight, payments, steelCostData, insulationCostData, storedDocuments, clients }),
-    [clients, deals, freight, payments, insulationCostData, quotes, steelCostData, storedDocuments],
+    () => buildSharedJobRecords({ quotes, deals, freight, payments, steelCostData, insulationCostData, storedDocuments, jobProfiles, clients }),
+    [clients, deals, freight, jobProfiles, payments, insulationCostData, quotes, steelCostData, storedDocuments],
   );
 
   const visibleJobsQuery = useQuery({

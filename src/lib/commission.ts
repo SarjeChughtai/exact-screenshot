@@ -1,7 +1,9 @@
 import type {
+  CommissionBasis,
   CommissionPayout,
   CommissionPayoutStage,
-  CommissionRecipientRole,
+  CommissionRecipientSetting,
+  CommissionRecipientType,
   Deal,
   InternalCost,
   PaymentEntry,
@@ -13,7 +15,8 @@ export interface CommissionStageEntry {
   key: string;
   jobId: string;
   clientName: string;
-  recipientRole: CommissionRecipientRole;
+  recipientRole: CommissionRecipientType;
+  recipientType: CommissionRecipientType;
   recipientName: string;
   payoutStage: CommissionPayoutStage;
   stageLabel: string;
@@ -31,6 +34,7 @@ export interface CommissionStageEntry {
   repGp: number;
   commissionBaseGp: number;
   commissionBasisLabel: string;
+  missingPayout: boolean;
 }
 
 const EPSILON = 0.000001;
@@ -41,39 +45,35 @@ const SALES_REP_STAGE_CONFIG: Array<{
   thresholdPct: number;
   sharePct: number;
 }> = [
-  { payoutStage: 'sales_rep_stage_1', stageLabel: '1st Deposit', thresholdPct: 0.3, sharePct: 0.5 },
-  { payoutStage: 'sales_rep_stage_2', stageLabel: '2nd Deposit', thresholdPct: 0.7, sharePct: 0.25 },
-  { payoutStage: 'sales_rep_stage_3', stageLabel: 'Final Deposit', thresholdPct: 1, sharePct: 0.25 },
+  { payoutStage: 'rep_stage_1', stageLabel: '1st Deposit', thresholdPct: 0.3, sharePct: 0.5 },
+  { payoutStage: 'rep_stage_2', stageLabel: '2nd Deposit', thresholdPct: 0.7, sharePct: 0.25 },
+  { payoutStage: 'rep_stage_3', stageLabel: 'Final Deposit', thresholdPct: 1, sharePct: 0.25 },
 ];
 
-const ESTIMATOR_STAGE_CONFIG = {
-  payoutStage: 'estimator_stage_2' as CommissionPayoutStage,
-  stageLabel: '70% Marker',
-  thresholdPct: 0.7,
-  sharePct: 1,
+const DEFAULT_STAGE_TWO_RATES: Partial<Record<CommissionRecipientType, number>> = {
+  estimator: 0.05,
+  owner: 0.05,
+  marketing: 0.05,
 };
 
-export function getCommissionPayoutKey(jobId: string, recipientRole: CommissionRecipientRole, payoutStage: CommissionPayoutStage) {
-  return `${jobId}:${recipientRole}:${payoutStage}`;
+function toCurrencySafe(value: number) {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, value);
 }
 
-export function getCommissionStageLabel(payoutStage: CommissionPayoutStage) {
-  switch (payoutStage) {
-    case 'sales_rep_stage_1':
-      return '1st Deposit';
-    case 'sales_rep_stage_2':
-      return '2nd Deposit';
-    case 'sales_rep_stage_3':
-      return 'Final Deposit';
-    case 'estimator_stage_2':
-      return '70% Marker';
-    default:
-      return payoutStage;
+function getThresholdReachedDate(sortedPayments: PaymentEntry[], salePrice: number, thresholdPct: number) {
+  if (salePrice <= 0) return null;
+
+  let runningPaid = 0;
+  const thresholdAmount = salePrice * thresholdPct;
+  for (const payment of sortedPayments) {
+    runningPaid += payment.amountExclTax;
+    if (runningPaid + EPSILON >= thresholdAmount) {
+      return payment.date;
+    }
   }
-}
 
-function buildInternalCostMap(internalCosts: InternalCost[]) {
-  return new Map(internalCosts.map(cost => [cost.jobId, cost]));
+  return null;
 }
 
 function buildPayoutMap(commissionPayouts: CommissionPayout[]) {
@@ -85,11 +85,15 @@ function buildPayoutMap(commissionPayouts: CommissionPayout[]) {
   );
 }
 
+function buildInternalCostMap(internalCosts: InternalCost[]) {
+  return new Map(internalCosts.map(cost => [cost.jobId, cost]));
+}
+
 function buildClientPaymentMap(payments: PaymentEntry[]) {
   const map = new Map<string, PaymentEntry[]>();
 
   for (const payment of payments) {
-    if (payment.direction !== 'Client Payment IN') continue;
+    if (payment.direction !== 'Client Payment IN' || !payment.jobId) continue;
     const bucket = map.get(payment.jobId) || [];
     bucket.push(payment);
     map.set(payment.jobId, bucket);
@@ -102,25 +106,121 @@ function buildClientPaymentMap(payments: PaymentEntry[]) {
   return map;
 }
 
-function getThresholdReachedDate(sortedPayments: PaymentEntry[], salePrice: number, thresholdPct: number) {
-  if (salePrice <= 0) return null;
+function determineSalesRepBasis(cost: InternalCost | undefined): CommissionBasis {
+  if (!cost) return 'auto';
 
-  let runningPaid = 0;
-  const thresholdAmount = salePrice * thresholdPct;
-
-  for (const payment of sortedPayments) {
-    runningPaid += payment.amountExclTax;
-    if (runningPaid + EPSILON >= thresholdAmount) {
-      return payment.date;
-    }
-  }
-
-  return null;
+  const repTotal = cost.repMaterial + cost.repStructuralDrawing + cost.repFoundationDrawing + cost.repFreight + cost.repInsulation;
+  return repTotal > 0 ? 'rep_gp' : 'true_gp';
 }
 
-function toCurrencySafe(value: number) {
-  if (!Number.isFinite(value)) return 0;
-  return Math.max(0, value);
+function getBasisLabel(basis: CommissionBasis) {
+  if (basis === 'rep_gp') return 'Rep GP';
+  if (basis === 'true_gp') return 'True GP';
+  return 'Auto';
+}
+
+function getCommissionBaseGp(trueGp: number, repGp: number, basis: CommissionBasis) {
+  if (basis === 'rep_gp') return repGp;
+  if (basis === 'true_gp') return trueGp;
+  return repGp > 0 ? repGp : trueGp;
+}
+
+function getDefaultRecipientName(
+  deal: Deal,
+  recipientType: CommissionRecipientType,
+  settingsMap: Map<CommissionRecipientType, CommissionRecipientSetting[]>,
+) {
+  if (recipientType === 'sales_rep') return deal.salesRep?.trim() || 'Unassigned';
+  if (recipientType === 'estimator') return deal.estimator?.trim() || 'Unassigned';
+  if (recipientType === 'team_lead') return deal.teamLead?.trim() || 'Unassigned';
+
+  const configured = settingsMap.get(recipientType)?.[0];
+  if (configured?.recipientName) return configured.recipientName;
+
+  if (recipientType === 'owner') return 'Owner';
+  if (recipientType === 'marketing') return 'Marketing';
+  if (recipientType === 'operations') return 'Operations';
+  return 'Unassigned';
+}
+
+function pushStageEntry(params: {
+  entries: CommissionStageEntry[];
+  payoutsByKey: Map<string, CommissionPayout>;
+  jobId: string;
+  clientName: string;
+  recipientType: CommissionRecipientType;
+  recipientName: string;
+  payoutStage: CommissionPayoutStage;
+  stageLabel: string;
+  thresholdPct: number;
+  amount: number;
+  salePrice: number;
+  clientPaid: number;
+  trueGp: number;
+  repGp: number;
+  commissionBaseGp: number;
+  commissionBasisLabel: string;
+  clientPayments: PaymentEntry[];
+}) {
+  const payoutKey = getCommissionPayoutKey(params.jobId, params.recipientType, params.payoutStage);
+  const payoutRecord = params.payoutsByKey.get(payoutKey) || null;
+  const eligibleOnDate = getThresholdReachedDate(params.clientPayments, params.salePrice, params.thresholdPct);
+  const amountRemainingToThreshold = params.salePrice > 0
+    ? Math.max(0, params.salePrice * params.thresholdPct - params.clientPaid)
+    : 0;
+  const status: CommissionQueueStatus = payoutRecord
+    ? 'paid'
+    : eligibleOnDate
+      ? 'pending'
+      : 'projected';
+
+  if (params.amount <= 0 && !payoutRecord) return;
+
+  params.entries.push({
+    key: payoutKey,
+    jobId: params.jobId,
+    clientName: params.clientName,
+    recipientRole: params.recipientType,
+    recipientType: params.recipientType,
+    recipientName: params.recipientName,
+    payoutStage: params.payoutStage,
+    stageLabel: params.stageLabel,
+    thresholdPct: params.thresholdPct,
+    thresholdLabel: `${Math.round(params.thresholdPct * 100)}% received`,
+    amount: params.amount,
+    salePrice: params.salePrice,
+    clientPaid: params.clientPaid,
+    paidPct: params.salePrice > 0 ? params.clientPaid / params.salePrice : 0,
+    eligibleOnDate,
+    amountRemainingToThreshold,
+    status,
+    payoutRecord,
+    trueGp: params.trueGp,
+    repGp: params.repGp,
+    commissionBaseGp: params.commissionBaseGp,
+    commissionBasisLabel: params.commissionBasisLabel,
+    missingPayout: Boolean(eligibleOnDate && !payoutRecord),
+  });
+}
+
+export function getCommissionPayoutKey(jobId: string, recipientRole: CommissionRecipientType, payoutStage: CommissionPayoutStage) {
+  return `${jobId}:${recipientRole}:${payoutStage}`;
+}
+
+export function getCommissionStageLabel(payoutStage: CommissionPayoutStage) {
+  switch (payoutStage) {
+    case 'rep_stage_1':
+      return '1st Deposit';
+    case 'rep_stage_2':
+      return '2nd Deposit';
+    case 'rep_stage_3':
+      return 'Final Deposit';
+    case 'stage_2':
+      return '2nd Deposit';
+    case 'manual':
+    default:
+      return 'Manual';
+  }
 }
 
 export function buildCommissionStageEntries(
@@ -128,10 +228,17 @@ export function buildCommissionStageEntries(
   internalCosts: InternalCost[],
   payments: PaymentEntry[],
   commissionPayouts: CommissionPayout[],
+  commissionRecipientSettings: CommissionRecipientSetting[] = [],
 ) {
   const costsByJob = buildInternalCostMap(internalCosts);
   const payoutsByKey = buildPayoutMap(commissionPayouts);
   const clientPaymentsByJob = buildClientPaymentMap(payments);
+  const settingsByType = commissionRecipientSettings.reduce<Map<CommissionRecipientType, CommissionRecipientSetting[]>>((map, setting) => {
+    const bucket = map.get(setting.recipientType) || [];
+    bucket.push(setting);
+    map.set(setting.recipientType, bucket);
+    return map;
+  }, new Map());
   const entries: CommissionStageEntry[] = [];
 
   for (const deal of deals) {
@@ -145,91 +252,107 @@ export function buildCommissionStageEntries(
       : 0;
     const trueGp = salePrice - trueTotal;
     const repGp = salePrice - repTotal;
-    const commissionBaseGp = (cost?.showRepCosts ?? false) ? repGp : trueGp;
-    const commissionBasisLabel = (cost?.showRepCosts ?? false) ? 'Rep-visible GP' : 'True GP';
-
+    const salesRepBasis = determineSalesRepBasis(cost);
+    const salesRepBaseGp = getCommissionBaseGp(trueGp, repGp, salesRepBasis);
     const clientPayments = clientPaymentsByJob.get(deal.jobId) || [];
     const clientPaid = clientPayments.reduce((sum, payment) => sum + payment.amountExclTax, 0);
-    const paidPct = salePrice > 0 ? clientPaid / salePrice : 0;
 
-    const repTotalCommission = toCurrencySafe(commissionBaseGp * 0.3);
-    const estimatorTotalCommission = toCurrencySafe(trueGp * 0.05);
+    const salesRepName = getDefaultRecipientName(deal, 'sales_rep', settingsByType);
+    const repTotalCommission = toCurrencySafe(salesRepBaseGp * 0.3);
+    if (salesRepName !== 'Unassigned') {
+      for (const stage of SALES_REP_STAGE_CONFIG) {
+        pushStageEntry({
+          entries,
+          payoutsByKey,
+          jobId: deal.jobId,
+          clientName: deal.clientName,
+          recipientType: 'sales_rep',
+          recipientName: salesRepName,
+          payoutStage: stage.payoutStage,
+          stageLabel: stage.stageLabel,
+          thresholdPct: stage.thresholdPct,
+          amount: toCurrencySafe(repTotalCommission * stage.sharePct),
+          salePrice,
+          clientPaid,
+          trueGp,
+          repGp,
+          commissionBaseGp: salesRepBaseGp,
+          commissionBasisLabel: getBasisLabel(salesRepBasis),
+          clientPayments,
+        });
+      }
+    }
 
-    for (const stage of SALES_REP_STAGE_CONFIG) {
-      const amount = toCurrencySafe(repTotalCommission * stage.sharePct);
-      const payoutRecord = payoutsByKey.get(getCommissionPayoutKey(deal.jobId, 'sales_rep', stage.payoutStage)) || null;
-      const eligibleOnDate = getThresholdReachedDate(clientPayments, salePrice, stage.thresholdPct);
-      const amountRemainingToThreshold = salePrice > 0
-        ? Math.max(0, salePrice * stage.thresholdPct - clientPaid)
-        : 0;
-      const status: CommissionQueueStatus = payoutRecord
-        ? 'paid'
-        : eligibleOnDate
-          ? 'pending'
-          : 'projected';
-
-      if (amount <= 0 && !payoutRecord) continue;
-
-      entries.push({
-        key: getCommissionPayoutKey(deal.jobId, 'sales_rep', stage.payoutStage),
+    for (const recipientType of ['estimator', 'owner', 'marketing'] as const) {
+      const recipientName = getDefaultRecipientName(deal, recipientType, settingsByType);
+      const rate = DEFAULT_STAGE_TWO_RATES[recipientType] || 0;
+      pushStageEntry({
+        entries,
+        payoutsByKey,
         jobId: deal.jobId,
         clientName: deal.clientName,
-        recipientRole: 'sales_rep',
-        recipientName: deal.salesRep?.trim() || 'Unassigned',
-        payoutStage: stage.payoutStage,
-        stageLabel: stage.stageLabel,
-        thresholdPct: stage.thresholdPct,
-        thresholdLabel: `${Math.round(stage.thresholdPct * 100)}% received`,
-        amount,
+        recipientType,
+        recipientName,
+        payoutStage: 'stage_2',
+        stageLabel: '2nd Deposit',
+        thresholdPct: 0.7,
+        amount: toCurrencySafe(trueGp * rate),
         salePrice,
         clientPaid,
-        paidPct,
-        eligibleOnDate,
-        amountRemainingToThreshold,
-        status,
-        payoutRecord,
         trueGp,
         repGp,
-        commissionBaseGp,
-        commissionBasisLabel,
+        commissionBaseGp: trueGp,
+        commissionBasisLabel: 'True GP',
+        clientPayments,
       });
     }
 
-    const estimatorAmount = estimatorTotalCommission;
-    const estimatorPayoutRecord = payoutsByKey.get(getCommissionPayoutKey(deal.jobId, 'estimator', ESTIMATOR_STAGE_CONFIG.payoutStage)) || null;
-    const estimatorEligibleOnDate = getThresholdReachedDate(clientPayments, salePrice, ESTIMATOR_STAGE_CONFIG.thresholdPct);
-    const estimatorStatus: CommissionQueueStatus = estimatorPayoutRecord
-      ? 'paid'
-      : estimatorEligibleOnDate
-        ? 'pending'
-        : 'projected';
+    for (const recipientType of ['operations', 'team_lead'] as const) {
+      const configuredRecipients = settingsByType.get(recipientType) || [];
+      if (configuredRecipients.length === 0 && recipientType === 'team_lead' && deal.teamLead?.trim()) {
+        pushStageEntry({
+          entries,
+          payoutsByKey,
+          jobId: deal.jobId,
+          clientName: deal.clientName,
+          recipientType,
+          recipientName: deal.teamLead.trim(),
+          payoutStage: 'manual',
+          stageLabel: 'Manual',
+          thresholdPct: 0,
+          amount: 0,
+          salePrice,
+          clientPaid,
+          trueGp,
+          repGp,
+          commissionBaseGp: trueGp,
+          commissionBasisLabel: 'Manual',
+          clientPayments,
+        });
+        continue;
+      }
 
-    if (estimatorAmount > 0 || estimatorPayoutRecord) {
-      entries.push({
-        key: getCommissionPayoutKey(deal.jobId, 'estimator', ESTIMATOR_STAGE_CONFIG.payoutStage),
-        jobId: deal.jobId,
-        clientName: deal.clientName,
-        recipientRole: 'estimator',
-        recipientName: deal.estimator?.trim() || 'Unassigned',
-        payoutStage: ESTIMATOR_STAGE_CONFIG.payoutStage,
-        stageLabel: ESTIMATOR_STAGE_CONFIG.stageLabel,
-        thresholdPct: ESTIMATOR_STAGE_CONFIG.thresholdPct,
-        thresholdLabel: `${Math.round(ESTIMATOR_STAGE_CONFIG.thresholdPct * 100)}% received`,
-        amount: estimatorAmount,
-        salePrice,
-        clientPaid,
-        paidPct,
-        eligibleOnDate: estimatorEligibleOnDate,
-        amountRemainingToThreshold: salePrice > 0
-          ? Math.max(0, salePrice * ESTIMATOR_STAGE_CONFIG.thresholdPct - clientPaid)
-          : 0,
-        status: estimatorStatus,
-        payoutRecord: estimatorPayoutRecord,
-        trueGp,
-        repGp,
-        commissionBaseGp,
-        commissionBasisLabel,
-      });
+      for (const setting of configuredRecipients) {
+        pushStageEntry({
+          entries,
+          payoutsByKey,
+          jobId: deal.jobId,
+          clientName: deal.clientName,
+          recipientType,
+          recipientName: setting.recipientName,
+          payoutStage: setting.scheduleRule === 'stage_2' ? 'stage_2' : 'manual',
+          stageLabel: setting.scheduleRule === 'stage_2' ? '2nd Deposit' : 'Manual',
+          thresholdPct: setting.scheduleRule === 'stage_2' ? 0.7 : 0,
+          amount: 0,
+          salePrice,
+          clientPaid,
+          trueGp,
+          repGp,
+          commissionBaseGp: trueGp,
+          commissionBasisLabel: setting.basisOverride === 'auto' ? 'Manual' : getBasisLabel(setting.basisOverride),
+          clientPayments,
+        });
+      }
     }
   }
 

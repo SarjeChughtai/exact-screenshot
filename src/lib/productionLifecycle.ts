@@ -70,7 +70,12 @@ export function deriveDealProductionStatusFromRecord(record: ProductionRecord): 
   return 'Submitted';
 }
 
-export function buildProductionShadowRecord(input: Pick<Deal, 'jobId' | 'productionStatus' | 'insulationStatus'>): ProductionRecord {
+export function buildProductionShadowRecord(
+  input: Pick<
+    Deal,
+    'jobId' | 'productionStatus' | 'insulationStatus' | 'engineeringDrawingsStatus' | 'foundationDrawingsStatus'
+  >,
+): ProductionRecord {
   const normalizedStage = normalizeProductionStage(input.productionStatus);
   const stageIndex = CANONICAL_PRODUCTION_STAGES.indexOf(normalizedStage);
 
@@ -85,6 +90,8 @@ export function buildProductionShadowRecord(input: Pick<Deal, 'jobId' | 'product
     delivered: stageIndex >= 6,
     drawingsStatus: input.productionStatus || normalizedStage,
     insulationStatus: input.insulationStatus || '',
+    engineeringDrawingsStatus: input.engineeringDrawingsStatus || 'not_requested',
+    foundationDrawingsStatus: input.foundationDrawingsStatus || 'not_requested',
   };
 }
 

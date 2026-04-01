@@ -6,9 +6,13 @@ import { useSettings } from '@/context/SettingsContext';
 import { formatNumber, formatCurrency } from '@/lib/calculations';
 import { buildJobDocumentVaultSummary } from '@/lib/documentVault';
 import { useSharedJobs } from '@/lib/sharedJobs';
+import { findJobProfile } from '@/lib/jobProfiles';
 import { supabase } from '@/integrations/supabase/client';
 import { getQuoteFileUrl } from '@/lib/quoteFileStorage';
 import { quoteFileFromRow } from '@/lib/supabaseMappers';
+import { JobIdSelect } from '@/components/JobIdSelect';
+import { ClientSelect } from '@/components/ClientSelect';
+import { PersonnelSelect } from '@/components/PersonnelSelect';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -26,6 +30,7 @@ import {
   summarizeDealMilestoneProgress,
 } from '@/lib/opportunities';
 import { toast } from 'sonner';
+import { jobIdsMatch } from '@/lib/jobIds';
 
 const DEAL_STATUS_LABELS: Record<string, string> = {
   Lead: 'Request for Quote',
@@ -58,6 +63,7 @@ export default function MasterDeals() {
     opportunities,
     dealMilestones,
     upsertDealMilestone,
+    jobProfiles,
   } = useAppContext();
   const { currentUser, hasAnyRole } = useRoles();
   const { settings } = useSettings();
@@ -72,7 +78,7 @@ export default function MasterDeals() {
   const [draggedDealId, setDraggedDealId] = useState<string | null>(null);
   const [pipelineView, setPipelineView] = useState(false);
   const [filesByJobId, setFilesByJobId] = useState<Record<string, QuoteFileRecord[]>>({});
-  const { visibleJobIds, stateByJobId } = useSharedJobs({ allowedStates: ['deal'] });
+  const { allJobs, visibleJobIds, stateByJobId } = useSharedJobs({ allowedStates: ['deal'] });
 
   const canEdit = hasAnyRole('admin', 'owner', 'operations');
   const isAdminOwner = hasAnyRole('admin', 'owner');
@@ -126,6 +132,36 @@ export default function MasterDeals() {
   }, [filesByJobId, quotes, visibleDeals]);
 
   const toggle = (jobId: string) => setExpandedJob(prev => prev === jobId ? null : jobId);
+
+  const applyProfileToDraft = (jobId: string, current: Partial<Deal>) => {
+    const profile = findJobProfile(jobProfiles, jobId);
+    if (!profile) return { ...current, jobId };
+
+    return {
+      ...current,
+      jobId: profile.jobId,
+      jobName: current.jobName || profile.jobName,
+      clientId: current.clientId || profile.clientId,
+      clientName: current.clientName || profile.clientName,
+      salesRep: current.salesRep || profile.salesRep,
+      estimator: current.estimator || profile.estimator,
+      teamLead: current.teamLead || profile.teamLead,
+      province: current.province || profile.province,
+      city: current.city || profile.city,
+      address: current.address || profile.address,
+      postalCode: current.postalCode || profile.postalCode,
+      width: current.width || profile.width,
+      length: current.length || profile.length,
+      height: current.height || profile.height,
+    };
+  };
+
+  const handleDraftJobChange = (
+    jobId: string,
+    setter: React.Dispatch<React.SetStateAction<Partial<Deal>>>,
+  ) => {
+    setter(current => applyProfileToDraft(jobId, current));
+  };
 
   const focusedJobId = searchParams.get('jobId') || '';
 
@@ -581,11 +617,71 @@ export default function MasterDeals() {
           </DialogHeader>
           {editingDeal && (
             <div className="grid grid-cols-2 gap-3 text-sm">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Job ID</label>
+                <JobIdSelect
+                  value={editingDeal.jobId}
+                  onValueChange={jobId => setEditingDeal(prev => prev ? applyProfileToDraft(jobId, prev) as Deal : null)}
+                  placeholder="Select job..."
+                  triggerClassName="mt-1"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Job Name</label>
+                <Input className="mt-1" value={editingDeal.jobName || ''} onChange={e => setEditingDeal(prev => prev ? { ...prev, jobName: e.target.value } : null)} />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Client</label>
+                <ClientSelect
+                  mode="name"
+                  valueId={editingDeal.clientId || ''}
+                  valueName={editingDeal.clientName || ''}
+                  onSelect={({ clientId, clientName }) => setEditingDeal(prev => prev ? { ...prev, clientId, clientName } : null)}
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Client ID</label>
+                <ClientSelect
+                  mode="id"
+                  valueId={editingDeal.clientId || ''}
+                  valueName={editingDeal.clientName || ''}
+                  onSelect={({ clientId, clientName }) => setEditingDeal(prev => prev ? { ...prev, clientId, clientName } : null)}
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Sales Rep</label>
+                <PersonnelSelect
+                  role="sales_rep"
+                  value={editingDeal.salesRep || ''}
+                  onValueChange={value => setEditingDeal(prev => prev ? { ...prev, salesRep: value } : null)}
+                  placeholder="Select sales rep..."
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Estimator</label>
+                <PersonnelSelect
+                  role="estimator"
+                  value={editingDeal.estimator || ''}
+                  onValueChange={value => setEditingDeal(prev => prev ? { ...prev, estimator: value } : null)}
+                  placeholder="Select estimator..."
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Team Lead</label>
+                <PersonnelSelect
+                  role="team_lead"
+                  value={editingDeal.teamLead || ''}
+                  onValueChange={value => setEditingDeal(prev => prev ? { ...prev, teamLead: value } : null)}
+                  placeholder="Select team lead..."
+                  className="mt-1"
+                />
+              </div>
               {[
-                ['jobId', 'Job ID'], ['jobName', 'Job Name'], ['clientName', 'Client Name'],
-                ['clientId', 'Client ID'], ['salesRep', 'Sales Rep'], ['estimator', 'Estimator'],
-                ['teamLead', 'Team Lead'], ['province', 'Province'], ['city', 'City'],
-                ['address', 'Address'], ['postalCode', 'Postal Code'],
+                ['province', 'Province'], ['city', 'City'], ['address', 'Address'], ['postalCode', 'Postal Code'],
               ].map(([key, label]) => (
                 <div key={key}>
                   <label className="text-xs font-medium text-muted-foreground">{label}</label>
@@ -621,9 +717,70 @@ export default function MasterDeals() {
             <DialogTitle>Add Deal</DialogTitle>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-3 text-sm">
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">Job ID *</label>
+              <JobIdSelect
+                value={newDeal.jobId || ''}
+                onValueChange={jobId => handleDraftJobChange(jobId, setNewDeal)}
+                placeholder="Select or create job..."
+                triggerClassName="mt-1"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">Job Name</label>
+              <Input className="mt-1" value={newDeal.jobName || ''} onChange={e => setNewDeal(prev => ({ ...prev, jobName: e.target.value }))} />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">Client</label>
+              <ClientSelect
+                mode="name"
+                valueId={newDeal.clientId || ''}
+                valueName={newDeal.clientName || ''}
+                onSelect={({ clientId, clientName }) => setNewDeal(prev => ({ ...prev, clientId, clientName }))}
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">Client ID</label>
+              <ClientSelect
+                mode="id"
+                valueId={newDeal.clientId || ''}
+                valueName={newDeal.clientName || ''}
+                onSelect={({ clientId, clientName }) => setNewDeal(prev => ({ ...prev, clientId, clientName }))}
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">Sales Rep</label>
+              <PersonnelSelect
+                role="sales_rep"
+                value={newDeal.salesRep || ''}
+                onValueChange={value => setNewDeal(prev => ({ ...prev, salesRep: value }))}
+                placeholder="Select sales rep..."
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">Estimator</label>
+              <PersonnelSelect
+                role="estimator"
+                value={newDeal.estimator || ''}
+                onValueChange={value => setNewDeal(prev => ({ ...prev, estimator: value }))}
+                placeholder="Select estimator..."
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">Team Lead</label>
+              <PersonnelSelect
+                role="team_lead"
+                value={newDeal.teamLead || ''}
+                onValueChange={value => setNewDeal(prev => ({ ...prev, teamLead: value }))}
+                placeholder="Select team lead..."
+                className="mt-1"
+              />
+            </div>
             {[
-              ['jobId', 'Job ID *'], ['jobName', 'Job Name'], ['clientName', 'Client Name'],
-              ['clientId', 'Client ID'], ['salesRep', 'Sales Rep'], ['estimator', 'Estimator'],
               ['province', 'Province'], ['city', 'City'], ['address', 'Address'], ['postalCode', 'Postal Code'],
             ].map(([key, label]) => (
               <div key={key}>

@@ -93,6 +93,7 @@ export type DealStatus = 'Lead' | 'Quoted' | 'Pending Payment' | 'In Progress' |
 export type PaymentStatus = 'PAID' | 'PARTIAL' | 'UNPAID';
 export type FreightStatus = 'Pending' | 'Booked' | 'In Transit' | 'Delivered';
 export type ProductionStage = 'Submitted' | 'Acknowledged' | 'In Production' | 'QC Complete' | 'Ship Ready' | 'Shipped' | 'Delivered';
+export type DrawingStatus = 'not_requested' | 'requested' | 'received' | 'signed' | 'not_required';
 
 export interface Deal {
   jobId: string;
@@ -123,6 +124,8 @@ export interface Deal {
   productionStatus: ProductionStage;
   freightStatus: FreightStatus;
   insulationStatus: string;
+  engineeringDrawingsStatus?: DrawingStatus;
+  foundationDrawingsStatus?: DrawingStatus;
   opportunityId?: string | null;
   cxPaymentStageOverride?: string;
   factoryPaymentStageOverride?: string;
@@ -147,8 +150,28 @@ export interface InternalCost {
   showRepCosts: boolean;
 }
 
-export type PaymentDirection = 'Client Payment IN' | 'Vendor Payment OUT' | 'Refund IN' | 'Refund OUT';
-export type PaymentType = 'Deposit' | 'Progress Payment' | 'Final Payment' | 'Freight' | 'Insulation' | 'Drawings' | 'Other';
+export type PaymentDirection =
+  | 'Client Payment IN'
+  | 'Vendor Payment OUT'
+  | 'Refund IN'
+  | 'Refund OUT'
+  | 'Commission Payment OUT'
+  | 'Expense OUT';
+export type PaymentType =
+  | 'Deposit'
+  | 'Progress Payment'
+  | 'Final Payment'
+  | 'Freight'
+  | 'Insulation'
+  | 'Drawings'
+  | 'Commission'
+  | 'Expense'
+  | 'Other';
+export type PaymentPartyType = 'client' | 'vendor' | 'commission' | 'general_expense';
+export type CommissionRecipientType = 'sales_rep' | 'estimator' | 'operations' | 'team_lead' | 'marketing' | 'owner';
+export type RecurrenceFrequency = 'monthly' | 'quarterly' | 'annual';
+export type CommissionBasis = 'true_gp' | 'rep_gp' | 'auto';
+export type CommissionScheduleRule = 'rep_schedule' | 'stage_2' | 'manual';
 
 export interface Vendor {
   id: string;
@@ -163,12 +186,15 @@ export interface Vendor {
 export interface PaymentEntry {
   id: string;
   date: string;
-  jobId: string;
+  jobId?: string | null;
   clientVendorName: string;
   clientId?: string;
   vendorId?: string;
   direction: PaymentDirection;
   type: PaymentType;
+  partyType?: PaymentPartyType;
+  commissionRecipientType?: CommissionRecipientType | null;
+  linkedUserId?: string | null;
   amountExclTax: number;
   province: string;
   taxRate: number;
@@ -177,26 +203,35 @@ export interface PaymentEntry {
   taxOverride: boolean;
   taxOverrideRate?: number;
   vendorProvinceOverride?: string;
+  recurrenceFrequency?: RecurrenceFrequency | null;
+  recurrenceStartDate?: string | null;
+  recurrenceEndDate?: string | null;
+  includeInProjection?: boolean;
   paymentMethod: string;
   referenceNumber: string;
   qbSynced: boolean;
   notes: string;
 }
 
-export type CommissionRecipientRole = 'sales_rep' | 'estimator';
+export type CommissionRecipientRole = CommissionRecipientType;
 export type CommissionPayoutStage =
-  | 'sales_rep_stage_1'
-  | 'sales_rep_stage_2'
-  | 'sales_rep_stage_3'
-  | 'estimator_stage_2';
+  | 'rep_stage_1'
+  | 'rep_stage_2'
+  | 'rep_stage_3'
+  | 'stage_2'
+  | 'manual';
 
 export interface CommissionPayout {
   id: string;
-  jobId: string;
+  jobId?: string | null;
   recipientRole: CommissionRecipientRole;
   recipientName: string;
   payoutStage: CommissionPayoutStage;
   amount: number;
+  linkedUserId?: string | null;
+  basisUsed?: CommissionBasis | null;
+  scheduleRule?: CommissionScheduleRule | null;
+  paymentLedgerId?: string | null;
   eligibleOnDate?: string | null;
   paidOn: string;
   paymentMethod: string;
@@ -219,6 +254,8 @@ export interface ProductionRecord {
   delivered: boolean;
   drawingsStatus: string;
   insulationStatus: string;
+  engineeringDrawingsStatus?: DrawingStatus;
+  foundationDrawingsStatus?: DrawingStatus;
 }
 
 export interface FreightRecord {
@@ -233,6 +270,10 @@ export interface FreightRecord {
   dropOffLocation?: string;
   pickupDate?: string;
   deliveryDate?: string;
+  estimatedPickupDate?: string;
+  estimatedDeliveryDate?: string;
+  actualPickupDate?: string;
+  actualDeliveryDate?: string;
   mode?: 'pre_sale' | 'execution';
   estDistance: number;
   estFreight: number;
@@ -328,6 +369,48 @@ export interface ManufacturerBid {
   submittedAt: string;
 }
 
+export type ConstructionRFQScope = 'install' | 'install_plus_concrete';
+export type ConstructionRFQStatus = 'Open' | 'Closed' | 'Awarded' | 'Cancelled';
+export type ConstructionBidScope = 'install_only' | 'concrete_only' | 'both';
+export type ConstructionBidStatus = 'Submitted' | 'Under Review' | 'Accepted' | 'Rejected' | 'Withdrawn';
+
+export interface ConstructionRFQ {
+  id: string;
+  jobId: string;
+  title: string;
+  scope: ConstructionRFQScope;
+  buildingDetails: string;
+  jobName: string;
+  province: string;
+  city: string;
+  postalCode: string;
+  address: string;
+  width: number;
+  length: number;
+  height: number;
+  notes: string;
+  requiredByDate: string;
+  closingDate: string;
+  status: ConstructionRFQStatus;
+  createdByUserId?: string | null;
+  createdAt?: string;
+  awardedBidId?: string | null;
+}
+
+export interface ConstructionBid {
+  id: string;
+  rfqId: string;
+  vendorId: string;
+  vendorName: string;
+  bidScope: ConstructionBidScope;
+  installAmount: number;
+  concreteAmount: number;
+  totalAmount: number;
+  notes: string;
+  status: ConstructionBidStatus;
+  submittedAt?: string;
+}
+
 // --- Import Review ---
 export type ImportReviewStatus = 'pending' | 'approved' | 'needs_review' | 'corrected' | 'rejected';
 
@@ -388,6 +471,42 @@ export interface SharedJobRecord {
   vendorUserIds: string[];
   sourceDocumentType?: DocumentType | 'deal';
   sourceDocumentId?: string | null;
+}
+
+export interface JobProfile {
+  jobId: string;
+  jobName: string;
+  clientId: string;
+  clientName: string;
+  salesRep: string;
+  estimator: string;
+  teamLead: string;
+  province: string;
+  city: string;
+  address: string;
+  postalCode: string;
+  width: number;
+  length: number;
+  height: number;
+  leftEaveHeight?: number;
+  rightEaveHeight?: number;
+  isSingleSlope?: boolean;
+  pitch?: number;
+  structureType?: StructureType | null;
+  lastSource?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface CommissionRecipientSetting {
+  id: string;
+  recipientType: CommissionRecipientType;
+  recipientName: string;
+  linkedUserId?: string | null;
+  basisOverride: CommissionBasis;
+  scheduleRule: CommissionScheduleRule;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export type MessagingConversationKind = 'direct' | 'group' | 'team' | 'deal';

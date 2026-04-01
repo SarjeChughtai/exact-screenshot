@@ -19,6 +19,19 @@ import {
   isDealFreightReady,
   summarizeDealMilestoneProgress,
 } from '@/lib/opportunities';
+import type { DrawingStatus } from '@/types';
+
+const DRAWING_STATUS_OPTIONS: Array<{ value: DrawingStatus; label: string }> = [
+  { value: 'not_requested', label: 'Not Requested' },
+  { value: 'requested', label: 'Requested' },
+  { value: 'received', label: 'Received' },
+  { value: 'signed', label: 'Signed' },
+  { value: 'not_required', label: 'Not Required' },
+];
+
+function getDrawingStatusLabel(value?: DrawingStatus | string | null) {
+  return DRAWING_STATUS_OPTIONS.find(option => option.value === value)?.label || 'Not Requested';
+}
 
 function derivePaymentStage(count: number, stages: string[]) {
   if (!count || stages.length === 0) return '';
@@ -96,14 +109,14 @@ export default function ProductionStatus() {
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-primary text-primary-foreground text-xs">
-              {['Job ID', 'Client', 'Building', 'Production', 'Insulation', 'Freight', 'Freight Ready', 'Milestones', 'Next Step', 'Blocked Reason', 'CX Payment', 'Factory Payment', 'Progress'].map(header => (
+              {['Job ID', 'Client', 'Building', 'Production', 'Engineering', 'Foundation', 'Insulation', 'Freight', 'Freight Ready', 'Milestones', 'Next Step', 'Blocked Reason', 'CX Payment', 'Factory Payment', 'Progress'].map(header => (
                 <th key={header} className="px-3 py-2 text-left font-medium whitespace-nowrap">{header}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {activeDeals.length === 0 ? (
-              <tr><td colSpan={13} className="px-3 py-8 text-center text-muted-foreground">No active production</td></tr>
+              <tr><td colSpan={15} className="px-3 py-8 text-center text-muted-foreground">No active production</td></tr>
             ) : activeDeals.map(deal => {
               const displayProductionStatus = getProductionStageLabel(deal.productionStatus, settings.productionStatuses);
               const progress = getProductionProgressPct(displayProductionStatus, settings.productionStatuses);
@@ -136,6 +149,36 @@ export default function ProductionStatus() {
                         </SelectContent>
                       </Select>
                     ) : <span className="text-xs">{displayProductionStatus}</span>}
+                  </td>
+                  <td className="px-3 py-2">
+                    {canEdit ? (
+                      <Select
+                        value={deal.engineeringDrawingsStatus || 'not_requested'}
+                        onValueChange={value => updateDeal(deal.jobId, { engineeringDrawingsStatus: value as DrawingStatus })}
+                      >
+                        <SelectTrigger className="h-7 text-xs w-36"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {DRAWING_STATUS_OPTIONS.map(option => (
+                            <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : <span className="text-xs">{getDrawingStatusLabel(deal.engineeringDrawingsStatus)}</span>}
+                  </td>
+                  <td className="px-3 py-2">
+                    {canEdit ? (
+                      <Select
+                        value={deal.foundationDrawingsStatus || 'not_requested'}
+                        onValueChange={value => updateDeal(deal.jobId, { foundationDrawingsStatus: value as DrawingStatus })}
+                      >
+                        <SelectTrigger className="h-7 text-xs w-36"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {DRAWING_STATUS_OPTIONS.map(option => (
+                            <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : <span className="text-xs">{getDrawingStatusLabel(deal.foundationDrawingsStatus)}</span>}
                   </td>
                   <td className="px-3 py-2">
                     {canEdit ? (

@@ -9,7 +9,7 @@ import { Download } from 'lucide-react';
 import { buildCommissionStageEntries } from '@/lib/commission';
 
 export default function CommissionStatement() {
-  const { deals, internalCosts, payments, commissionPayouts } = useAppContext();
+  const { deals, internalCosts, payments, commissionPayouts, commissionRecipientSettings } = useAppContext();
   const { visibleJobIds } = useSharedJobs({ allowedStates: ['deal'] });
   const [selectedJob, setSelectedJob] = useState('');
 
@@ -22,12 +22,9 @@ export default function CommissionStatement() {
   const cost = internalCosts.find(entry => entry.jobId === selectedJob);
 
   const stageEntries = useMemo(
-    () => buildCommissionStageEntries(deals, internalCosts, payments, commissionPayouts).filter(entry => entry.jobId === selectedJob),
-    [commissionPayouts, deals, internalCosts, payments, selectedJob],
+    () => buildCommissionStageEntries(deals, internalCosts, payments, commissionPayouts, commissionRecipientSettings).filter(entry => entry.jobId === selectedJob),
+    [commissionPayouts, commissionRecipientSettings, deals, internalCosts, payments, selectedJob],
   );
-
-  const salesRepStages = stageEntries.filter(entry => entry.recipientRole === 'sales_rep');
-  const estimatorStage = stageEntries.find(entry => entry.recipientRole === 'estimator');
 
   const salePrice = cost?.salePrice || 0;
   const trueTotal = cost
@@ -51,14 +48,10 @@ export default function CommissionStatement() {
     .reduce((sum, payment) => sum + payment.amountExclTax, 0);
   const paidPct = salePrice > 0 ? clientPaid / salePrice : 0;
 
-  const pendingRepAmount = salesRepStages
+  const pendingPayoutAmount = stageEntries
     .filter(entry => entry.status === 'pending')
     .reduce((sum, entry) => sum + entry.amount, 0);
-  const pendingEstimatorAmount = estimatorStage?.status === 'pending' ? estimatorStage.amount : 0;
-  const cashPositionAfterPending = clientPaid - vendorPaid - pendingRepAmount - pendingEstimatorAmount;
-
-  const ownerEach = Math.max(0, trueGp * 0.05);
-  const ownerEligible = paidPct >= 0.7;
+  const cashPositionAfterPending = clientPaid - vendorPaid - pendingPayoutAmount;
 
   const printStatement = () => {
     const element = document.getElementById('commission-statement');
@@ -148,18 +141,19 @@ export default function CommissionStatement() {
                   <Row label="Client Paid To Date" value={clientPaid} />
                   <Row label="Vendor Paid To Date" value={vendorPaid} />
                   <Row label="Paid % Of Sale" value={0} customValue={`${(paidPct * 100).toFixed(0)}%`} />
-                  <Row label="Pending Rep Payouts" value={pendingRepAmount} />
-                  <Row label="Pending Estimator Payouts" value={pendingEstimatorAmount} />
+                  <Row label="Pending Payouts" value={pendingPayoutAmount} />
                   <Row label="Cash After Pending Payouts" value={cashPositionAfterPending} bold />
                 </div>
               </div>
             </div>
 
             <div className="section">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Sales Rep Payout Stages</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Payout Schedule</p>
               <table>
                 <thead>
                   <tr>
+                    <th>Recipient</th>
+                    <th>Type</th>
                     <th>Stage</th>
                     <th>Amount</th>
                     <th>Eligibility</th>
@@ -168,8 +162,10 @@ export default function CommissionStatement() {
                   </tr>
                 </thead>
                 <tbody>
-                  {salesRepStages.map(stage => (
+                  {stageEntries.map(stage => (
                     <tr key={stage.key}>
+                      <td>{stage.recipientName}</td>
+                      <td>{stage.recipientType.replace(/_/g, ' ')}</td>
                       <td>
                         <div>{stage.stageLabel}</div>
                         <div className="muted">{stage.thresholdLabel}</div>
@@ -184,55 +180,13 @@ export default function CommissionStatement() {
                       <td>{stage.payoutRecord?.paidOn || '-'}</td>
                     </tr>
                   ))}
-                  {salesRepStages.length === 0 && (
+                  {stageEntries.length === 0 && (
                     <tr>
-                      <td colSpan={5}>No sales rep commission available for this deal.</td>
+                      <td colSpan={7}>No commission available for this deal.</td>
                     </tr>
                   )}
                 </tbody>
               </table>
-            </div>
-
-            <div className="section">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Estimator Payout</p>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Recipient</th>
-                    <th>Amount</th>
-                    <th>Eligibility</th>
-                    <th>Status</th>
-                    <th>Paid</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {estimatorStage ? (
-                    <tr>
-                      <td>{estimatorStage.recipientName}</td>
-                      <td>{formatCurrency(estimatorStage.amount)}</td>
-                      <td>
-                        {estimatorStage.eligibleOnDate
-                          ? `Eligible on ${estimatorStage.eligibleOnDate}`
-                          : `Needs ${formatCurrency(estimatorStage.amountRemainingToThreshold)} more`}
-                      </td>
-                      <td>{estimatorStage.status === 'paid' ? 'Paid' : estimatorStage.status === 'pending' ? 'Pending payout' : 'Projected'}</td>
-                      <td>{estimatorStage.payoutRecord?.paidOn || '-'}</td>
-                    </tr>
-                  ) : (
-                    <tr>
-                      <td colSpan={5}>No estimator commission available for this deal.</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="section">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Owner Payout Reference</p>
-              <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                <Row label={`Owner Each (${ownerEligible ? 'eligible' : 'not yet eligible'})`} value={ownerEach} />
-                <Row label="Owner Total (3 x 5%)" value={ownerEach * 3} />
-              </div>
             </div>
           </div>
         </>

@@ -14,23 +14,44 @@ import { VendorSelect } from '@/components/VendorSelect';
 import { formatCurrency, getProvinceTax, PROVINCES } from '@/lib/calculations';
 import { useSharedJobs } from '@/lib/sharedJobs';
 import { supabase } from '@/integrations/supabase/client';
-import type { PaymentEntry, PaymentDirection, PaymentType } from '@/types';
+import type {
+  CommissionRecipientType,
+  PaymentEntry,
+  PaymentDirection,
+  PaymentPartyType,
+  PaymentType,
+  RecurrenceFrequency,
+} from '@/types';
 import { toast } from 'sonner';
 import { Pencil, Trash2, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { jobIdsMatch, resolveCanonicalJobId } from '@/lib/jobIds';
 
-const DIRECTIONS: PaymentDirection[] = ['Client Payment IN', 'Vendor Payment OUT', 'Refund IN', 'Refund OUT'];
-const TYPES: PaymentType[] = ['Deposit', 'Progress Payment', 'Final Payment', 'Freight', 'Insulation', 'Drawings', 'Other'];
+const DIRECTIONS: PaymentDirection[] = ['Client Payment IN', 'Vendor Payment OUT', 'Refund IN', 'Refund OUT', 'Commission Payment OUT', 'Expense OUT'];
+const TYPES: PaymentType[] = ['Deposit', 'Progress Payment', 'Final Payment', 'Freight', 'Insulation', 'Drawings', 'Other', 'Commission', 'Expense'];
+const PARTY_TYPES: PaymentPartyType[] = ['client', 'vendor', 'commission', 'general_expense'];
+const COMMISSION_RECIPIENT_TYPES: CommissionRecipientType[] = ['sales_rep', 'estimator', 'operations', 'team_lead', 'marketing', 'owner'];
+const RECURRENCE_OPTIONS: RecurrenceFrequency[] = ['monthly', 'quarterly', 'annual'];
 const PROVINCE_CODES = PROVINCES.map(p => p.code);
 
 const isClientDirection = (dir: PaymentDirection) =>
   dir === 'Client Payment IN' || dir === 'Refund OUT';
+
+const isVendorDirection = (dir: PaymentDirection) =>
+  dir === 'Vendor Payment OUT' || dir === 'Refund IN' || dir === 'Expense OUT';
+
+const isCommissionDirection = (dir: PaymentDirection) =>
+  dir === 'Commission Payment OUT';
+
+const isExpenseDirection = (dir: PaymentDirection) =>
+  dir === 'Expense OUT';
 
 const BLANK_FORM = {
   date: new Date().toISOString().split('T')[0],
   jobId: '',
   direction: 'Client Payment IN' as PaymentDirection,
   type: 'Deposit' as PaymentType,
+  partyType: 'client' as PaymentPartyType,
+  commissionRecipientType: 'sales_rep' as CommissionRecipientType,
   clientId: '',
   vendorId: '',
   clientVendorName: '',
@@ -41,6 +62,10 @@ const BLANK_FORM = {
   paymentMethod: '',
   referenceNumber: '',
   notes: '',
+  recurrenceFrequency: '' as '' | RecurrenceFrequency,
+  recurrenceStartDate: '',
+  recurrenceEndDate: '',
+  includeInProjection: true,
 };
 
 type SortCol = 'date' | 'jobId' | 'clientVendorName' | 'direction' | 'type' | 'amountExclTax' | 'taxAmount' | 'totalInclTax' | 'paymentMethod' | 'referenceNumber';
@@ -77,11 +102,38 @@ export default function PaymentLedger() {
   const set = (k: string, v: string | boolean) => setForm(f => ({ ...f, [k]: v }));
   const setEdit = (k: string, v: string | boolean) => setEditForm(f => ({ ...f, [k]: v }));
 
+  const getDefaultPartyType = (direction: PaymentDirection): PaymentPartyType => {
+    if (isCommissionDirection(direction)) return 'commission';
+    if (isExpenseDirection(direction)) return 'general_expense';
+    if (isClientDirection(direction)) return 'client';
+    return 'vendor';
+  };
+
   const handleDirectionChange = (dir: string) => {
-    setForm(f => ({ ...f, direction: dir as PaymentDirection, clientId: '', vendorId: '', clientVendorName: '', vendorProvinceOverride: '' }));
+    const direction = dir as PaymentDirection;
+    setForm(f => ({
+      ...f,
+      direction,
+      partyType: getDefaultPartyType(direction),
+      type: isCommissionDirection(direction) ? 'Commission' : isExpenseDirection(direction) ? 'Expense' : f.type,
+      clientId: '',
+      vendorId: '',
+      clientVendorName: '',
+      vendorProvinceOverride: '',
+    }));
   };
   const handleEditDirectionChange = (dir: string) => {
-    setEditForm(f => ({ ...f, direction: dir as PaymentDirection, clientId: '', vendorId: '', clientVendorName: '', vendorProvinceOverride: '' }));
+    const direction = dir as PaymentDirection;
+    setEditForm(f => ({
+      ...f,
+      direction,
+      partyType: getDefaultPartyType(direction),
+      type: isCommissionDirection(direction) ? 'Commission' : isExpenseDirection(direction) ? 'Expense' : f.type,
+      clientId: '',
+      vendorId: '',
+      clientVendorName: '',
+      vendorProvinceOverride: '',
+    }));
   };
 
   const handleClientSelect = ({ clientId, clientName }: { clientId: string; clientName: string }) => {
@@ -115,29 +167,35 @@ export default function PaymentLedger() {
   );
 
   const visiblePayments = useMemo(
-    () => payments.filter(payment => visibleJobIds.has(resolveCanonicalJobId(payment.jobId) || payment.jobId)),
+    () => payments.filter(payment => !payment.jobId || visibleJobIds.has(resolveCanonicalJobId(payment.jobId) || payment.jobId)),
     [payments, visibleJobIds],
   );
 
   const save = async () => {
     const normalizedJobId = resolveCanonicalJobId(form.jobId) || form.jobId.trim();
     const amount = parseFloat(form.amountExclTax) || 0;
-    if (!normalizedJobId || !amount) { toast.error('Job ID and amount required'); return; }
+    if ((!normalizedJobId && !isExpenseDirection(form.direction)) || !amount) { toast.error('Amount is required, and most payment types require a job ID'); return; }
     const province = resolveProvince(form, normalizedJobId);
     const { taxRate, taxAmount, totalInclTax } = computeTax(amount, province, form.taxOverride, form.taxOverrideRate);
     const entry: PaymentEntry = {
       id: crypto.randomUUID(),
-      date: form.date, jobId: normalizedJobId,
+      date: form.date, jobId: normalizedJobId || null,
       clientVendorName: form.clientVendorName,
+      partyType: form.partyType,
+      commissionRecipientType: isCommissionDirection(form.direction) ? form.commissionRecipientType : undefined,
       clientId: isClientDirection(form.direction) ? (form.clientId && form.clientId !== '__manual' ? form.clientId : undefined) : undefined,
-      vendorId: !isClientDirection(form.direction) ? (form.vendorId && form.vendorId !== '__manual' ? form.vendorId : undefined) : undefined,
+      vendorId: isVendorDirection(form.direction) ? (form.vendorId && form.vendorId !== '__manual' ? form.vendorId : undefined) : undefined,
       direction: form.direction, type: form.type,
       amountExclTax: amount, province, taxRate, taxAmount, totalInclTax,
       taxOverride: form.taxOverride,
       taxOverrideRate: form.taxOverride ? parseFloat(form.taxOverrideRate) / 100 || 0 : undefined,
-      vendorProvinceOverride: !isClientDirection(form.direction) ? form.vendorProvinceOverride || undefined : undefined,
+      vendorProvinceOverride: isVendorDirection(form.direction) ? form.vendorProvinceOverride || undefined : undefined,
       paymentMethod: form.paymentMethod, referenceNumber: form.referenceNumber,
       qbSynced: false, notes: form.notes,
+      recurrenceFrequency: form.recurrenceFrequency || undefined,
+      recurrenceStartDate: form.recurrenceStartDate || undefined,
+      recurrenceEndDate: form.recurrenceEndDate || undefined,
+      includeInProjection: isExpenseDirection(form.direction) ? form.includeInProjection : false,
     };
     await addPayment(entry);
     setShowForm(false);
@@ -148,7 +206,9 @@ export default function PaymentLedger() {
   const openEdit = (p: PaymentEntry) => {
     setEditingPayment(p);
     setEditForm({
-      date: p.date, jobId: p.jobId, direction: p.direction, type: p.type,
+      date: p.date, jobId: p.jobId || '', direction: p.direction, type: p.type,
+      partyType: p.partyType || getDefaultPartyType(p.direction),
+      commissionRecipientType: p.commissionRecipientType || 'sales_rep',
       clientId: p.clientId ?? '',
       vendorId: p.vendorId ?? '',
       clientVendorName: p.clientVendorName,
@@ -157,6 +217,10 @@ export default function PaymentLedger() {
       taxOverride: p.taxOverride,
       taxOverrideRate: p.taxOverride && p.taxOverrideRate != null ? String(p.taxOverrideRate * 100) : '',
       paymentMethod: p.paymentMethod, referenceNumber: p.referenceNumber, notes: p.notes,
+      recurrenceFrequency: p.recurrenceFrequency || '',
+      recurrenceStartDate: p.recurrenceStartDate || '',
+      recurrenceEndDate: p.recurrenceEndDate || '',
+      includeInProjection: p.includeInProjection ?? true,
     });
     setEditAuditNote('');
     setPendingConfirmEdit(false);
@@ -165,7 +229,7 @@ export default function PaymentLedger() {
   const requestSaveEdit = () => {
     if (!editingPayment) return;
     const amount = parseFloat(editForm.amountExclTax) || 0;
-    if (!editForm.jobId || !amount) { toast.error('Job ID and amount required'); return; }
+    if ((!editForm.jobId && !isExpenseDirection(editForm.direction)) || !amount) { toast.error('Amount is required, and most payment types require a job ID'); return; }
     setPendingConfirmEdit(true);
   };
 
@@ -177,17 +241,23 @@ export default function PaymentLedger() {
     const province = resolveProvince(editForm, normalizedJobId);
     const { taxRate, taxAmount, totalInclTax } = computeTax(amount, province, editForm.taxOverride, editForm.taxOverrideRate);
     await updatePayment(editingPayment.id, {
-      date: editForm.date, jobId: normalizedJobId,
+      date: editForm.date, jobId: normalizedJobId || null,
       clientVendorName: editForm.clientVendorName,
+      partyType: editForm.partyType,
+      commissionRecipientType: isCommissionDirection(editForm.direction) ? editForm.commissionRecipientType : undefined,
       clientId: isClientDirection(editForm.direction) ? (editForm.clientId && editForm.clientId !== '__manual' ? editForm.clientId : undefined) : undefined,
-      vendorId: !isClientDirection(editForm.direction) ? (editForm.vendorId && editForm.vendorId !== '__manual' ? editForm.vendorId : undefined) : undefined,
+      vendorId: isVendorDirection(editForm.direction) ? (editForm.vendorId && editForm.vendorId !== '__manual' ? editForm.vendorId : undefined) : undefined,
       direction: editForm.direction, type: editForm.type,
       amountExclTax: amount, province, taxRate, taxAmount, totalInclTax,
       taxOverride: editForm.taxOverride,
       taxOverrideRate: editForm.taxOverride ? parseFloat(editForm.taxOverrideRate) / 100 || 0 : undefined,
-      vendorProvinceOverride: !isClientDirection(editForm.direction) ? editForm.vendorProvinceOverride || undefined : undefined,
+      vendorProvinceOverride: isVendorDirection(editForm.direction) ? editForm.vendorProvinceOverride || undefined : undefined,
       paymentMethod: editForm.paymentMethod, referenceNumber: editForm.referenceNumber,
       notes: editForm.notes + (editAuditNote ? `\n[Edit note: ${editAuditNote}]` : ''),
+      recurrenceFrequency: editForm.recurrenceFrequency || undefined,
+      recurrenceStartDate: editForm.recurrenceStartDate || undefined,
+      recurrenceEndDate: editForm.recurrenceEndDate || undefined,
+      includeInProjection: isExpenseDirection(editForm.direction) ? editForm.includeInProjection : false,
     });
     setEditingPayment(null);
     setPendingConfirmEdit(false);
@@ -310,14 +380,21 @@ export default function PaymentLedger() {
               <Input className="input-blue mt-1" type="date" value={form.date} onChange={e => set('date', e.target.value)} />
             </div>
             <div>
-                <Label className="text-xs">Job ID</Label>
-          <JobIdSelect value={form.jobId} onValueChange={v => set('jobId', v)} />
+              <Label className="text-xs">Job ID {isExpenseDirection(form.direction) ? '(optional)' : ''}</Label>
+              <JobIdSelect value={form.jobId} onValueChange={v => set('jobId', v)} />
             </div>
             <div>
               <Label className="text-xs">Direction</Label>
               <Select value={form.direction} onValueChange={handleDirectionChange}>
                 <SelectTrigger className="input-blue mt-1"><SelectValue /></SelectTrigger>
                 <SelectContent>{DIRECTIONS.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs">Party Type</Label>
+              <Select value={form.partyType} onValueChange={v => set('partyType', v)}>
+                <SelectTrigger className="input-blue mt-1"><SelectValue /></SelectTrigger>
+                <SelectContent>{PARTY_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div>
@@ -338,6 +415,14 @@ export default function PaymentLedger() {
                   onSelect={handleClientSelect}
                   className="mt-1"
                 />
+              </div>
+            ) : isCommissionDirection(form.direction) ? (
+              <div>
+                <Label className="text-xs">Recipient Type</Label>
+                <Select value={form.commissionRecipientType} onValueChange={v => set('commissionRecipientType', v)}>
+                  <SelectTrigger className="input-blue mt-1"><SelectValue /></SelectTrigger>
+                  <SelectContent>{COMMISSION_RECIPIENT_TYPES.map(type => <SelectItem key={type} value={type}>{type.replace(/_/g, ' ')}</SelectItem>)}</SelectContent>
+                </Select>
               </div>
             ) : (
               <div>
@@ -364,6 +449,40 @@ export default function PaymentLedger() {
                   <SelectContent>{PROVINCE_CODES.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
+            )}
+
+            {isExpenseDirection(form.direction) && (
+              <>
+                <div>
+                  <Label className="text-xs">Recurring</Label>
+                  <Select value={form.recurrenceFrequency || '__none__'} onValueChange={v => set('recurrenceFrequency', v === '__none__' ? '' : v)}>
+                    <SelectTrigger className="input-blue mt-1"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">One-time</SelectItem>
+                      {RECURRENCE_OPTIONS.map(option => <SelectItem key={option} value={option}>{option}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <Label className="text-xs">Include In Projection</Label>
+                  <div className="flex items-center gap-2 mt-2">
+                    <Switch checked={form.includeInProjection} onCheckedChange={v => set('includeInProjection', v)} />
+                    <span className="text-xs text-muted-foreground">Projected cash planning</span>
+                  </div>
+                </div>
+                {form.recurrenceFrequency && (
+                  <>
+                    <div>
+                      <Label className="text-xs">Recurrence Start</Label>
+                      <Input className="input-blue mt-1" type="date" value={form.recurrenceStartDate} onChange={e => set('recurrenceStartDate', e.target.value)} />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Recurrence End</Label>
+                      <Input className="input-blue mt-1" type="date" value={form.recurrenceEndDate} onChange={e => set('recurrenceEndDate', e.target.value)} />
+                    </div>
+                  </>
+                )}
+              </>
             )}
 
             <div>
@@ -440,7 +559,7 @@ export default function PaymentLedger() {
             ) : sortedPayments.map(p => (
               <tr key={p.id} className="border-b hover:bg-muted/50 cursor-pointer" onClick={() => setViewingPayment(p)}>
                 <td className="px-3 py-2 text-xs">{p.date}</td>
-                <td className="px-3 py-2 font-mono text-xs">{p.jobId}</td>
+                <td className="px-3 py-2 font-mono text-xs">{p.jobId || '-'}</td>
                 <td className="px-3 py-2">{p.clientVendorName}</td>
                 <td className="px-3 py-2 text-xs">{p.direction}</td>
                 <td className="px-3 py-2 text-xs">{p.type}</td>
@@ -494,7 +613,9 @@ export default function PaymentLedger() {
           <DialogHeader><DialogTitle>Payment Details</DialogTitle></DialogHeader>
           {viewingPayment && (() => {
             const deal = visibleDeals.find(d => d.jobId === viewingPayment.jobId);
-            const jobPayments = visiblePayments.filter(p => p.jobId === viewingPayment.jobId);
+            const jobPayments = viewingPayment.jobId
+              ? visiblePayments.filter(p => p.jobId === viewingPayment.jobId)
+              : [];
             const totalIn = jobPayments.filter(p => p.direction === 'Client Payment IN' || p.direction === 'Refund IN').reduce((s, p) => s + p.totalInclTax, 0);
             const totalOut = jobPayments.filter(p => p.direction === 'Vendor Payment OUT' || p.direction === 'Refund OUT').reduce((s, p) => s + p.totalInclTax, 0);
             const linkedClient = clients.find(c => c.id === viewingPayment.clientId);
@@ -505,8 +626,10 @@ export default function PaymentLedger() {
                   <h3 className="font-semibold text-sm">Payment Information</h3>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-1 text-xs">
                     <div><span className="text-muted-foreground">Date:</span> <span className="font-medium">{viewingPayment.date}</span></div>
-                    <div><span className="text-muted-foreground">Job ID:</span> <span className="font-mono font-medium">{viewingPayment.jobId}</span></div>
+                    <div><span className="text-muted-foreground">Job ID:</span> <span className="font-mono font-medium">{viewingPayment.jobId || '-'}</span></div>
                     <div><span className="text-muted-foreground">Name:</span> <span className="font-medium">{viewingPayment.clientVendorName}</span></div>
+                    {viewingPayment.partyType && <div><span className="text-muted-foreground">Party Type:</span> <span className="font-medium">{viewingPayment.partyType}</span></div>}
+                    {viewingPayment.commissionRecipientType && <div><span className="text-muted-foreground">Commission Type:</span> <span className="font-medium">{viewingPayment.commissionRecipientType.replace(/_/g, ' ')}</span></div>}
                     {linkedClient && <div><span className="text-muted-foreground">Linked Client:</span> <span className="font-medium">{linkedClient.clientName || linkedClient.name}</span></div>}
                     {linkedVendor && <div><span className="text-muted-foreground">Linked Vendor:</span> <span className="font-medium">{linkedVendor.name} ({linkedVendor.province})</span></div>}
                     <div><span className="text-muted-foreground">Direction:</span> <span className="font-medium">{viewingPayment.direction}</span></div>
@@ -597,7 +720,7 @@ export default function PaymentLedger() {
                     <Input className="input-blue mt-1" type="date" value={editForm.date} onChange={e => setEdit('date', e.target.value)} />
                   </div>
                   <div>
-                    <Label className="text-xs">Job ID</Label>
+                    <Label className="text-xs">Job ID {isExpenseDirection(editForm.direction) ? '(optional)' : ''}</Label>
                     <JobIdSelect value={editForm.jobId} onValueChange={v => setEdit('jobId', v)} />
                   </div>
                   <div>
@@ -605,6 +728,13 @@ export default function PaymentLedger() {
                     <Select value={editForm.direction} onValueChange={handleEditDirectionChange}>
                       <SelectTrigger className="input-blue mt-1"><SelectValue /></SelectTrigger>
                       <SelectContent>{DIRECTIONS.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-xs">Party Type</Label>
+                    <Select value={editForm.partyType} onValueChange={v => setEdit('partyType', v)}>
+                      <SelectTrigger className="input-blue mt-1"><SelectValue /></SelectTrigger>
+                      <SelectContent>{PARTY_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
                   <div>
@@ -625,6 +755,14 @@ export default function PaymentLedger() {
                         onSelect={handleEditClientSelect}
                         className="mt-1"
                       />
+                    </div>
+                  ) : isCommissionDirection(editForm.direction) ? (
+                    <div>
+                      <Label className="text-xs">Recipient Type</Label>
+                      <Select value={editForm.commissionRecipientType} onValueChange={v => setEdit('commissionRecipientType', v)}>
+                        <SelectTrigger className="input-blue mt-1"><SelectValue /></SelectTrigger>
+                        <SelectContent>{COMMISSION_RECIPIENT_TYPES.map(type => <SelectItem key={type} value={type}>{type.replace(/_/g, ' ')}</SelectItem>)}</SelectContent>
+                      </Select>
                     </div>
                   ) : (
                     <div>
@@ -651,6 +789,40 @@ export default function PaymentLedger() {
                         <SelectContent>{PROVINCE_CODES.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
                       </Select>
                     </div>
+                  )}
+
+                  {isExpenseDirection(editForm.direction) && (
+                    <>
+                      <div>
+                        <Label className="text-xs">Recurring</Label>
+                        <Select value={editForm.recurrenceFrequency || '__none__'} onValueChange={v => setEdit('recurrenceFrequency', v === '__none__' ? '' : v)}>
+                          <SelectTrigger className="input-blue mt-1"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__none__">One-time</SelectItem>
+                            {RECURRENCE_OPTIONS.map(option => <SelectItem key={option} value={option}>{option}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <Label className="text-xs">Include In Projection</Label>
+                        <div className="flex items-center gap-2 mt-2">
+                          <Switch checked={editForm.includeInProjection} onCheckedChange={v => setEdit('includeInProjection', v)} />
+                          <span className="text-xs text-muted-foreground">Projected cash planning</span>
+                        </div>
+                      </div>
+                      {editForm.recurrenceFrequency && (
+                        <>
+                          <div>
+                            <Label className="text-xs">Recurrence Start</Label>
+                            <Input className="input-blue mt-1" type="date" value={editForm.recurrenceStartDate} onChange={e => setEdit('recurrenceStartDate', e.target.value)} />
+                          </div>
+                          <div>
+                            <Label className="text-xs">Recurrence End</Label>
+                            <Input className="input-blue mt-1" type="date" value={editForm.recurrenceEndDate} onChange={e => setEdit('recurrenceEndDate', e.target.value)} />
+                          </div>
+                        </>
+                      )}
+                    </>
                   )}
 
                   <div>

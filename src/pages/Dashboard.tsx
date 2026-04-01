@@ -36,7 +36,11 @@ export default function Dashboard() {
     Complete: t('dashboard.stages.complete'),
   };
 
-  if (hasAnyRole('freight', 'manufacturer', 'construction')) {
+  if (hasAnyRole('freight', 'construction')) {
+     return <Navigate to="/construction-board" replace />;
+  }
+
+  if (hasAnyRole('manufacturer')) {
      return <Navigate to="/vendor-board" replace />;
   }
 

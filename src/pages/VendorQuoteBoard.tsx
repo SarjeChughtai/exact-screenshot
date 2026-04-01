@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useRoles } from '@/context/RoleContext';
 import { useAppContext } from '@/context/AppContext';
@@ -70,6 +71,10 @@ export default function VendorQuoteBoard() {
   const primaryRole = ['freight', 'manufacturer', 'construction'].find(role => currentUser.roles.includes(role as any)) || 'vendor';
   const canManageBidBoard = currentUser.roles.some(role => ['admin', 'owner', 'operations'].includes(role));
   const isManufacturerView = primaryRole === 'manufacturer';
+
+  if (!isManufacturerView) {
+    return <Navigate to="/construction-board" replace />;
+  }
 
   const { data: jobs, isLoading: isJobsLoading } = useQuery({
     queryKey: ['vendor_jobs', primaryRole],

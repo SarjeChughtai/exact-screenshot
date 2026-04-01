@@ -19,6 +19,10 @@ import type {
   InsulationCostDataRecord,
   Opportunity,
   DealMilestone,
+  JobProfile,
+  CommissionRecipientSetting,
+  ConstructionRFQ,
+  ConstructionBid,
 } from '@/types';
 
 // --- Deal ---
@@ -52,6 +56,8 @@ export function dealFromRow(r: any): Deal {
     productionStatus: r.production_status ?? 'Submitted',
     freightStatus: r.freight_status ?? 'Pending',
     insulationStatus: r.insulation_status ?? '',
+    engineeringDrawingsStatus: r.engineering_drawings_status ?? 'not_requested',
+    foundationDrawingsStatus: r.foundation_drawings_status ?? 'not_requested',
     opportunityId: r.opportunity_id ?? null,
     cxPaymentStageOverride: r.cx_payment_stage_override ?? '',
     factoryPaymentStageOverride: r.factory_payment_stage_override ?? '',
@@ -70,6 +76,8 @@ export function dealToRow(d: Partial<Deal>): Record<string, any> {
     orderType: 'order_type', dateSigned: 'date_signed', dealStatus: 'deal_status',
     paymentStatus: 'payment_status', productionStatus: 'production_status',
     freightStatus: 'freight_status', insulationStatus: 'insulation_status',
+    engineeringDrawingsStatus: 'engineering_drawings_status',
+    foundationDrawingsStatus: 'foundation_drawings_status',
     opportunityId: 'opportunity_id',
     cxPaymentStageOverride: 'cx_payment_stage_override',
     factoryPaymentStageOverride: 'factory_payment_stage_override',
@@ -219,6 +227,9 @@ export function paymentFromRow(r: any): PaymentEntry {
     vendorId: r.vendor_id ?? undefined,
     direction: r.direction ?? 'Client Payment IN',
     type: r.type ?? 'Deposit',
+    partyType: r.party_type ?? 'client',
+    commissionRecipientType: r.commission_recipient_type ?? null,
+    linkedUserId: r.linked_user_id ?? null,
     amountExclTax: Number(r.amount_excl_tax) || 0,
     province: r.province ?? '',
     taxRate: Number(r.tax_rate) || 0,
@@ -227,6 +238,10 @@ export function paymentFromRow(r: any): PaymentEntry {
     taxOverride: r.tax_override ?? false,
     taxOverrideRate: r.tax_override_rate != null ? Number(r.tax_override_rate) : undefined,
     vendorProvinceOverride: r.vendor_province_override ?? undefined,
+    recurrenceFrequency: r.recurrence_frequency ?? null,
+    recurrenceStartDate: r.recurrence_start_date ?? null,
+    recurrenceEndDate: r.recurrence_end_date ?? null,
+    includeInProjection: r.include_in_projection ?? false,
     paymentMethod: r.payment_method ?? '',
     referenceNumber: r.reference_number ?? '',
     qbSynced: r.qb_synced ?? false,
@@ -238,10 +253,14 @@ export function paymentToRow(p: Partial<PaymentEntry>): Record<string, any> {
   const map: Record<string, string> = {
     id: 'id', date: 'date', jobId: 'job_id', clientVendorName: 'client_vendor_name',
     clientId: 'client_id', vendorId: 'vendor_id',
-    direction: 'direction', type: 'type', amountExclTax: 'amount_excl_tax', province: 'province',
+    direction: 'direction', type: 'type', partyType: 'party_type',
+    commissionRecipientType: 'commission_recipient_type', linkedUserId: 'linked_user_id',
+    amountExclTax: 'amount_excl_tax', province: 'province',
     taxRate: 'tax_rate', taxAmount: 'tax_amount', totalInclTax: 'total_incl_tax',
     taxOverride: 'tax_override', taxOverrideRate: 'tax_override_rate',
     vendorProvinceOverride: 'vendor_province_override',
+    recurrenceFrequency: 'recurrence_frequency', recurrenceStartDate: 'recurrence_start_date',
+    recurrenceEndDate: 'recurrence_end_date', includeInProjection: 'include_in_projection',
     paymentMethod: 'payment_method', referenceNumber: 'reference_number',
     qbSynced: 'qb_synced', notes: 'notes',
   };
@@ -259,8 +278,12 @@ export function commissionPayoutFromRow(r: any): CommissionPayout {
     jobId: r.job_id ?? '',
     recipientRole: r.recipient_role ?? 'sales_rep',
     recipientName: r.recipient_name ?? '',
-    payoutStage: r.payout_stage ?? 'sales_rep_stage_1',
+    payoutStage: r.payout_stage ?? 'rep_stage_1',
     amount: Number(r.amount) || 0,
+    linkedUserId: r.linked_user_id ?? null,
+    basisUsed: r.basis_used ?? null,
+    scheduleRule: r.schedule_rule ?? null,
+    paymentLedgerId: r.payment_ledger_id ?? null,
     eligibleOnDate: r.eligible_on_date ?? null,
     paidOn: r.paid_on ?? '',
     paymentMethod: r.payment_method ?? '',
@@ -281,6 +304,10 @@ export function commissionPayoutToRow(p: Partial<CommissionPayout>): Record<stri
     recipientName: 'recipient_name',
     payoutStage: 'payout_stage',
     amount: 'amount',
+    linkedUserId: 'linked_user_id',
+    basisUsed: 'basis_used',
+    scheduleRule: 'schedule_rule',
+    paymentLedgerId: 'payment_ledger_id',
     eligibleOnDate: 'eligible_on_date',
     paidOn: 'paid_on',
     paymentMethod: 'payment_method',
@@ -364,6 +391,8 @@ export function productionFromRow(r: any): ProductionRecord {
     delivered: r.delivered ?? false,
     drawingsStatus: r.drawings_status ?? '',
     insulationStatus: r.insulation_status ?? '',
+    engineeringDrawingsStatus: r.engineering_drawings_status ?? 'not_requested',
+    foundationDrawingsStatus: r.foundation_drawings_status ?? 'not_requested',
   };
 }
 
@@ -373,6 +402,8 @@ export function productionToRow(pr: Partial<ProductionRecord>): Record<string, a
     inProduction: 'in_production', qcComplete: 'qc_complete', shipReady: 'ship_ready',
     shipped: 'shipped', delivered: 'delivered', drawingsStatus: 'drawings_status',
     insulationStatus: 'insulation_status',
+    engineeringDrawingsStatus: 'engineering_drawings_status',
+    foundationDrawingsStatus: 'foundation_drawings_status',
   };
   const row: Record<string, any> = {};
   for (const [k, v] of Object.entries(pr)) {
@@ -395,6 +426,10 @@ export function freightFromRow(r: any): FreightRecord {
     dropOffLocation: r.drop_off_location ?? '',
     pickupDate: r.pickup_date ?? '',
     deliveryDate: r.delivery_date ?? '',
+    estimatedPickupDate: r.estimated_pickup_date ?? '',
+    estimatedDeliveryDate: r.estimated_delivery_date ?? '',
+    actualPickupDate: r.actual_pickup_date ?? '',
+    actualDeliveryDate: r.actual_delivery_date ?? '',
     mode: r.mode ?? 'execution',
     estDistance: Number(r.est_distance) || 0,
     estFreight: Number(r.est_freight) || 0,
@@ -411,7 +446,9 @@ export function freightToRow(fr: Partial<FreightRecord>): Record<string, any> {
     jobId: 'job_id', clientName: 'client_name', buildingSize: 'building_size',
     opportunityId: 'opportunity_id',
     province: 'province', weight: 'weight', pickupAddress: 'pickup_address', deliveryAddress: 'delivery_address',
-    dropOffLocation: 'drop_off_location', pickupDate: 'pickup_date', deliveryDate: 'delivery_date', mode: 'mode',
+    dropOffLocation: 'drop_off_location', pickupDate: 'pickup_date', deliveryDate: 'delivery_date',
+    estimatedPickupDate: 'estimated_pickup_date', estimatedDeliveryDate: 'estimated_delivery_date',
+    actualPickupDate: 'actual_pickup_date', actualDeliveryDate: 'actual_delivery_date', mode: 'mode',
     estDistance: 'est_distance', estFreight: 'est_freight', actualFreight: 'actual_freight',
     paid: 'paid', carrier: 'carrier', assignedFreightUserId: 'assigned_freight_user_id', status: 'status',
   };
@@ -666,6 +703,150 @@ export function steelCostEntryToRow(e: Partial<SteelCostEntry>): Record<string, 
   };
   const row: Record<string, any> = {};
   for (const [k, v] of Object.entries(e)) {
+    if (map[k]) row[map[k]] = v;
+  }
+  return row;
+}
+
+// --- JobProfile ---
+export function jobProfileFromRow(r: any): JobProfile {
+  return {
+    jobId: r.job_id ?? '',
+    jobName: r.job_name ?? '',
+    clientId: r.client_id ?? '',
+    clientName: r.client_name ?? '',
+    salesRep: r.sales_rep ?? '',
+    estimator: r.estimator ?? '',
+    teamLead: r.team_lead ?? '',
+    province: r.province ?? '',
+    city: r.city ?? '',
+    address: r.address ?? '',
+    postalCode: r.postal_code ?? '',
+    width: Number(r.width) || 0,
+    length: Number(r.length) || 0,
+    height: Number(r.height) || 0,
+    leftEaveHeight: r.left_eave_height != null ? Number(r.left_eave_height) : undefined,
+    rightEaveHeight: r.right_eave_height != null ? Number(r.right_eave_height) : undefined,
+    isSingleSlope: r.is_single_slope ?? undefined,
+    pitch: r.pitch != null ? Number(r.pitch) : undefined,
+    structureType: r.structure_type ?? null,
+    lastSource: r.last_source ?? null,
+    createdAt: r.created_at ?? '',
+    updatedAt: r.updated_at ?? '',
+  };
+}
+
+export function jobProfileToRow(profile: Partial<JobProfile>): Record<string, any> {
+  const map: Record<string, string> = {
+    jobId: 'job_id', jobName: 'job_name', clientId: 'client_id', clientName: 'client_name',
+    salesRep: 'sales_rep', estimator: 'estimator', teamLead: 'team_lead',
+    province: 'province', city: 'city', address: 'address', postalCode: 'postal_code',
+    width: 'width', length: 'length', height: 'height',
+    leftEaveHeight: 'left_eave_height', rightEaveHeight: 'right_eave_height',
+    isSingleSlope: 'is_single_slope', pitch: 'pitch', structureType: 'structure_type',
+    lastSource: 'last_source', updatedAt: 'updated_at',
+  };
+  const row: Record<string, any> = {};
+  for (const [k, v] of Object.entries(profile)) {
+    if (map[k]) row[map[k]] = v;
+  }
+  return row;
+}
+
+// --- CommissionRecipientSetting ---
+export function commissionRecipientSettingFromRow(r: any): CommissionRecipientSetting {
+  return {
+    id: r.id ?? '',
+    recipientType: r.recipient_type ?? 'sales_rep',
+    recipientName: r.recipient_name ?? '',
+    linkedUserId: r.linked_user_id ?? null,
+    basisOverride: r.basis_override ?? 'auto',
+    scheduleRule: r.schedule_rule ?? 'manual',
+    createdAt: r.created_at ?? '',
+    updatedAt: r.updated_at ?? '',
+  };
+}
+
+export function commissionRecipientSettingToRow(setting: Partial<CommissionRecipientSetting>): Record<string, any> {
+  const map: Record<string, string> = {
+    id: 'id', recipientType: 'recipient_type', recipientName: 'recipient_name',
+    linkedUserId: 'linked_user_id', basisOverride: 'basis_override', scheduleRule: 'schedule_rule',
+    createdAt: 'created_at', updatedAt: 'updated_at',
+  };
+  const row: Record<string, any> = {};
+  for (const [k, v] of Object.entries(setting)) {
+    if (map[k]) row[map[k]] = v;
+  }
+  return row;
+}
+
+// --- ConstructionRFQ ---
+export function constructionRFQFromRow(r: any): ConstructionRFQ {
+  return {
+    id: r.id ?? '',
+    jobId: r.job_id ?? '',
+    title: r.title ?? '',
+    scope: r.scope ?? 'install',
+    buildingDetails: r.building_details ?? '',
+    jobName: r.job_name ?? '',
+    province: r.province ?? '',
+    city: r.city ?? '',
+    postalCode: r.postal_code ?? '',
+    address: r.address ?? '',
+    width: Number(r.width) || 0,
+    length: Number(r.length) || 0,
+    height: Number(r.height) || 0,
+    notes: r.notes ?? '',
+    requiredByDate: r.required_by_date ?? '',
+    closingDate: r.closing_date ?? '',
+    status: r.status ?? 'Open',
+    createdByUserId: r.created_by_user_id ?? null,
+    createdAt: r.created_at ?? '',
+    awardedBidId: r.awarded_bid_id ?? null,
+  };
+}
+
+export function constructionRFQToRow(rfq: Partial<ConstructionRFQ>): Record<string, any> {
+  const map: Record<string, string> = {
+    id: 'id', jobId: 'job_id', title: 'title', scope: 'scope',
+    buildingDetails: 'building_details', jobName: 'job_name', province: 'province',
+    city: 'city', postalCode: 'postal_code', address: 'address',
+    width: 'width', length: 'length', height: 'height', notes: 'notes',
+    requiredByDate: 'required_by_date', closingDate: 'closing_date', status: 'status',
+    createdByUserId: 'created_by_user_id', createdAt: 'created_at', awardedBidId: 'awarded_bid_id',
+  };
+  const row: Record<string, any> = {};
+  for (const [k, v] of Object.entries(rfq)) {
+    if (map[k]) row[map[k]] = v;
+  }
+  return row;
+}
+
+// --- ConstructionBid ---
+export function constructionBidFromRow(r: any): ConstructionBid {
+  return {
+    id: r.id ?? '',
+    rfqId: r.rfq_id ?? '',
+    vendorId: r.vendor_id ?? '',
+    vendorName: r.vendor_name ?? '',
+    bidScope: r.bid_scope ?? 'install_only',
+    installAmount: Number(r.install_amount) || 0,
+    concreteAmount: Number(r.concrete_amount) || 0,
+    totalAmount: Number(r.total_amount) || 0,
+    notes: r.notes ?? '',
+    status: r.status ?? 'Submitted',
+    submittedAt: r.submitted_at ?? '',
+  };
+}
+
+export function constructionBidToRow(bid: Partial<ConstructionBid>): Record<string, any> {
+  const map: Record<string, string> = {
+    id: 'id', rfqId: 'rfq_id', vendorId: 'vendor_id', vendorName: 'vendor_name',
+    bidScope: 'bid_scope', installAmount: 'install_amount', concreteAmount: 'concrete_amount',
+    totalAmount: 'total_amount', notes: 'notes', status: 'status', submittedAt: 'submitted_at',
+  };
+  const row: Record<string, any> = {};
+  for (const [k, v] of Object.entries(bid)) {
     if (map[k]) row[map[k]] = v;
   }
   return row;

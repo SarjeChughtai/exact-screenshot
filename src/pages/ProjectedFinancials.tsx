@@ -6,9 +6,19 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 
 export default function ProjectedFinancials() {
-  const { deals, internalCosts } = useAppContext();
+  const { deals, internalCosts, payments } = useAppContext();
   const { visibleJobIds } = useSharedJobs({ allowedStates: ['deal'] });
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+
+  const expensePayments = payments.filter(payment => payment.direction === 'Expense OUT');
+  const totalExpensesOut = expensePayments.reduce((sum, payment) => sum + payment.totalInclTax, 0);
+  const projectedRecurringMonthly = expensePayments.reduce((sum, payment) => {
+    if (!payment.includeInProjection || !payment.recurrenceFrequency) return sum;
+    if (payment.recurrenceFrequency === 'monthly') return sum + payment.totalInclTax;
+    if (payment.recurrenceFrequency === 'quarterly') return sum + (payment.totalInclTax / 3);
+    if (payment.recurrenceFrequency === 'annual') return sum + (payment.totalInclTax / 12);
+    return sum;
+  }, 0);
 
   const rows = deals.filter(deal => visibleJobIds.has(deal.jobId)).map(deal => {
     const internalCost = internalCosts.find(cost => cost.jobId === deal.jobId);
@@ -52,6 +62,19 @@ export default function ProjectedFinancials() {
       <div>
         <h2 className="text-2xl font-bold">Projected Financials</h2>
         <p className="text-sm text-muted-foreground mt-1">Auto-populated from Internal Costs. Click the warning indicator to see missing data.</p>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="rounded-lg border bg-card p-4">
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">Expense Out</p>
+          <p className="mt-2 text-2xl font-semibold">{formatCurrency(totalExpensesOut)}</p>
+          <p className="mt-1 text-xs text-muted-foreground">General expenses recorded in the payment ledger.</p>
+        </div>
+        <div className="rounded-lg border bg-card p-4">
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">Projected Monthly Recurring Expense</p>
+          <p className="mt-2 text-2xl font-semibold">{formatCurrency(projectedRecurringMonthly)}</p>
+          <p className="mt-1 text-xs text-muted-foreground">Monthlyized from recurring expense-out ledger rows.</p>
+        </div>
       </div>
 
       <div className="bg-card border rounded-lg overflow-x-auto">

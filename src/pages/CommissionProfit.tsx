@@ -3,12 +3,11 @@ import { useAppContext } from '@/context/AppContext';
 import { useRoles } from '@/context/RoleContext';
 import { formatCurrency } from '@/lib/calculations';
 import { buildCommissionStageEntries, type CommissionStageEntry, type CommissionQueueStatus } from '@/lib/commission';
-import type { CommissionPayout, CommissionRecipientRole } from '@/types';
+import type { CommissionPayout, CommissionRecipientType } from '@/types';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -73,9 +72,9 @@ function SummaryCard({ label, amount, count }: { label: string; amount: number; 
 }
 
 export default function CommissionProfit() {
-  const { deals, internalCosts, payments, commissionPayouts, upsertCommissionPayout, deleteCommissionPayout } = useAppContext();
+  const { deals, internalCosts, payments, commissionPayouts, commissionRecipientSettings, upsertCommissionPayout, deleteCommissionPayout } = useAppContext();
   const { currentUser } = useRoles();
-  const [activeRole, setActiveRole] = useState<CommissionRecipientRole>('sales_rep');
+  const [recipientTypeFilter, setRecipientTypeFilter] = useState<CommissionRecipientType | 'all'>('all');
   const [queueFilter, setQueueFilter] = useState<QueueFilter>('pending');
   const [userFilter, setUserFilter] = useState('all');
   const [sortBy, setSortBy] = useState<SortBy>('eligible');
@@ -84,34 +83,38 @@ export default function CommissionProfit() {
   const [pendingRemoval, setPendingRemoval] = useState<CommissionStageEntry | null>(null);
 
   const allEntries = useMemo(
-    () => buildCommissionStageEntries(deals, internalCosts, payments, commissionPayouts),
-    [commissionPayouts, deals, internalCosts, payments],
+    () => buildCommissionStageEntries(deals, internalCosts, payments, commissionPayouts, commissionRecipientSettings),
+    [commissionPayouts, commissionRecipientSettings, deals, internalCosts, payments],
   );
 
-  const roleEntries = useMemo(
-    () => allEntries.filter(entry => entry.recipientRole === activeRole),
-    [activeRole, allEntries],
+  const filteredByType = useMemo(
+    () => recipientTypeFilter === 'all'
+      ? allEntries
+      : allEntries.filter(entry => entry.recipientType === recipientTypeFilter),
+    [allEntries, recipientTypeFilter],
   );
 
   const userOptions = useMemo(
-    () => Array.from(new Set(roleEntries.map(entry => entry.recipientName))).sort((a, b) => a.localeCompare(b)),
-    [roleEntries],
+    () => Array.from(new Set(filteredByType.map(entry => entry.recipientName))).sort((a, b) => a.localeCompare(b)),
+    [filteredByType],
   );
 
   const summary = useMemo(() => {
-    return roleEntries.reduce(
-      (acc, entry) => {
-        acc[entry.status].amount += entry.amount;
-        acc[entry.status].count += 1;
-        return acc;
-      },
-      {
-        pending: { amount: 0, count: 0 },
-        paid: { amount: 0, count: 0 },
-        projected: { amount: 0, count: 0 },
-      },
-    );
-  }, [roleEntries]);
+    const pending = allEntries.filter(entry => entry.status === 'pending');
+    const projected = allEntries.filter(entry => entry.status === 'projected');
+
+    const sumAmount = (entries: CommissionStageEntry[]) => entries.reduce((sum, entry) => sum + entry.amount, 0);
+    const countEntries = (entries: CommissionStageEntry[]) => entries.length;
+
+    return {
+      totalPending: { amount: sumAmount(pending), count: countEntries(pending) },
+      salesRepPending: pending.filter(entry => entry.recipientType === 'sales_rep'),
+      estimatorPending: pending.filter(entry => entry.recipientType === 'estimator'),
+      marketingPending: pending.filter(entry => entry.recipientType === 'marketing'),
+      ownerPending: pending.filter(entry => entry.recipientType === 'owner'),
+      projectedNext: { amount: sumAmount(projected), count: countEntries(projected) },
+    };
+  }, [allEntries]);
 
   const userSummary = useMemo(() => {
     const grouped = new Map<string, {
@@ -124,15 +127,17 @@ export default function CommissionProfit() {
       projectedCount: number;
     }>();
 
-    for (const entry of roleEntries) {
+    for (const entry of filteredByType) {
       const existing = grouped.get(entry.recipientName) || {
         recipientName: entry.recipientName,
+        recipientType: entry.recipientType,
         pendingAmount: 0,
         pendingCount: 0,
         paidAmount: 0,
         paidCount: 0,
         projectedAmount: 0,
         projectedCount: 0,
+        missingCount: 0,
       };
 
       if (entry.status === 'pending') {
@@ -146,6 +151,10 @@ export default function CommissionProfit() {
         existing.projectedCount += 1;
       }
 
+      if (entry.missingPayout) {
+        existing.missingCount += 1;
+      }
+
       grouped.set(entry.recipientName, existing);
     }
 
@@ -153,10 +162,10 @@ export default function CommissionProfit() {
       b.pendingAmount - a.pendingAmount
       || a.recipientName.localeCompare(b.recipientName)
     ));
-  }, [roleEntries]);
+  }, [filteredByType]);
 
   const filteredEntries = useMemo(() => {
-    let next = roleEntries;
+    let next = filteredByType;
     if (queueFilter !== 'all') {
       next = next.filter(entry => entry.status === queueFilter);
     }
@@ -164,7 +173,7 @@ export default function CommissionProfit() {
       next = next.filter(entry => entry.recipientName === userFilter);
     }
     return [...next].sort((a, b) => compareEntries(a, b, sortBy));
-  }, [queueFilter, roleEntries, sortBy, userFilter]);
+  }, [filteredByType, queueFilter, sortBy, userFilter]);
 
   const openConfirmDialog = (entry: CommissionStageEntry) => {
     setSelectedEntry(entry);
@@ -198,6 +207,8 @@ export default function CommissionProfit() {
       notes: confirmForm.notes,
       confirmedByUserId: currentUser.id || null,
       confirmedByName: currentUser.name || null,
+      basisUsed: selectedEntry.recipientType === 'sales_rep' && selectedEntry.commissionBasisLabel === 'Rep GP' ? 'rep_gp' : 'true_gp',
+      scheduleRule: selectedEntry.payoutStage === 'manual' ? 'manual' : selectedEntry.payoutStage === 'stage_2' ? 'stage_2' : 'rep_schedule',
       createdAt: selectedEntry.payoutRecord?.createdAt || now,
       updatedAt: now,
     };
@@ -223,18 +234,32 @@ export default function CommissionProfit() {
             Track who is eligible, when the deposit threshold was hit, what is still pending, and what has already been paid.
           </p>
         </div>
-        <Tabs value={activeRole} onValueChange={value => { setActiveRole(value as CommissionRecipientRole); setUserFilter('all'); }}>
-          <TabsList>
-            <TabsTrigger value="sales_rep">Sales Reps</TabsTrigger>
-            <TabsTrigger value="estimator">Estimators</TabsTrigger>
-          </TabsList>
-        </Tabs>
+        <div className="w-56">
+          <Label className="text-xs">Recipient Type</Label>
+          <Select value={recipientTypeFilter} onValueChange={value => { setRecipientTypeFilter(value as CommissionRecipientType | 'all'); setUserFilter('all'); }}>
+            <SelectTrigger className="mt-1 h-9">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All recipient types</SelectItem>
+              <SelectItem value="sales_rep">Sales Rep</SelectItem>
+              <SelectItem value="estimator">Estimator</SelectItem>
+              <SelectItem value="marketing">Marketing</SelectItem>
+              <SelectItem value="owner">Owner</SelectItem>
+              <SelectItem value="operations">Operations</SelectItem>
+              <SelectItem value="team_lead">Team Lead</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <SummaryCard label="Pending Now" amount={summary.pending.amount} count={summary.pending.count} />
-        <SummaryCard label="Already Paid" amount={summary.paid.amount} count={summary.paid.count} />
-        <SummaryCard label="Projected Next" amount={summary.projected.amount} count={summary.projected.count} />
+      <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-6">
+        <SummaryCard label="Total Pending" amount={summary.totalPending.amount} count={summary.totalPending.count} />
+        <SummaryCard label="Sales Rep Pending" amount={summary.salesRepPending.reduce((sum, entry) => sum + entry.amount, 0)} count={summary.salesRepPending.length} />
+        <SummaryCard label="Estimator Pending" amount={summary.estimatorPending.reduce((sum, entry) => sum + entry.amount, 0)} count={summary.estimatorPending.length} />
+        <SummaryCard label="Marketing Pending" amount={summary.marketingPending.reduce((sum, entry) => sum + entry.amount, 0)} count={summary.marketingPending.length} />
+        <SummaryCard label="Owner Pending" amount={summary.ownerPending.reduce((sum, entry) => sum + entry.amount, 0)} count={summary.ownerPending.length} />
+        <SummaryCard label="Projected Next" amount={summary.projectedNext.amount} count={summary.projectedNext.count} />
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
@@ -250,6 +275,7 @@ export default function CommissionProfit() {
               <thead>
                 <tr className="border-b text-left text-xs text-muted-foreground">
                   <th className="px-2 py-2 font-medium">User</th>
+                  <th className="px-2 py-2 font-medium">Type</th>
                   <th className="px-2 py-2 font-medium">Pending</th>
                   <th className="px-2 py-2 font-medium">Paid</th>
                   <th className="px-2 py-2 font-medium">Projected</th>
@@ -258,11 +284,15 @@ export default function CommissionProfit() {
               <tbody>
                 {userSummary.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="px-2 py-6 text-center text-sm text-muted-foreground">No commission records</td>
+                    <td colSpan={5} className="px-2 py-6 text-center text-sm text-muted-foreground">No commission records</td>
                   </tr>
                 ) : userSummary.map(row => (
                   <tr key={row.recipientName} className="border-b last:border-b-0">
-                    <td className="px-2 py-2 font-medium text-foreground">{row.recipientName}</td>
+                    <td className="px-2 py-2 font-medium text-foreground">
+                      <div>{row.recipientName}</div>
+                      {row.missingCount > 0 && <div className="text-xs text-amber-700">{row.missingCount} missing payout</div>}
+                    </td>
+                    <td className="px-2 py-2 text-xs">{row.recipientType.replace(/_/g, ' ')}</td>
                     <td className="px-2 py-2">
                       <div className="font-mono">{formatCurrency(row.pendingAmount)}</div>
                       <div className="text-xs text-muted-foreground">{row.pendingCount} item{row.pendingCount === 1 ? '' : 's'}</div>
@@ -342,6 +372,7 @@ export default function CommissionProfit() {
               <thead>
                 <tr className="border-b text-left text-xs text-muted-foreground">
                   <th className="px-2 py-2 font-medium">User</th>
+                  <th className="px-2 py-2 font-medium">Type</th>
                   <th className="px-2 py-2 font-medium">Job</th>
                   <th className="px-2 py-2 font-medium">Stage</th>
                   <th className="px-2 py-2 font-medium">Amount</th>
@@ -354,14 +385,16 @@ export default function CommissionProfit() {
               <tbody>
                 {filteredEntries.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-2 py-8 text-center text-muted-foreground">No payouts match the current filters</td>
+                    <td colSpan={9} className="px-2 py-8 text-center text-muted-foreground">No payouts match the current filters</td>
                   </tr>
                 ) : filteredEntries.map(entry => (
                   <tr key={entry.key} className="border-b align-top last:border-b-0">
                     <td className="px-2 py-2">
                       <div className="font-medium text-foreground">{entry.recipientName}</div>
                       <div className="text-xs text-muted-foreground">{entry.clientName}</div>
+                      {entry.missingPayout && <div className="text-xs text-amber-700">Missing payout</div>}
                     </td>
+                    <td className="px-2 py-2 text-xs">{entry.recipientType.replace(/_/g, ' ')}</td>
                     <td className="px-2 py-2">
                       <div className="font-mono text-xs">{entry.jobId}</div>
                       <div className="text-xs text-muted-foreground">{(entry.paidPct * 100).toFixed(0)}% paid</div>

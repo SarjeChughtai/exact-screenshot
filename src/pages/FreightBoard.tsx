@@ -12,6 +12,7 @@ import { JobIdSelect } from '@/components/JobIdSelect';
 import { useAppContext } from '@/context/AppContext';
 import { formatCurrency, formatNumber } from '@/lib/calculations';
 import { buildJobDocumentVaultSummary } from '@/lib/documentVault';
+import { findJobProfile } from '@/lib/jobProfiles';
 import { useRoles } from '@/context/RoleContext';
 import { useSettings } from '@/context/SettingsContext';
 import { useSharedJobs } from '@/lib/sharedJobs';
@@ -27,8 +28,10 @@ interface FreightFormState {
   mode: FreightMode;
   carrier: string;
   status: FreightStatus;
-  pickupDate: string;
-  deliveryDate: string;
+  estimatedPickupDate: string;
+  estimatedDeliveryDate: string;
+  actualPickupDate: string;
+  actualDeliveryDate: string;
   dropOffLocation: string;
   estDistance: string;
   estFreight: string;
@@ -42,8 +45,10 @@ const EMPTY_FORM: FreightFormState = {
   mode: 'pre_sale',
   carrier: '',
   status: 'Pending',
-  pickupDate: '',
-  deliveryDate: '',
+  estimatedPickupDate: '',
+  estimatedDeliveryDate: '',
+  actualPickupDate: '',
+  actualDeliveryDate: '',
   dropOffLocation: '',
   estDistance: '',
   estFreight: '',
@@ -59,6 +64,7 @@ export default function FreightBoard() {
     deals,
     quotes,
     freight,
+    jobProfiles,
     dealMilestones,
     internalCosts,
     payments,
@@ -118,18 +124,19 @@ export default function FreightBoard() {
     }>>((accumulator, job) => {
       const deal = deals.find(item => item.jobId === job.jobId);
       const quote = quoteByJobId[job.jobId];
+      const profile = findJobProfile(jobProfiles, job.jobId);
 
       accumulator[job.jobId] = {
         jobId: job.jobId,
         state: job.state === 'deal' ? 'deal' : 'external_quote',
-        clientName: deal?.clientName || quote?.clientName || job.clientName || '',
-        province: deal?.province || quote?.province || '',
-        city: deal?.city || quote?.city || '',
-        address: deal?.address || quote?.address || '',
-        postalCode: deal?.postalCode || quote?.postalCode || '',
-        width: deal?.width || quote?.width || 0,
-        length: deal?.length || quote?.length || 0,
-        height: deal?.height || quote?.height || 0,
+        clientName: profile?.clientName || deal?.clientName || quote?.clientName || job.clientName || '',
+        province: profile?.province || deal?.province || quote?.province || '',
+        city: profile?.city || deal?.city || quote?.city || '',
+        address: profile?.address || deal?.address || quote?.address || '',
+        postalCode: profile?.postalCode || deal?.postalCode || quote?.postalCode || '',
+        width: profile?.width || deal?.width || quote?.width || 0,
+        length: profile?.length || deal?.length || quote?.length || 0,
+        height: profile?.height || deal?.height || quote?.height || 0,
         weight: deal?.weight || quote?.weight || 0,
         opportunityId: deal?.opportunityId || quote?.opportunityId || null,
         dealExists: Boolean(deal),
@@ -137,7 +144,7 @@ export default function FreightBoard() {
 
       return accumulator;
     }, {});
-  }, [deals, postableJobs, quoteByJobId]);
+  }, [deals, jobProfiles, postableJobs, quoteByJobId]);
 
   const executionRows = useMemo(() => {
     return buildFreightExecutionRows({
@@ -263,8 +270,10 @@ export default function FreightBoard() {
       mode: record.mode || 'execution',
       carrier: record.carrier || '',
       status: record.status || 'Pending',
-      pickupDate: record.pickupDate || '',
-      deliveryDate: record.deliveryDate || '',
+      estimatedPickupDate: record.estimatedPickupDate || record.pickupDate || '',
+      estimatedDeliveryDate: record.estimatedDeliveryDate || record.deliveryDate || '',
+      actualPickupDate: record.actualPickupDate || '',
+      actualDeliveryDate: record.actualDeliveryDate || '',
       dropOffLocation: record.dropOffLocation || record.deliveryAddress || '',
       estDistance: String(record.estDistance || ''),
       estFreight: String(record.estFreight || ''),
@@ -287,8 +296,10 @@ export default function FreightBoard() {
       estDistance: existing?.estDistance ? String(existing.estDistance) : current.estDistance,
       actualFreight: existing?.actualFreight ? String(existing.actualFreight) : current.actualFreight,
       carrier: existing?.carrier || current.carrier,
-      pickupDate: existing?.pickupDate || current.pickupDate,
-      deliveryDate: existing?.deliveryDate || current.deliveryDate,
+      estimatedPickupDate: existing?.estimatedPickupDate || existing?.pickupDate || current.estimatedPickupDate,
+      estimatedDeliveryDate: existing?.estimatedDeliveryDate || existing?.deliveryDate || current.estimatedDeliveryDate,
+      actualPickupDate: existing?.actualPickupDate || current.actualPickupDate,
+      actualDeliveryDate: existing?.actualDeliveryDate || current.actualDeliveryDate,
       status: existing?.status || current.status,
       paid: existing?.paid || current.paid,
       assignToCurrentUser: existing ? existing.assignedFreightUserId === currentUser.id : current.assignToCurrentUser,
@@ -311,8 +322,10 @@ export default function FreightBoard() {
       mode: existing?.mode || nextMode,
       carrier: existing?.carrier || '',
       status: existing?.status || 'Pending',
-      pickupDate: existing?.pickupDate || '',
-      deliveryDate: existing?.deliveryDate || '',
+      estimatedPickupDate: existing?.estimatedPickupDate || existing?.pickupDate || '',
+      estimatedDeliveryDate: existing?.estimatedDeliveryDate || existing?.deliveryDate || '',
+      actualPickupDate: existing?.actualPickupDate || '',
+      actualDeliveryDate: existing?.actualDeliveryDate || '',
       dropOffLocation: existing?.dropOffLocation || existing?.deliveryAddress || resolvedLocation,
       estDistance: existing?.estDistance ? String(existing.estDistance) : '',
       estFreight: existing?.estFreight ? String(existing.estFreight) : '',
@@ -365,8 +378,12 @@ export default function FreightBoard() {
       pickupAddress: existing?.pickupAddress || '',
       deliveryAddress: existing?.deliveryAddress || resolvedLocation,
       dropOffLocation: form.dropOffLocation || resolvedLocation,
-      pickupDate: form.pickupDate,
-      deliveryDate: form.deliveryDate,
+      pickupDate: form.mode === 'execution' ? form.actualPickupDate : form.estimatedPickupDate,
+      deliveryDate: form.mode === 'execution' ? form.actualDeliveryDate : form.estimatedDeliveryDate,
+      estimatedPickupDate: form.estimatedPickupDate,
+      estimatedDeliveryDate: form.estimatedDeliveryDate,
+      actualPickupDate: form.actualPickupDate,
+      actualDeliveryDate: form.actualDeliveryDate,
       mode: form.mode,
       estDistance: Number(form.estDistance) || 0,
       estFreight: Number(form.estFreight) || 0,
@@ -446,7 +463,7 @@ export default function FreightBoard() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-primary text-primary-foreground text-xs">
-                {['Job ID', 'Client', 'Building', 'Province', 'Est Distance', 'Est Freight', 'Pickup', 'Delivery', 'Drop-Off', 'Assigned', 'Docs', 'Status', 'Actions'].map(header => (
+                {['Job ID', 'Client', 'Building', 'Province', 'Est Distance', 'Est Freight', 'Est Pickup', 'Est Delivery', 'Drop-Off', 'Assigned', 'Docs', 'Status', 'Actions'].map(header => (
                   <th key={header} className="px-3 py-2 text-left font-medium whitespace-nowrap">{header}</th>
                 ))}
               </tr>
@@ -464,8 +481,8 @@ export default function FreightBoard() {
                   <td className="px-3 py-2 text-xs">{row.province || '-'}</td>
                   <td className="px-3 py-2 font-mono">{row.estDistance ? `${formatNumber(row.estDistance)} km` : '-'}</td>
                   <td className="px-3 py-2 font-mono">{row.estFreight ? formatCurrency(row.estFreight) : '-'}</td>
-                  <td className="px-3 py-2 text-xs">{row.pickupDate || '-'}</td>
-                  <td className="px-3 py-2 text-xs">{row.deliveryDate || '-'}</td>
+                  <td className="px-3 py-2 text-xs">{row.estimatedPickupDate || row.pickupDate || '-'}</td>
+                  <td className="px-3 py-2 text-xs">{row.estimatedDeliveryDate || row.deliveryDate || '-'}</td>
                   <td className="px-3 py-2 text-xs">{row.dropOffLocation || '-'}</td>
                   <td className="px-3 py-2 text-xs">{getAssigneeLabel(row.assignedFreightUserId)}</td>
                   <td className="px-3 py-2 text-xs">
@@ -500,14 +517,14 @@ export default function FreightBoard() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-primary text-primary-foreground text-xs">
-                {['Job ID', 'Client', 'Building', 'Weight', 'Province', 'Pickup', 'Delivery', 'Drop-Off', 'Assigned', 'Ready', 'Milestones', 'Next Step', 'Blocked Reason', 'Docs', 'Est Freight', 'Actual', 'Variance', 'Paid', 'Status', 'Actions'].map(header => (
+                {['Job ID', 'Client', 'Building', 'Weight', 'Province', 'Est Pickup', 'Est Delivery', 'Actual Pickup', 'Actual Delivery', 'Drop-Off', 'Assigned', 'Ready', 'Milestones', 'Next Step', 'Blocked Reason', 'Docs', 'Est Freight', 'Actual', 'Variance', 'Paid', 'Status', 'Actions'].map(header => (
                   <th key={header} className="px-3 py-2 text-left font-medium whitespace-nowrap">{header}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {executionRows.length === 0 ? (
-                <tr><td colSpan={20} className="px-3 py-8 text-center text-muted-foreground">No deal-stage freight rows.</td></tr>
+                <tr><td colSpan={22} className="px-3 py-8 text-center text-muted-foreground">No deal-stage freight rows.</td></tr>
               ) : executionRows.map(row => {
                 const documentSummary = documentSummaryByJobId[row.jobId];
                 return (
@@ -517,8 +534,10 @@ export default function FreightBoard() {
                   <td className="px-3 py-2 text-xs">{row.buildingSize}</td>
                   <td className="px-3 py-2 font-mono">{formatNumber(row.weight)} lbs</td>
                   <td className="px-3 py-2 text-xs">{row.province}</td>
-                  <td className="px-3 py-2 text-xs">{row.pickupDate || '-'}</td>
-                  <td className="px-3 py-2 text-xs">{row.deliveryDate || '-'}</td>
+                  <td className="px-3 py-2 text-xs">{row.estimatedPickupDate || '-'}</td>
+                  <td className="px-3 py-2 text-xs">{row.estimatedDeliveryDate || '-'}</td>
+                  <td className="px-3 py-2 text-xs">{row.actualPickupDate || row.pickupDate || '-'}</td>
+                  <td className="px-3 py-2 text-xs">{row.actualDeliveryDate || row.deliveryDate || '-'}</td>
                   <td className="px-3 py-2 text-xs">{row.dropOffLocation || '-'}</td>
                   <td className="px-3 py-2 text-xs">{getAssigneeLabel(row.assignedFreightUserId)}</td>
                   <td className="px-3 py-2">
@@ -554,8 +573,12 @@ export default function FreightBoard() {
                         pickupAddress: '',
                         deliveryAddress: row.dropOffLocation,
                         dropOffLocation: row.dropOffLocation,
-                        pickupDate: row.pickupDate,
-                        deliveryDate: row.deliveryDate,
+                        pickupDate: row.actualPickupDate || row.pickupDate,
+                        deliveryDate: row.actualDeliveryDate || row.deliveryDate,
+                        estimatedPickupDate: row.estimatedPickupDate || '',
+                        estimatedDeliveryDate: row.estimatedDeliveryDate || '',
+                        actualPickupDate: row.actualPickupDate || row.pickupDate,
+                        actualDeliveryDate: row.actualDeliveryDate || row.deliveryDate,
                         mode: 'execution',
                         estDistance: 0,
                         estFreight: row.estFreight,
@@ -633,12 +656,20 @@ export default function FreightBoard() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Pickup Date</Label>
-              <Input type="date" value={form.pickupDate} onChange={event => setForm(current => ({ ...current, pickupDate: event.target.value }))} />
+              <Label>Estimated Pickup Date</Label>
+              <Input type="date" value={form.estimatedPickupDate} onChange={event => setForm(current => ({ ...current, estimatedPickupDate: event.target.value }))} />
             </div>
             <div className="space-y-2">
-              <Label>Delivery Date</Label>
-              <Input type="date" value={form.deliveryDate} onChange={event => setForm(current => ({ ...current, deliveryDate: event.target.value }))} />
+              <Label>Estimated Delivery Date</Label>
+              <Input type="date" value={form.estimatedDeliveryDate} onChange={event => setForm(current => ({ ...current, estimatedDeliveryDate: event.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label>Actual Pickup Date</Label>
+              <Input type="date" value={form.actualPickupDate} onChange={event => setForm(current => ({ ...current, actualPickupDate: event.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label>Actual Delivery Date</Label>
+              <Input type="date" value={form.actualDeliveryDate} onChange={event => setForm(current => ({ ...current, actualDeliveryDate: event.target.value }))} />
             </div>
             <div className="space-y-2 md:col-span-2">
               <Label>Drop-Off Location</Label>

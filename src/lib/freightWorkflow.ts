@@ -13,6 +13,10 @@ export interface FreightExecutionRow {
   buildingSize: string;
   province: string;
   weight: number;
+  estimatedPickupDate: string;
+  estimatedDeliveryDate: string;
+  actualPickupDate: string;
+  actualDeliveryDate: string;
   pickupDate: string;
   deliveryDate: string;
   dropOffLocation: string;
@@ -37,6 +41,8 @@ export interface FreightPreSaleRow {
   buildingSize: string;
   province: string;
   weight: number;
+  estimatedPickupDate: string;
+  estimatedDeliveryDate: string;
   pickupDate: string;
   deliveryDate: string;
   dropOffLocation: string;
@@ -79,6 +85,10 @@ export function buildFreightExecutionRows(input: {
         buildingSize: `${deal.width}x${deal.length}x${deal.height}`,
         province: deal.province,
         weight: deal.weight,
+        estimatedPickupDate: freightRecord?.estimatedPickupDate || '',
+        estimatedDeliveryDate: freightRecord?.estimatedDeliveryDate || '',
+        actualPickupDate: freightRecord?.actualPickupDate || freightRecord?.pickupDate || deal.pickupDate || '',
+        actualDeliveryDate: freightRecord?.actualDeliveryDate || freightRecord?.deliveryDate || deal.deliveryDate || '',
         pickupDate: freightRecord?.pickupDate || deal.pickupDate || '',
         deliveryDate: freightRecord?.deliveryDate || deal.deliveryDate || '',
         dropOffLocation: freightRecord?.dropOffLocation || freightRecord?.deliveryAddress || [deal.city, deal.province].filter(Boolean).join(', '),
@@ -119,6 +129,8 @@ export function buildPreSaleFreightRows(input: {
         buildingSize: record.buildingSize || (quote ? `${quote.width}x${quote.length}x${quote.height}` : ''),
         province: record.province || quote?.province || '',
         weight: record.weight || quote?.weight || 0,
+        estimatedPickupDate: record.estimatedPickupDate || record.pickupDate || '',
+        estimatedDeliveryDate: record.estimatedDeliveryDate || record.deliveryDate || '',
         pickupDate: record.pickupDate || '',
         deliveryDate: record.deliveryDate || '',
         dropOffLocation: record.dropOffLocation || record.deliveryAddress || [quote?.city, quote?.province].filter(Boolean).join(', '),

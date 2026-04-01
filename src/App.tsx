@@ -44,6 +44,7 @@ const AuditLog = lazy(() => import("@/pages/AuditLog"));
 const Settings = lazy(() => import("@/pages/Settings"));
 const DealerRFQ = lazy(() => import("@/pages/DealerRFQ"));
 const DealerLog = lazy(() => import("@/pages/DealerLog"));
+const ConstructionBoard = lazy(() => import("@/pages/ConstructionBoard"));
 const DraftLog = lazy(() => import("@/pages/DraftLog"));
 const MasterData = lazy(() => import("@/pages/MasterData"));
 const Clients = lazy(() => import("@/pages/Clients"));
@@ -121,6 +122,7 @@ const App = () => (
                           <Route path="/audit-log" element={withModule('settings', <AuditLog />)} />
                           <Route path="/dealer-rfq" element={withModule('dealer-rfq', <DealerRFQ />)} />
                           <Route path="/dealer-log" element={withModule('dealer-log', <DealerLog />)} />
+                          <Route path="/construction-board" element={withModule('vendor-board', <ConstructionBoard />)} />
                           <Route path="/draft-log" element={withModule('draft-log', <DraftLog />)} />
                           <Route path="/master-data" element={withModule('master-data', <MasterData />)} />
                           <Route path="/clients" element={withModule('payment-ledger', <Clients />)} />

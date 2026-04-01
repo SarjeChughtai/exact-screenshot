@@ -101,9 +101,9 @@ const menuGroups: MenuGroup[] = [
     ],
   },
   {
-    label: 'sidebar.vendorPortal',
+    label: 'sidebar.constructionPortal',
     items: [
-      { path: '/vendor-board', label: 'sidebar.quoteBoard', icon: Factory, module: 'vendor-board' },
+      { path: '/construction-board', label: 'sidebar.constructionBoard', icon: Factory, module: 'vendor-board' },
     ],
   },
   {
@@ -127,16 +127,11 @@ export function AppSidebar() {
   const { profile } = useSettings();
   const { t } = useTranslation();
   const canImpersonate = actualRoles.includes('admin') || actualRoles.includes('owner');
-  const vendorBoardLabelKey = currentUser.roles.includes('manufacturer')
-    ? 'sidebar.manufacturerBoard'
-    : 'sidebar.vendorBoard';
-
   const filteredGroups = menuGroups
     .map(g => ({
       ...g,
       items: g.items
-        .filter(item => canAccess(item.module) && (item.module !== 'messages' || profile.canUseMessaging))
-        .map(item => item.path === '/vendor-board' ? { ...item, label: vendorBoardLabelKey } : item),
+        .filter(item => canAccess(item.module) && (item.module !== 'messages' || profile.canUseMessaging)),
     }))
     .filter(g => g.items.length > 0);
 

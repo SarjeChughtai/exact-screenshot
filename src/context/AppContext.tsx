@@ -16,9 +16,12 @@ import {
   SteelCostDataRecord,
   InsulationCostDataRecord,
   StoredDocument,
+  JobProfile,
+  CommissionRecipientSetting,
 } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
 import { useRoles } from '@/context/RoleContext';
+import { useSettings, type PersonnelEntry, type PersonnelRole } from '@/context/SettingsContext';
 import { logAudit } from '@/lib/auditLog';
 import {
   dealFromRow, dealToRow,
@@ -34,6 +37,10 @@ import {
   steelCostDataFromRow,
   insulationCostDataFromRow,
   storedDocumentFromRow,
+  jobProfileFromRow,
+  jobProfileToRow,
+  commissionRecipientSettingFromRow,
+  commissionRecipientSettingToRow,
   opportunityFromRow,
   opportunityToRow,
   dealMilestoneFromRow,
@@ -51,6 +58,14 @@ import {
   deriveDealProductionStatusFromRecord,
 } from '@/lib/productionLifecycle';
 import { jobIdsMatch, resolveCanonicalJobId } from '@/lib/jobIds';
+import {
+  buildJobProfileFromDeal,
+  buildJobProfileFromEstimate,
+  buildJobProfileFromFreight,
+  buildJobProfileFromQuote,
+  findJobProfile,
+  mergeJobProfile,
+} from '@/lib/jobProfiles';
 import {
   buildClientSeedForLedger,
   buildVendorSeedForLedger,
@@ -75,6 +90,8 @@ interface AppState {
   steelCostData: SteelCostDataRecord[];
   insulationCostData: InsulationCostDataRecord[];
   storedDocuments: StoredDocument[];
+  jobProfiles: JobProfile[];
+  commissionRecipientSettings: CommissionRecipientSetting[];
   loading: boolean;
 }
 
@@ -114,6 +131,7 @@ interface AppContextType extends AppState {
   allocateJobId: () => Promise<string>;
   quickAddClient: (clientId: string, clientName: string, jobId?: string) => Promise<Client | null>;
   quickAddVendor: (vendorName: string, province?: string) => Promise<Vendor | null>;
+  upsertJobProfile: (updates: Partial<JobProfile> & { jobId: string }) => Promise<JobProfile | null>;
   refreshData: () => Promise<void>;
 }
 
@@ -121,6 +139,7 @@ const AppContext = createContext<AppContextType | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const { currentUser } = useRoles();
+  const { settings, updateSettings } = useSettings();
   const [state, setState] = useState<AppState>({
     quotes: [],
     deals: [],
@@ -138,6 +157,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     steelCostData: [],
     insulationCostData: [],
     storedDocuments: [],
+    jobProfiles: [],
+    commissionRecipientSettings: [],
     loading: true,
   });
 
@@ -157,7 +178,104 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
 
     return Array.from(productionByJobId.values());
-  }, []);
+  }, [buildAuthoritativeProductionState, state.rfqs]);
+
+  const ensureManualPersonnelEntry = useCallback(async (name: string, roles: PersonnelRole[]) => {
+    const trimmedName = name.trim();
+    if (!trimmedName) return;
+
+    const existing = settings.personnel.find(person =>
+      person.name.trim().toLowerCase() === trimmedName.toLowerCase(),
+    );
+
+    if (existing) {
+      const mergedRoles = Array.from(new Set([...(existing.roles || [existing.role]), ...roles])) as PersonnelRole[];
+      const existingManual = settings.externalPersonnel.find(person => person.id === existing.id);
+      if (existingManual && mergedRoles.length !== (existing.roles || []).length) {
+        await updateSettings({
+          externalPersonnel: settings.externalPersonnel.map(person =>
+            person.id === existingManual.id ? { ...person, role: mergedRoles[0], roles: mergedRoles } : person,
+          ),
+        });
+      }
+      return;
+    }
+
+    const nextEntry: PersonnelEntry = {
+      id: `manual:${trimmedName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+      name: trimmedName,
+      email: '',
+      role: roles[0],
+      roles,
+    };
+
+    await updateSettings({
+      externalPersonnel: [...settings.externalPersonnel, nextEntry],
+    });
+  }, [settings, updateSettings]);
+
+  const upsertJobProfile = useCallback(async (updates: Partial<JobProfile> & { jobId: string }) => {
+    const canonicalJobId = resolveCanonicalJobId(updates.jobId) || updates.jobId.trim();
+    if (!canonicalJobId) return null;
+
+    const existing = findJobProfile(state.jobProfiles, canonicalJobId);
+    const nextProfile = mergeJobProfile(existing, { ...updates, jobId: canonicalJobId });
+
+    setState(prev => ({
+      ...prev,
+      jobProfiles: [...prev.jobProfiles.filter(profile => !jobIdsMatch(profile.jobId, canonicalJobId)), nextProfile],
+    }));
+
+    try {
+      const { data, error } = await (supabase.from as any)('job_profiles')
+        .upsert(jobProfileToRow(nextProfile), { onConflict: 'job_id' })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      if (data) {
+        const mapped = jobProfileFromRow(data);
+        setState(prev => ({
+          ...prev,
+          jobProfiles: [...prev.jobProfiles.filter(profile => !jobIdsMatch(profile.jobId, canonicalJobId)), mapped],
+        }));
+        return mapped;
+      }
+    } catch (error) {
+      console.error('Failed to persist job profile', error);
+    }
+
+    return nextProfile;
+  }, [state.jobProfiles]);
+
+  const syncJobProfileFromQuote = useCallback(async (quote: Partial<Quote>) => {
+    const seed = buildJobProfileFromQuote(quote);
+    if (seed) {
+      await upsertJobProfile(seed);
+    }
+  }, [upsertJobProfile]);
+
+  const syncJobProfileFromDeal = useCallback(async (deal: Partial<Deal>) => {
+    const seed = buildJobProfileFromDeal(deal);
+    if (seed) {
+      await upsertJobProfile(seed);
+    }
+  }, [upsertJobProfile]);
+
+  const syncJobProfileFromEstimate = useCallback(async (estimate: Partial<Estimate>) => {
+    const seed = buildJobProfileFromEstimate(estimate);
+    if (seed) {
+      await upsertJobProfile(seed);
+    }
+  }, [upsertJobProfile]);
+
+  const syncJobProfileFromFreight = useCallback(async (record: Partial<FreightRecord>) => {
+    const seed = buildJobProfileFromFreight(record);
+    if (seed) {
+      await upsertJobProfile(seed);
+    }
+  }, [upsertJobProfile]);
 
   const fetchAll = useCallback(async () => {
     try {
@@ -177,6 +295,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         steelCostRes,
         insulationCostRes,
         storedDocumentsRes,
+        jobProfilesRes,
+        commissionRecipientSettingsRes,
       ] = await Promise.all([
         supabase.from('quotes').select('*'),
         supabase.from('deals').select('*'),
@@ -193,6 +313,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         (supabase.from as any)('steel_cost_data').select('*'),
         (supabase.from as any)('insulation_cost_data').select('*'),
         (supabase.from as any)('stored_documents').select('*'),
+        (supabase.from as any)('job_profiles').select('*'),
+        (supabase.from as any)('commission_recipient_settings').select('*'),
       ]);
 
       // Log fetch results for debugging
@@ -212,6 +334,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         steelCostData: steelCostRes.data?.length, steelCostErr: steelCostRes.error,
         insulationCostData: insulationCostRes.data?.length, insulationCostErr: insulationCostRes.error,
         storedDocuments: storedDocumentsRes.data?.length, storedDocumentsErr: storedDocumentsRes.error,
+        jobProfiles: jobProfilesRes.data?.length, jobProfilesErr: jobProfilesRes.error,
+        commissionRecipientSettings: commissionRecipientSettingsRes.data?.length, commissionRecipientSettingsErr: commissionRecipientSettingsRes.error,
       });
 
       // Check if any core query had an error (e.g. RLS blocking unauthenticated)
@@ -243,6 +367,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const steelCostData = (steelCostRes.data || []).map(steelCostDataFromRow);
       const insulationCostData = (insulationCostRes.data || []).map(insulationCostDataFromRow);
       const storedDocuments = (storedDocumentsRes.data || []).map(storedDocumentFromRow);
+      const jobProfiles = jobProfilesRes.error ? [] : ((jobProfilesRes.data || []).map(jobProfileFromRow));
+      const commissionRecipientSettings = commissionRecipientSettingsRes.error ? [] : ((commissionRecipientSettingsRes.data || []).map(commissionRecipientSettingFromRow));
 
       // If all Supabase tables are empty, try migrating from localStorage
       const allEmpty = quotes.length === 0 && deals.length === 0 && payments.length === 0;
@@ -275,6 +401,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         steelCostData,
         insulationCostData,
         storedDocuments,
+        jobProfiles,
+        commissionRecipientSettings,
         loading: false,
       });
     } catch (err) {
@@ -305,6 +433,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
           steelCostData: data.steelCostData || [],
           insulationCostData: data.insulationCostData || [],
           storedDocuments: data.storedDocuments || [],
+          jobProfiles: data.jobProfiles || [],
+          commissionRecipientSettings: data.commissionRecipientSettings || [],
           loading: false,
         });
       } else {
@@ -393,6 +523,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         steelCostData: [],
         insulationCostData: [],
         storedDocuments: [],
+        jobProfiles: [],
+        commissionRecipientSettings: [],
         rfqs: [],
         loading: false,
       });
@@ -416,12 +548,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         console.warn('[Data] Supabase insert returned 0 rows — using SEED_DEALS in-memory');
         setState(prev => ({ ...prev, deals: SEED_DEALS, loading: false }));
         // Also save to localStorage so it persists
-        const currentState = { quotes: [], deals: SEED_DEALS, opportunities: [], dealMilestones: [], internalCosts: [], payments: [], commissionPayouts: [], production: [], freight: [], rfqs: [], clients: [], vendors: [], estimates: [], steelCostData: [], insulationCostData: [], storedDocuments: [] };
+        const currentState = { quotes: [], deals: SEED_DEALS, opportunities: [], dealMilestones: [], internalCosts: [], payments: [], commissionPayouts: [], production: [], freight: [], rfqs: [], clients: [], vendors: [], estimates: [], steelCostData: [], insulationCostData: [], storedDocuments: [], jobProfiles: [], commissionRecipientSettings: [] };
         localStorage.setItem('canada_steel_state', JSON.stringify(currentState));
       }
     } catch {
       setState(prev => ({ ...prev, deals: SEED_DEALS, loading: false }));
-      const currentState = { quotes: [], deals: SEED_DEALS, opportunities: [], dealMilestones: [], internalCosts: [], payments: [], commissionPayouts: [], production: [], freight: [], rfqs: [], clients: [], vendors: [], estimates: [], steelCostData: [], insulationCostData: [], storedDocuments: [] };
+      const currentState = { quotes: [], deals: SEED_DEALS, opportunities: [], dealMilestones: [], internalCosts: [], payments: [], commissionPayouts: [], production: [], freight: [], rfqs: [], clients: [], vendors: [], estimates: [], steelCostData: [], insulationCostData: [], storedDocuments: [], jobProfiles: [], commissionRecipientSettings: [] };
       localStorage.setItem('canada_steel_state', JSON.stringify(currentState));
     }
   }, [buildAuthoritativeProductionState]);
@@ -556,7 +688,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [currentUser?.id, state.dealMilestones]);
 
   const syncProductionShadow = useCallback(async (
-    input: Pick<Deal, 'jobId' | 'productionStatus' | 'insulationStatus'>,
+    input: Pick<
+      Deal,
+      'jobId' | 'productionStatus' | 'insulationStatus' | 'engineeringDrawingsStatus' | 'foundationDrawingsStatus'
+    >,
   ) => {
     const shadowRecord = buildProductionShadowRecord(input);
 
@@ -600,6 +735,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const row = quoteToRow(nextQuote);
       await supabase.from('quotes').insert(row as any).select().single();
     } catch {}
+    await syncJobProfileFromQuote(nextQuote);
   }, [currentUser, upsertOpportunityRecord]);
 
   const allocateJobId = useCallback(async (): Promise<string> => {
@@ -621,12 +757,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
     if (nextQuote) {
       void upsertOpportunityRecord(nextQuote, 'quote');
+      void syncJobProfileFromQuote(nextQuote);
     }
     try {
       const row = quoteToRow(updates);
       await supabase.from('quotes').update(row as any).eq('id', id);
     } catch {}
-  }, [currentUser, state.quotes, upsertOpportunityRecord]);
+  }, [currentUser, state.quotes, syncJobProfileFromQuote, upsertOpportunityRecord]);
 
   const deleteQuote = useCallback(async (id: string) => {
     setState(prev => {
@@ -744,13 +881,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const ensurePaymentIntegrity = useCallback(async (payment: PaymentEntry) => {
-    const canonicalJobId = resolveCanonicalJobId(payment.jobId) || payment.jobId.trim();
-    const linkedDeal = state.deals.find(deal => jobIdsMatch(deal.jobId, canonicalJobId)) || null;
+    const rawJobId = (payment.jobId || '').trim();
+    const canonicalJobId = resolveCanonicalJobId(rawJobId) || rawJobId;
+    const linkedDeal = canonicalJobId
+      ? state.deals.find(deal => jobIdsMatch(deal.jobId, canonicalJobId)) || null
+      : null;
     const isClientPaymentDirection = payment.direction === 'Client Payment IN' || payment.direction === 'Refund OUT';
+    const isVendorPaymentDirection = payment.direction === 'Vendor Payment OUT' || payment.direction === 'Refund IN' || payment.direction === 'Expense OUT';
+    const inferredPartyType = payment.partyType || (
+      payment.direction === 'Commission Payment OUT'
+        ? 'commission'
+        : isClientPaymentDirection
+          ? 'client'
+          : isVendorPaymentDirection
+            ? 'vendor'
+            : 'general_expense'
+    );
 
     let nextPayment: PaymentEntry = {
       ...payment,
-      jobId: canonicalJobId,
+      jobId: canonicalJobId || null,
+      partyType: inferredPartyType,
       clientVendorName: payment.clientVendorName.trim(),
     };
 
@@ -776,7 +927,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       );
 
       if (client) {
-        await upsertClientJob(client.clientId, client.clientName || client.name || nextPayment.clientVendorName, canonicalJobId);
+        if (canonicalJobId) {
+          await upsertClientJob(client.clientId, client.clientName || client.name || nextPayment.clientVendorName, canonicalJobId);
+        }
         nextPayment = {
           ...nextPayment,
           clientId: client.id,
@@ -790,7 +943,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           vendorId: undefined,
         };
       }
-    } else {
+    } else if (isVendorPaymentDirection) {
       const matchingVendor = findVendorRecordForLedger(state.vendors, {
         vendorId: payment.vendorId,
         clientVendorName: payment.clientVendorName,
@@ -822,6 +975,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
           vendorId: undefined,
         };
       }
+    } else {
+      nextPayment = {
+        ...nextPayment,
+        clientId: undefined,
+        vendorId: undefined,
+      };
     }
 
     return nextPayment;
@@ -838,12 +997,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
       await supabase.from('deals').insert(row as any).select().single();
     } catch {}
     void syncProductionShadow(nextDeal);
+    void syncJobProfileFromDeal(nextDeal);
+    if (nextDeal.salesRep) await ensureManualPersonnelEntry(nextDeal.salesRep, ['sales_rep']);
+    if (nextDeal.estimator) await ensureManualPersonnelEntry(nextDeal.estimator, ['estimator']);
+    if (nextDeal.teamLead) await ensureManualPersonnelEntry(nextDeal.teamLead, ['team_lead']);
     // Upsert client record with the new job ID
     if (nextDeal.clientName || nextDeal.clientId) {
       const cId = nextDeal.clientId || `C-${Date.now().toString(36).toUpperCase()}`;
       await upsertClientJob(cId, nextDeal.clientName, nextDeal.jobId);
     }
-  }, [currentUser, syncProductionShadow, upsertClientJob, upsertOpportunityRecord]);
+  }, [currentUser, ensureManualPersonnelEntry, syncJobProfileFromDeal, syncProductionShadow, upsertClientJob, upsertOpportunityRecord]);
 
   const updateDeal = useCallback(async (jobId: string, updates: Partial<Deal>) => {
     const existingDeal = state.deals.find(d => d.jobId === jobId);
@@ -859,6 +1022,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (nextDeal) {
       void upsertOpportunityRecord(nextDeal, 'deal');
       void syncProductionShadow(nextDeal);
+      void syncJobProfileFromDeal(nextDeal);
+      if (nextDeal.salesRep) void ensureManualPersonnelEntry(nextDeal.salesRep, ['sales_rep']);
+      if (nextDeal.estimator) void ensureManualPersonnelEntry(nextDeal.estimator, ['estimator']);
+      if (nextDeal.teamLead) void ensureManualPersonnelEntry(nextDeal.teamLead, ['team_lead']);
     }
     try {
       const row = dealToRow(updates);
@@ -882,7 +1049,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
       toast.error('Unable to save the deal update. The previous value was restored.');
     }
-  }, [currentUser, state.deals, syncProductionShadow, upsertOpportunityRecord]);
+  }, [currentUser, ensureManualPersonnelEntry, state.deals, syncJobProfileFromDeal, syncProductionShadow, upsertOpportunityRecord]);
 
   const deleteDeal = useCallback(async (jobId: string) => {
     const revertedQuote = state.quotes.find(quote =>
@@ -1055,6 +1222,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         ...deal,
         productionStatus: nextStatus,
         insulationStatus: pr.insulationStatus || deal.insulationStatus,
+        engineeringDrawingsStatus: pr.engineeringDrawingsStatus || deal.engineeringDrawingsStatus,
+        foundationDrawingsStatus: pr.foundationDrawingsStatus || deal.foundationDrawingsStatus,
       } : deal),
     }));
     logAudit(currentUser?.name || 'System', 'CREATE', 'Production', pr.jobId, pr);
@@ -1064,6 +1233,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       await supabase.from('deals').update({
         production_status: nextStatus,
         insulation_status: pr.insulationStatus || '',
+        engineering_drawings_status: pr.engineeringDrawingsStatus || 'not_requested',
+        foundation_drawings_status: pr.foundationDrawingsStatus || 'not_requested',
       } as any).eq('job_id', pr.jobId);
     } catch {}
   }, [currentUser]);
@@ -1085,6 +1256,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
           ...deal,
           productionStatus: nextStatus,
           insulationStatus: nextRecord.insulationStatus || deal.insulationStatus,
+          engineeringDrawingsStatus: nextRecord.engineeringDrawingsStatus || deal.engineeringDrawingsStatus,
+          foundationDrawingsStatus: nextRecord.foundationDrawingsStatus || deal.foundationDrawingsStatus,
         } : deal),
       };
     });
@@ -1095,6 +1268,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         await supabase.from('deals').update({
           production_status: nextStatus,
           insulation_status: nextRecord.insulationStatus || '',
+          engineering_drawings_status: nextRecord.engineeringDrawingsStatus || 'not_requested',
+          foundation_drawings_status: nextRecord.foundationDrawingsStatus || 'not_requested',
         } as any).eq('job_id', jobId);
       }
     } catch {}
@@ -1108,9 +1283,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const row = freightToRow(fr);
       await supabase.from('freight').insert(row as any).select().single();
     } catch {}
-  }, [currentUser]);
+    await syncJobProfileFromFreight(fr);
+  }, [currentUser, syncJobProfileFromFreight]);
 
   const updateFreight = useCallback(async (jobId: string, updates: Partial<FreightRecord>) => {
+    const nextFreight = state.freight.find(record => record.jobId === jobId)
+      ? { ...state.freight.find(record => record.jobId === jobId)!, ...updates }
+      : null;
     setState(prev => {
       const existing = prev.freight.find(f => f.jobId === jobId);
       if (existing) logAudit(currentUser?.name || 'System', 'UPDATE', 'Freight', jobId, updates, existing);
@@ -1123,7 +1302,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const row = freightToRow(updates);
       await supabase.from('freight').update(row as any).eq('job_id', jobId);
     } catch {}
-  }, [currentUser]);
+    if (nextFreight) {
+      void syncJobProfileFromFreight(nextFreight);
+    }
+  }, [currentUser, state.freight, syncJobProfileFromFreight]);
 
   // --- RFQs ---
   const addRFQ = useCallback((rfq: RFQ) => {
@@ -1230,9 +1412,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const row = estimateToRow(estimate);
       await (supabase.from as any)('estimates').insert(row).select().single();
     } catch {}
-  }, [currentUser]);
+    await syncJobProfileFromEstimate(estimate);
+  }, [currentUser, syncJobProfileFromEstimate]);
 
   const updateEstimate = useCallback(async (id: string, updates: Partial<Estimate>) => {
+    const nextEstimate = state.estimates.find(estimate => estimate.id === id)
+      ? { ...state.estimates.find(estimate => estimate.id === id)!, ...updates }
+      : null;
     setState(prev => {
       const existing = prev.estimates.find(estimate => estimate.id === id);
       if (existing) logAudit(currentUser?.name || 'System', 'UPDATE', 'Estimate', id, updates, existing);
@@ -1245,7 +1431,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const row = estimateToRow(updates);
       await (supabase.from as any)('estimates').update(row).eq('id', id);
     } catch {}
-  }, [currentUser]);
+    if (nextEstimate) {
+      void syncJobProfileFromEstimate(nextEstimate);
+    }
+  }, [currentUser, state.estimates, syncJobProfileFromEstimate]);
 
   const deleteEstimate = useCallback(async (id: string) => {
     setState(prev => {
@@ -1266,7 +1455,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       upsertCommissionPayout, deleteCommissionPayout,
       addProduction, updateProduction, addFreight, updateFreight,
       addRFQ, updateRFQ, deleteRFQ,
-      quickAddClient, quickAddVendor, addClient, updateClient, deleteClient,
+      quickAddClient, quickAddVendor, upsertJobProfile, addClient, updateClient, deleteClient,
       addVendor, updateVendor, deleteVendor,
       addEstimate, updateEstimate, deleteEstimate, allocateJobId,
       refreshData: fetchAll,
