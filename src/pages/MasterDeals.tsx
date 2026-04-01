@@ -9,10 +9,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { ChevronDown, ChevronRight, Edit, Trash2, Plus, EyeOff, Eye, MessageSquare } from 'lucide-react';
 import type { Deal, DealStatus } from '@/types';
+import { DEAL_MILESTONE_DEFINITIONS, isDealFreightReady } from '@/lib/opportunities';
 
 const DEAL_STATUS_LABELS: Record<string, string> = {
   Lead: 'Request for Quote',
@@ -28,7 +30,17 @@ const EMPTY_DEAL: Partial<Deal> = {
 
 export default function MasterDeals() {
   const navigate = useNavigate();
-  const { deals, updateDeal, deleteDeal, addDeal, payments, internalCosts } = useAppContext();
+  const {
+    deals,
+    updateDeal,
+    deleteDeal,
+    addDeal,
+    payments,
+    internalCosts,
+    opportunities,
+    dealMilestones,
+    upsertDealMilestone,
+  } = useAppContext();
   const { currentUser, hasAnyRole } = useRoles();
   const { settings } = useSettings();
   const [filterStatus, setFilterStatus] = useState<string>('all');
@@ -258,6 +270,9 @@ export default function MasterDeals() {
             ) : filtered.map(d => {
               const isExpanded = expandedJob === d.jobId;
               const ic = internalCosts.find(c => c.jobId === d.jobId);
+              const opportunity = opportunities.find(item => item.jobId === d.jobId);
+              const milestonesForJob = dealMilestones.filter(item => item.jobId === d.jobId);
+              const freightReady = isDealFreightReady(milestonesForJob);
               const clientPmts = payments.filter(p => p.jobId === d.jobId && p.direction === 'Client Payment IN');
               const vendorPmts = payments.filter(p => p.jobId === d.jobId && p.direction === 'Vendor Payment OUT');
               const clientIn = clientPmts.reduce((s, p) => s + p.amountExclTax, 0);
@@ -349,6 +364,57 @@ export default function MasterDeals() {
                             <p className="text-success">Client In: {formatCurrency(clientIn)}</p>
                             <p className="text-destructive">Vendor Out: {formatCurrency(vendorOut)}</p>
                             <p className="font-semibold">Net: {formatCurrency(clientIn - vendorOut)}</p>
+                          </div>
+                        </div>
+                        <div className="mt-4 grid gap-4 lg:grid-cols-[280px,1fr]">
+                          <div className="rounded-md border bg-background p-4 text-xs">
+                            <div className="flex items-center justify-between gap-3">
+                              <p className="font-semibold text-muted-foreground">Opportunity</p>
+                              <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${freightReady ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                                {freightReady ? 'Freight Ready' : 'Freight Not Ready'}
+                              </span>
+                            </div>
+                            <div className="mt-2 space-y-1">
+                              <p>Status: <span className="font-medium capitalize">{opportunity?.status || 'open'}</span></p>
+                              <p>Source: <span className="font-medium">{opportunity?.source || 'deal'}</span></p>
+                              <p>Potential Revenue: <span className="font-medium">{formatCurrency(opportunity?.potentialRevenue || 0)}</span></p>
+                              <p>Owner: <span className="font-medium">{opportunity?.salesRep || d.salesRep || 'Unassigned'}</span></p>
+                            </div>
+                          </div>
+                          <div className="rounded-md border bg-background p-4">
+                            <div className="mb-3 flex items-center justify-between gap-3">
+                              <div>
+                                <p className="font-semibold text-sm">Post-Sale Milestones</p>
+                                <p className="text-xs text-muted-foreground">
+                                  Freight readiness is derived from the required milestone set.
+                                </p>
+                              </div>
+                            </div>
+                            <div className="grid gap-2 md:grid-cols-2">
+                              {DEAL_MILESTONE_DEFINITIONS.map(definition => {
+                                const milestone = milestonesForJob.find(item => item.milestoneKey === definition.key);
+                                return (
+                                  <label
+                                    key={`${d.jobId}-${definition.key}`}
+                                    className={`flex items-start gap-3 rounded-md border px-3 py-2 text-xs ${milestone?.isComplete ? 'border-green-200 bg-green-50/50' : 'border-border'}`}
+                                  >
+                                    <Checkbox
+                                      checked={milestone?.isComplete || false}
+                                      disabled={!canEdit}
+                                      onCheckedChange={(checked) => {
+                                        void upsertDealMilestone(d.jobId, definition.key, checked === true, milestone?.notes || '');
+                                      }}
+                                    />
+                                    <div className="space-y-0.5">
+                                      <p className="font-medium">{definition.label}</p>
+                                      {definition.requiredForFreightReady && (
+                                        <p className="text-muted-foreground">Required for freight-ready status</p>
+                                      )}
+                                    </div>
+                                  </label>
+                                );
+                              })}
+                            </div>
                           </div>
                         </div>
                         <div className="mt-3">

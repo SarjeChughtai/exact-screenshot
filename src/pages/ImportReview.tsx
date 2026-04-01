@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 import { CheckCircle2, XCircle, AlertTriangle, Pencil, Download, ChevronDown, ChevronUp, Clock, FileText } from 'lucide-react';
 import type { InsulationCostDataRecord, QuoteFileRecord, ImportReviewStatus, SteelCostDataRecord, StoredDocument } from '@/types';
 import { persistParsedCostDocument } from '@/lib/costDataWarehouse';
+import { groupImportReviewFiles, resolveDuplicateDocumentGroupKey, type ImportReviewFile } from '@/lib/importReview';
 
 const STATUS_OPTIONS: { value: ImportReviewStatus | 'all'; label: string }[] = [
   { value: 'all', label: 'All' },
@@ -51,7 +52,7 @@ interface EditFormState {
 }
 
 export default function ImportReview() {
-  const [files, setFiles] = useState<(QuoteFileRecord & {
+  const [files, setFiles] = useState<(ImportReviewFile & {
     steelCostEntries?: any[];
     steelWarehouseEntry?: SteelCostDataRecord | null;
     insulationWarehouseEntry?: InsulationCostDataRecord | null;
@@ -115,6 +116,7 @@ export default function ImportReview() {
 
   useEffect(() => { fetchFiles(); }, [fetchFiles]);
 
+  const allDuplicateGroups = useMemo(() => groupImportReviewFiles(files), [files]);
   const filtered = files.filter(f => {
     if (statusFilter !== 'all' && f.reviewStatus !== statusFilter) return false;
     if (searchQuery) {
@@ -125,12 +127,25 @@ export default function ImportReview() {
     }
     return true;
   });
+  const groupByFileId = useMemo(() => {
+    return allDuplicateGroups.reduce<Record<string, { key: string; primaryFileId: string; duplicateCount: number }>>((accumulator, group) => {
+      group.files.forEach(file => {
+        accumulator[file.id] = {
+          key: group.key,
+          primaryFileId: group.primaryFileId,
+          duplicateCount: group.duplicateCount,
+        };
+      });
+      return accumulator;
+    }, {});
+  }, [allDuplicateGroups]);
 
   const counts = {
     total: files.length,
     pending: files.filter(f => f.reviewStatus === 'pending').length,
     needsReview: files.filter(f => f.reviewStatus === 'needs_review').length,
     approved: files.filter(f => f.reviewStatus === 'approved').length,
+    duplicates: allDuplicateGroups.filter(group => group.duplicateCount > 0).length,
   };
 
   const updateReviewStatus = async (id: string, status: ImportReviewStatus) => {
@@ -156,6 +171,50 @@ export default function ImportReview() {
       })
       .eq('quote_file_id', id);
     toast.success(`Status updated to ${STATUS_BADGE[status].label}`);
+    fetchFiles();
+  };
+
+  const markPrimaryDocument = async (file: ImportReviewFile) => {
+    const groupKey = resolveDuplicateDocumentGroupKey(file);
+    const duplicateGroup = allDuplicateGroups.find(group => group.key === groupKey);
+    if (!duplicateGroup) return;
+
+    const quoteFileIds = duplicateGroup.files.map(entry => entry.id);
+
+    const { error: quoteFilesError } = await (supabase.from as any)('quote_files')
+      .update({
+        duplicate_group_key: groupKey,
+        is_primary_document: false,
+      })
+      .in('id', quoteFileIds);
+
+    if (quoteFilesError) {
+      toast.error('Failed to update the primary document set');
+      return;
+    }
+
+    await (supabase.from as any)('quote_files')
+      .update({
+        duplicate_group_key: groupKey,
+        is_primary_document: true,
+      })
+      .eq('id', file.id);
+
+    await (supabase.from as any)('stored_documents')
+      .update({
+        duplicate_group_key: groupKey,
+        is_primary_document: false,
+      })
+      .in('quote_file_id', quoteFileIds);
+
+    await (supabase.from as any)('stored_documents')
+      .update({
+        duplicate_group_key: groupKey,
+        is_primary_document: true,
+      })
+      .eq('quote_file_id', file.id);
+
+    toast.success('Primary document set updated');
     fetchFiles();
   };
 
@@ -383,7 +442,7 @@ export default function ImportReview() {
   return (
     <div className="space-y-6">
       {/* Summary Stats */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-5 gap-4">
         <div className="bg-card border rounded-lg p-4">
           <div className="text-sm text-muted-foreground">Total Imports</div>
           <div className="text-2xl font-bold">{counts.total}</div>
@@ -399,6 +458,10 @@ export default function ImportReview() {
         <div className="bg-card border rounded-lg p-4">
           <div className="text-sm text-muted-foreground">Approved</div>
           <div className="text-2xl font-bold text-green-600">{counts.approved}</div>
+        </div>
+        <div className="bg-card border rounded-lg p-4">
+          <div className="text-sm text-muted-foreground">Duplicate Groups</div>
+          <div className="text-2xl font-bold text-blue-600">{counts.duplicates}</div>
         </div>
       </div>
 
@@ -453,6 +516,9 @@ export default function ImportReview() {
                 const badge = STATUS_BADGE[file.reviewStatus] || STATUS_BADGE.pending;
                 const srcBadge = SOURCE_BADGE[file.extractionSource] || SOURCE_BADGE.unknown;
                 const entry = file.steelWarehouseEntry || file.insulationWarehouseEntry || file.steelCostEntries?.[0];
+                const duplicateMeta = groupByFileId[file.id];
+                const isPrimaryDocument = duplicateMeta ? duplicateMeta.primaryFileId === file.id : file.isPrimaryDocument !== false;
+                const hiddenDuplicateCount = duplicateMeta?.duplicateCount || 0;
 
                 return (
                   <React.Fragment key={file.id}>
@@ -462,7 +528,14 @@ export default function ImportReview() {
                     </td>
                     <td className="p-3 align-top">
                       <div className="font-medium truncate max-w-48" title={file.fileName}>{file.fileName}</div>
-                      <div className="text-xs text-muted-foreground">{(file.fileSize / 1024).toFixed(0)} KB</div>
+                      <div className="mt-1 flex flex-wrap items-center gap-1">
+                        <span className="text-xs text-muted-foreground">{(file.fileSize / 1024).toFixed(0)} KB</span>
+                        {hiddenDuplicateCount > 0 && (
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${isPrimaryDocument ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                            {isPrimaryDocument ? 'Primary visible set' : 'Hidden duplicate'}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="p-3 align-top font-mono text-xs">{file.jobId || '-'}</td>
                     <td className="p-3 align-top">{file.clientName || '-'}</td>
@@ -485,6 +558,17 @@ export default function ImportReview() {
                           title="View details">
                           {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                         </Button>
+                        {hiddenDuplicateCount > 0 && !isPrimaryDocument && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => void markPrimaryDocument(file)}
+                            title="Mark as primary set"
+                            className="text-blue-600 hover:text-blue-700"
+                          >
+                            <FileText className="h-4 w-4" />
+                          </Button>
+                        )}
                         {file.reviewStatus !== 'approved' && (
                           <Button size="sm" variant="ghost" onClick={() => updateReviewStatus(file.id, 'approved')}
                             title="Approve" className="text-green-600 hover:text-green-700">
@@ -561,6 +645,24 @@ export default function ImportReview() {
                               {renderAIOutput(file.aiOutput)}
                             </div>
                           </div>
+
+                          {hiddenDuplicateCount > 0 && (
+                            <div className="rounded-md border bg-background p-3 text-xs">
+                              <div className="flex items-center justify-between gap-3">
+                                <div>
+                                  <p className="font-medium">Duplicate document set</p>
+                                  <p className="text-muted-foreground">
+                                    {hiddenDuplicateCount + 1} files share this job/file grouping. Downstream tools only use the primary set.
+                                  </p>
+                                </div>
+                                {!isPrimaryDocument && (
+                                  <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => void markPrimaryDocument(file)}>
+                                    Make Primary Set
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          )}
 
                           {/* Review info */}
                           {file.reviewedAt && (

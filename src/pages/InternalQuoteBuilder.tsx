@@ -24,6 +24,7 @@ import { DocumentGallery } from '@/components/DocumentGallery';
 import { getQuoteFileUrl } from '@/lib/quoteFileStorage';
 import { downloadDocumentPdf, saveDocumentPdf } from '@/lib/documentPdf';
 import { notifyUsers } from '@/lib/workflowNotifications';
+import { steelCostDataFromRow, insulationCostDataFromRow } from '@/lib/supabaseMappers';
 import {
   extractTextFromPdf as extractCostPdfText,
   isInsulationQuoteText,
@@ -31,6 +32,7 @@ import {
   parseSilvercoteQuotePages,
 } from '@/lib/pdfParsers';
 import { persistParsedCostDocument } from '@/lib/costDataWarehouse';
+import { buildHistoricalQuoteFileSnapshot } from '@/lib/historicalQuoteFiles';
 
 interface CostFileData {
   steelWeightLbs: number;
@@ -385,47 +387,78 @@ export default function InternalQuoteBuilder() {
     setForm(f => ({ ...f, clientId: client.clientId, clientName: client.clientName }));
   };
 
+  const applyHistoricalSnapshot = (snapshot: ReturnType<typeof buildHistoricalQuoteFileSnapshot>) => {
+    if (snapshot.jobId) handleJobIdChange(snapshot.jobId);
+    if (snapshot.clientName) set('clientName', snapshot.clientName);
+    if (snapshot.clientId) set('clientId', snapshot.clientId);
+    if (snapshot.jobName) set('jobName', snapshot.jobName);
+    if (snapshot.width != null) set('width', String(snapshot.width));
+    if (snapshot.length != null) set('length', String(snapshot.length));
+    if (snapshot.height != null) set('height', String(snapshot.height));
+    if (snapshot.roofPitch != null) set('pitch', String(snapshot.roofPitch));
+    if (snapshot.province) set('province', snapshot.province);
+    if (snapshot.city) set('city', snapshot.city);
+    if (snapshot.postalCode) set('postalCode', snapshot.postalCode);
+
+    if (snapshot.documentType === 'insulation') {
+      if (snapshot.insulationTotal != null) set('insulationCost', String(snapshot.insulationTotal));
+      if (snapshot.insulationGrade) set('insulationGrade', snapshot.insulationGrade);
+      return;
+    }
+
+    if (snapshot.weightLbs != null || snapshot.totalSupplierCost != null) {
+      setCostData({
+        steelWeightLbs: snapshot.weightLbs || 0,
+        supplierCostPerLb: snapshot.costPerLb || 0,
+        totalSupplierCost: snapshot.totalSupplierCost || 0,
+        accessories: snapshot.components || [],
+      });
+    }
+  };
+
   const handleSelectHistoricalFile = async (fileRecord: any) => {
     setAiProcessing(true);
     try {
       // 1. Add to the building's file list so the user can see it and remove it
       const newFile: ParsedFile = {
-        name: fileRecord.file_name,
-        type: fileRecord.file_type || 'unknown',
+        name: fileRecord.fileName,
+        type: fileRecord.fileType || 'unknown',
         status: 'success',
         buildingIndex: activeBuildingIdx,
-        data: fileRecord.ai_output
+        data: fileRecord.aiOutput,
       };
       
       setBuildings(prev => prev.map((b, i) => 
         i === activeBuildingIdx ? { ...b, files: [...b.files, newFile] } : b
       ));
 
-      // 2. Try to use existing AI output if available
-      if (fileRecord.ai_output) {
-        const aiResult = fileRecord.ai_output;
-        if (fileRecord.file_type === 'insulation') {
-          set('insulationCost', String(aiResult.insulation_total || 0));
-          if (aiResult.insulation_grade) set('insulationGrade', aiResult.insulation_grade);
-          toast.success(`Pulled insulation data from ${fileRecord.file_name}`);
-        } else {
-          applyAIData(aiResult);
-          const weight = aiResult.weight || 0;
-          const costPerLb = aiResult.cost_per_lb || (aiResult.total_cost && weight ? aiResult.total_cost / weight : 0);
-          const totalCost = aiResult.total_cost || weight * costPerLb;
-          const components = (aiResult.components || []).map((c: any) => ({ name: c.name, weight: c.weight || 0, cost: c.cost || 0 }));
-          setCostData({ steelWeightLbs: weight, supplierCostPerLb: costPerLb, totalSupplierCost: totalCost, accessories: components });
-          toast.success(`Pulled MBS data from ${fileRecord.file_name}`);
-        }
+      const [steelWarehouseRes, insulationWarehouseRes] = await Promise.all([
+        (supabase.from as any)('steel_cost_data').select('*').eq('quote_file_id', fileRecord.id).maybeSingle(),
+        (supabase.from as any)('insulation_cost_data').select('*').eq('quote_file_id', fileRecord.id).maybeSingle(),
+      ]);
+
+      const snapshot = buildHistoricalQuoteFileSnapshot({
+        file: fileRecord,
+        steelWarehouseEntry: steelWarehouseRes.data ? steelCostDataFromRow(steelWarehouseRes.data) : null,
+        insulationWarehouseEntry: insulationWarehouseRes.data ? insulationCostDataFromRow(insulationWarehouseRes.data) : null,
+      });
+
+      if (snapshot.documentType !== 'unknown' || fileRecord.aiOutput) {
+        applyHistoricalSnapshot(snapshot);
+        toast.success(
+          snapshot.documentType === 'insulation'
+            ? `Pulled insulation data from ${fileRecord.fileName}`
+            : `Pulled cost data from ${fileRecord.fileName}`,
+        );
       } else {
         // 3. No stored data, must fetch and re-parse
         toast.info('Re-parsing historical document...');
-        const url = await getQuoteFileUrl(fileRecord.storage_path);
+        const url = await getQuoteFileUrl(fileRecord.storagePath);
         if (!url) throw new Error('Could not get file URL');
         
         const response = await fetch(url);
         const blob = await response.blob();
-        const file = new File([blob], fileRecord.file_name, { type: 'application/pdf' });
+        const file = new File([blob], fileRecord.fileName, { type: 'application/pdf' });
         await handleFileUpload([file]);
       }
     } catch (e) {
@@ -459,7 +492,7 @@ export default function InternalQuoteBuilder() {
     if (aiData.roof_pitch) set('pitch', String(aiData.roof_pitch));
     if (aiData.client_name) set('clientName', aiData.client_name);
     if (aiData.client_id) set('clientId', aiData.client_id);
-    if (aiData.job_id) set('jobId', aiData.job_id);
+    if (aiData.job_id) handleJobIdChange(aiData.job_id);
     if (aiData.job_name) set('jobName', aiData.job_name);
     if (aiData.province) set('province', aiData.province);
     if (aiData.city) set('city', aiData.city);
@@ -607,7 +640,7 @@ export default function InternalQuoteBuilder() {
               if (parsed.roofSlope) set('pitch', String(parsed.roofSlope));
               if (parsed.clientName) set('clientName', parsed.clientName);
               if (parsed.clientId) set('clientId', parsed.clientId);
-              if (parsed.projectId) set('jobId', parsed.projectId);
+              if (parsed.projectId) handleJobIdChange(parsed.projectId);
               setCostData({
                 steelWeightLbs: parsed.totalWeightLb,
                 supplierCostPerLb: parsed.pricePerLb || (parsed.totalWeightLb && parsed.totalCost ? parsed.totalCost / parsed.totalWeightLb : 0),

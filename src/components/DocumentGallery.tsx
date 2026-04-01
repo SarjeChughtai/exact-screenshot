@@ -4,14 +4,15 @@ import { Button } from '@/components/ui/button';
 import { FileText, Download, Loader2, RefreshCw, History, Search } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
+import type { QuoteFileRecord } from '@/types';
 
 interface DocumentGalleryProps {
   jobId: string;
-  onSelectFile: (file: any) => void;
+  onSelectFile: (file: QuoteFileRecord) => void;
 }
 
 export function DocumentGallery({ jobId, onSelectFile }: DocumentGalleryProps) {
-  const [files, setFiles] = useState<any[]>([]);
+  const [files, setFiles] = useState<QuoteFileRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [viewMode, setViewMode] = useState<'job' | 'recent'>('job');
 
@@ -95,13 +96,20 @@ export function DocumentGallery({ jobId, onSelectFile }: DocumentGalleryProps) {
               <div className="flex items-center gap-2 overflow-hidden">
                 <FileText className="h-4 w-4 text-primary shrink-0" />
                 <div className="overflow-hidden">
-                  <p className="text-xs font-medium truncate" title={file.file_name}>{file.file_name}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs font-medium truncate" title={file.fileName}>{file.fileName}</p>
+                    {file.isPrimaryDocument && (
+                      <span className="rounded-full bg-green-100 px-1.5 py-0.5 text-[9px] font-medium text-green-700">
+                        Primary
+                      </span>
+                    )}
+                  </div>
                   <div className="flex items-center gap-2">
                     <p className="text-[9px] text-muted-foreground">
-                      {file.created_at ? format(new Date(file.created_at), 'MMM d, h:mm a') : 'Unknown date'}
+                      {file.createdAt ? format(new Date(file.createdAt), 'MMM d, h:mm a') : 'Unknown date'}
                     </p>
-                    {viewMode === 'recent' && file.job_id && (
-                      <span className="text-[9px] font-mono text-accent truncate border-l pl-2">Job: {file.job_id}</span>
+                    {viewMode === 'recent' && file.jobId && (
+                      <span className="text-[9px] font-mono text-accent truncate border-l pl-2">Job: {file.jobId}</span>
                     )}
                   </div>
                 </div>

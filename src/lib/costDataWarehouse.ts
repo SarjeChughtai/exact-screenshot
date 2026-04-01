@@ -21,6 +21,7 @@ import {
   parseCostDocumentFromPages,
   type ParsedCostDocument,
 } from '@/lib/pdfParsers';
+import { buildDuplicateDocumentGroupKey } from '@/lib/importReview';
 
 export interface CostDocumentImportContext {
   fileName: string;
@@ -91,6 +92,15 @@ export async function upsertStoredDocument(
     parserName: context.parserName || (parsedResult ? 'regex-pdf-parser' : null),
     parserVersion: context.parserVersion || COST_PARSER_VERSION,
     parseError: context.parseError ?? parsedResult?.parseError ?? null,
+    duplicateGroupKey: buildDuplicateDocumentGroupKey({
+      jobId: context.jobId ?? context.projectId ?? null,
+      fileType: context.fileType || 'unknown',
+      extractedDocumentType: parsedResult?.type === 'unknown' ? null : parsedResult?.type || null,
+      documentId: context.documentId ?? null,
+      buildingLabel: null,
+      clientId: context.clientId ?? null,
+    }),
+    isPrimaryDocument: true,
     reviewStatus:
       context.reviewStatus
       || parsedResult?.reviewStatus

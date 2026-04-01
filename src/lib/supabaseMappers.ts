@@ -17,6 +17,8 @@ import type {
   StoredDocument,
   SteelCostDataRecord,
   InsulationCostDataRecord,
+  Opportunity,
+  DealMilestone,
 } from '@/types';
 
 // --- Deal ---
@@ -50,6 +52,7 @@ export function dealFromRow(r: any): Deal {
     productionStatus: r.production_status ?? 'Submitted',
     freightStatus: r.freight_status ?? 'Pending',
     insulationStatus: r.insulation_status ?? '',
+    opportunityId: r.opportunity_id ?? null,
     cxPaymentStageOverride: r.cx_payment_stage_override ?? '',
     factoryPaymentStageOverride: r.factory_payment_stage_override ?? '',
     deliveryDate: r.delivery_date ?? '',
@@ -67,6 +70,7 @@ export function dealToRow(d: Partial<Deal>): Record<string, any> {
     orderType: 'order_type', dateSigned: 'date_signed', dealStatus: 'deal_status',
     paymentStatus: 'payment_status', productionStatus: 'production_status',
     freightStatus: 'freight_status', insulationStatus: 'insulation_status',
+    opportunityId: 'opportunity_id',
     cxPaymentStageOverride: 'cx_payment_stage_override',
     factoryPaymentStageOverride: 'factory_payment_stage_override',
     deliveryDate: 'delivery_date', pickupDate: 'pickup_date', notes: 'notes',
@@ -127,6 +131,7 @@ export function quoteFromRow(r: any): Quote {
     documentType: r.document_type ?? 'external_quote',
     workflowStatus: r.workflow_status ?? 'draft',
     sourceDocumentId: r.source_document_id ?? null,
+    opportunityId: r.opportunity_id ?? null,
     assignedEstimatorUserId: r.assigned_estimator_user_id ?? null,
     assignedOperationsUserId: r.assigned_operations_user_id ?? null,
     pdfStoragePath: r.pdf_storage_path ?? '',
@@ -153,6 +158,7 @@ export function quoteToRow(q: Partial<Quote>): Record<string, any> {
     qst: 'qst', grandTotal: 'grand_total', status: 'status',
     documentType: 'document_type', workflowStatus: 'workflow_status',
     sourceDocumentId: 'source_document_id',
+    opportunityId: 'opportunity_id',
     assignedEstimatorUserId: 'assigned_estimator_user_id',
     assignedOperationsUserId: 'assigned_operations_user_id',
     pdfStoragePath: 'pdf_storage_path', pdfFileName: 'pdf_file_name',
@@ -381,10 +387,15 @@ export function freightFromRow(r: any): FreightRecord {
     jobId: r.job_id ?? '',
     clientName: r.client_name ?? '',
     buildingSize: r.building_size ?? '',
+    opportunityId: r.opportunity_id ?? null,
     province: r.province ?? '',
     weight: Number(r.weight) || 0,
     pickupAddress: r.pickup_address ?? '',
     deliveryAddress: r.delivery_address ?? '',
+    dropOffLocation: r.drop_off_location ?? '',
+    pickupDate: r.pickup_date ?? '',
+    deliveryDate: r.delivery_date ?? '',
+    mode: r.mode ?? 'execution',
     estDistance: Number(r.est_distance) || 0,
     estFreight: Number(r.est_freight) || 0,
     actualFreight: Number(r.actual_freight) || 0,
@@ -398,7 +409,9 @@ export function freightFromRow(r: any): FreightRecord {
 export function freightToRow(fr: Partial<FreightRecord>): Record<string, any> {
   const map: Record<string, string> = {
     jobId: 'job_id', clientName: 'client_name', buildingSize: 'building_size',
+    opportunityId: 'opportunity_id',
     province: 'province', weight: 'weight', pickupAddress: 'pickup_address', deliveryAddress: 'delivery_address',
+    dropOffLocation: 'drop_off_location', pickupDate: 'pickup_date', deliveryDate: 'delivery_date', mode: 'mode',
     estDistance: 'est_distance', estFreight: 'est_freight', actualFreight: 'actual_freight',
     paid: 'paid', carrier: 'carrier', assignedFreightUserId: 'assigned_freight_user_id', status: 'status',
   };
@@ -484,6 +497,7 @@ export function quoteFileFromRow(r: any): QuoteFileRecord {
   return {
     id: r.id ?? '',
     documentId: r.document_id ?? null,
+    storedDocumentId: r.stored_document_id ?? null,
     jobId: r.job_id ?? '',
     clientName: r.client_name ?? '',
     clientId: r.client_id ?? '',
@@ -500,6 +514,8 @@ export function quoteFileFromRow(r: any): QuoteFileRecord {
     reviewedBy: r.reviewed_by ?? null,
     reviewedAt: r.reviewed_at ?? null,
     correctedData: r.corrected_data ?? null,
+    duplicateGroupKey: r.duplicate_group_key ?? null,
+    isPrimaryDocument: r.is_primary_document ?? true,
     gdriveStatus: r.gdrive_status ?? 'pending',
     gdriveFileId: r.gdrive_file_id ?? null,
     uploadedBy: r.uploaded_by ?? null,
@@ -509,7 +525,7 @@ export function quoteFileFromRow(r: any): QuoteFileRecord {
 
 export function quoteFileToRow(qf: Partial<QuoteFileRecord>): Record<string, any> {
   const map: Record<string, string> = {
-    id: 'id', documentId: 'document_id', jobId: 'job_id', clientName: 'client_name', clientId: 'client_id',
+    id: 'id', documentId: 'document_id', storedDocumentId: 'stored_document_id', jobId: 'job_id', clientName: 'client_name', clientId: 'client_id',
     fileName: 'file_name', fileSize: 'file_size', fileType: 'file_type',
     fileCategory: 'file_category',
     storagePath: 'storage_path', buildingLabel: 'building_label',
@@ -517,6 +533,7 @@ export function quoteFileToRow(qf: Partial<QuoteFileRecord>): Record<string, any
     reviewStatus: 'review_status', parseError: 'parse_error',
     reviewedBy: 'reviewed_by', reviewedAt: 'reviewed_at',
     correctedData: 'corrected_data', gdriveStatus: 'gdrive_status',
+    duplicateGroupKey: 'duplicate_group_key', isPrimaryDocument: 'is_primary_document',
     gdriveFileId: 'gdrive_file_id', uploadedBy: 'uploaded_by',
   };
   const row: Record<string, any> = {};
@@ -677,6 +694,8 @@ export function storedDocumentFromRow(r: any): StoredDocument {
     reviewStatus: r.review_status ?? 'pending',
     parsedData: r.parsed_data ?? null,
     metadata: r.metadata ?? {},
+    duplicateGroupKey: r.duplicate_group_key ?? null,
+    isPrimaryDocument: r.is_primary_document ?? true,
     parsedSuccessfully: r.parsed_successfully ?? null,
     reviewedBy: r.reviewed_by ?? null,
     reviewedAt: r.reviewed_at ?? null,
@@ -709,6 +728,8 @@ export function storedDocumentToRow(d: Partial<StoredDocument>): Record<string, 
     reviewStatus: 'review_status',
     parsedData: 'parsed_data',
     metadata: 'metadata',
+    duplicateGroupKey: 'duplicate_group_key',
+    isPrimaryDocument: 'is_primary_document',
     parsedSuccessfully: 'parsed_successfully',
     reviewedBy: 'reviewed_by',
     reviewedAt: 'reviewed_at',
@@ -909,6 +930,82 @@ export function insulationCostDataToRow(d: Partial<InsulationCostDataRecord>): R
   };
   const row: Record<string, any> = {};
   for (const [k, v] of Object.entries(d)) {
+    if (map[k]) row[map[k]] = v;
+  }
+  return row;
+}
+
+export function opportunityFromRow(r: any): Opportunity {
+  return {
+    id: r.id ?? '',
+    jobId: r.job_id ?? '',
+    clientId: r.client_id ?? '',
+    clientName: r.client_name ?? '',
+    name: r.name ?? '',
+    potentialRevenue: Number(r.potential_revenue) || 0,
+    status: r.status ?? 'open',
+    createdByUserId: r.created_by_user_id ?? null,
+    ownerUserId: r.owner_user_id ?? null,
+    salesRep: r.sales_rep ?? null,
+    estimator: r.estimator ?? null,
+    source: r.source ?? 'manual',
+    createdAt: r.created_at ?? '',
+    updatedAt: r.updated_at ?? '',
+  };
+}
+
+export function opportunityToRow(opportunity: Partial<Opportunity>): Record<string, any> {
+  const map: Record<string, string> = {
+    id: 'id',
+    jobId: 'job_id',
+    clientId: 'client_id',
+    clientName: 'client_name',
+    name: 'name',
+    potentialRevenue: 'potential_revenue',
+    status: 'status',
+    createdByUserId: 'created_by_user_id',
+    ownerUserId: 'owner_user_id',
+    salesRep: 'sales_rep',
+    estimator: 'estimator',
+    source: 'source',
+    createdAt: 'created_at',
+    updatedAt: 'updated_at',
+  };
+  const row: Record<string, any> = {};
+  for (const [k, v] of Object.entries(opportunity)) {
+    if (map[k]) row[map[k]] = v;
+  }
+  return row;
+}
+
+export function dealMilestoneFromRow(r: any): DealMilestone {
+  return {
+    id: r.id ?? '',
+    jobId: r.job_id ?? '',
+    milestoneKey: r.milestone_key ?? 'order_form_sent',
+    isComplete: r.is_complete ?? false,
+    completedAt: r.completed_at ?? null,
+    completedByUserId: r.completed_by_user_id ?? null,
+    notes: r.notes ?? '',
+    createdAt: r.created_at ?? '',
+    updatedAt: r.updated_at ?? '',
+  };
+}
+
+export function dealMilestoneToRow(milestone: Partial<DealMilestone>): Record<string, any> {
+  const map: Record<string, string> = {
+    id: 'id',
+    jobId: 'job_id',
+    milestoneKey: 'milestone_key',
+    isComplete: 'is_complete',
+    completedAt: 'completed_at',
+    completedByUserId: 'completed_by_user_id',
+    notes: 'notes',
+    createdAt: 'created_at',
+    updatedAt: 'updated_at',
+  };
+  const row: Record<string, any> = {};
+  for (const [k, v] of Object.entries(milestone)) {
     if (map[k]) row[map[k]] = v;
   }
   return row;

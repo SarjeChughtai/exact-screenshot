@@ -72,6 +72,7 @@ export interface Quote {
   documentType: DocumentType;
   workflowStatus: WorkflowStatus;
   sourceDocumentId?: string | null;
+  opportunityId?: string | null;
   assignedEstimatorUserId?: string | null;
   assignedOperationsUserId?: string | null;
   pdfStoragePath?: string;
@@ -119,6 +120,7 @@ export interface Deal {
   productionStatus: ProductionStage;
   freightStatus: FreightStatus;
   insulationStatus: string;
+  opportunityId?: string | null;
   cxPaymentStageOverride?: string;
   factoryPaymentStageOverride?: string;
   deliveryDate: string;
@@ -220,10 +222,15 @@ export interface FreightRecord {
   jobId: string;
   clientName: string;
   buildingSize: string;
+  opportunityId?: string | null;
   province?: string;
   weight: number;
   pickupAddress: string;
   deliveryAddress: string;
+  dropOffLocation?: string;
+  pickupDate?: string;
+  deliveryDate?: string;
+  mode?: 'pre_sale' | 'execution';
   estDistance: number;
   estFreight: number;
   actualFreight: number;
@@ -323,6 +330,7 @@ export type ImportReviewStatus = 'pending' | 'approved' | 'needs_review' | 'corr
 export interface QuoteFileRecord {
   id: string;
   documentId?: string | null;
+  storedDocumentId?: string | null;
   jobId: string;
   clientName: string;
   clientId: string;
@@ -339,6 +347,8 @@ export interface QuoteFileRecord {
   reviewedBy: string | null;
   reviewedAt: string | null;
   correctedData: Record<string, unknown> | null;
+  duplicateGroupKey?: string | null;
+  isPrimaryDocument?: boolean;
   gdriveStatus: string;
   gdriveFileId: string | null;
   uploadedBy: string | null;
@@ -488,6 +498,8 @@ export interface StoredDocument {
   reviewStatus: CostDocumentReviewStatus;
   parsedData?: Record<string, unknown> | null;
   metadata?: Record<string, unknown> | null;
+  duplicateGroupKey?: string | null;
+  isPrimaryDocument?: boolean;
   parsedSuccessfully?: boolean | null;
   reviewedBy?: string | null;
   reviewedAt?: string | null;
@@ -581,4 +593,54 @@ export interface InsulationCostDataRecord {
   reviewedAt?: string | null;
   dateAdded?: string | null;
   createdAt?: string;
+}
+
+export type OpportunityStatus = 'open' | 'won' | 'lost' | 'abandoned';
+
+export interface Opportunity {
+  id: string;
+  jobId: string;
+  clientId: string;
+  clientName: string;
+  name: string;
+  potentialRevenue: number;
+  status: OpportunityStatus;
+  createdByUserId?: string | null;
+  ownerUserId?: string | null;
+  salesRep?: string | null;
+  estimator?: string | null;
+  source?: DocumentType | 'dealer_quote' | 'deal' | 'manual' | 'ghl_sync';
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export type DealMilestoneKey =
+  | 'order_form_sent'
+  | 'signed_order_form_received'
+  | 'first_client_invoice_issued'
+  | 'first_client_payment_received'
+  | 'design_file_requested_from_estimator'
+  | 'design_file_sent_to_factory'
+  | 'vendor_rfq_sent'
+  | 'factory_quote_received'
+  | 'factory_quote_added_to_true_cost'
+  | 'first_factory_invoice_issued'
+  | 'first_factory_invoice_paid'
+  | 'design_file_sent_for_stamp'
+  | 'second_client_invoice_issued'
+  | 'second_client_payment_received'
+  | 'second_factory_invoice_requested'
+  | 'second_factory_invoice_paid'
+  | 'freight_ready_achieved';
+
+export interface DealMilestone {
+  id: string;
+  jobId: string;
+  milestoneKey: DealMilestoneKey;
+  isComplete: boolean;
+  completedAt?: string | null;
+  completedByUserId?: string | null;
+  notes?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }

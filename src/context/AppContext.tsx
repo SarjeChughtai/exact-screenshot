@@ -2,6 +2,8 @@ import React, { createContext, useContext, useState, useCallback, useEffect, Rea
 import {
   Quote,
   Deal,
+  Opportunity,
+  DealMilestone,
   InternalCost,
   PaymentEntry,
   CommissionPayout,
@@ -32,13 +34,24 @@ import {
   steelCostDataFromRow,
   insulationCostDataFromRow,
   storedDocumentFromRow,
+  opportunityFromRow,
+  opportunityToRow,
+  dealMilestoneFromRow,
+  dealMilestoneToRow,
 } from '@/lib/supabaseMappers';
 import { SEED_DEALS } from '@/data/seedDeals';
 import { toast } from 'sonner';
+import {
+  buildDealMilestoneRecord,
+  buildOpportunityFromDeal,
+  buildOpportunityFromQuote,
+} from '@/lib/opportunities';
 
 interface AppState {
   quotes: Quote[];
   deals: Deal[];
+  opportunities: Opportunity[];
+  dealMilestones: DealMilestone[];
   internalCosts: InternalCost[];
   payments: PaymentEntry[];
   commissionPayouts: CommissionPayout[];
@@ -62,6 +75,8 @@ interface AppContextType extends AppState {
   addDeal: (d: Deal) => void;
   updateDeal: (jobId: string, updates: Partial<Deal>) => void;
   deleteDeal: (jobId: string) => void;
+  updateOpportunityByJob: (jobId: string, updates: Partial<Opportunity>) => Promise<void>;
+  upsertDealMilestone: (jobId: string, milestoneKey: DealMilestone['milestoneKey'], isComplete: boolean, notes?: string) => Promise<void>;
   addInternalCost: (ic: InternalCost) => void;
   updateInternalCost: (jobId: string, updates: Partial<InternalCost>) => void;
   addPayment: (p: PaymentEntry) => void;
@@ -98,6 +113,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AppState>({
     quotes: [],
     deals: [],
+    opportunities: [],
+    dealMilestones: [],
     internalCosts: [],
     payments: [],
     commissionPayouts: [],
@@ -118,6 +135,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const [
         quotesRes,
         dealsRes,
+        opportunitiesRes,
+        dealMilestonesRes,
         costsRes,
         paymentsRes,
         commissionPayoutsRes,
@@ -132,6 +151,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ] = await Promise.all([
         supabase.from('quotes').select('*'),
         supabase.from('deals').select('*'),
+        (supabase.from as any)('opportunities').select('*'),
+        (supabase.from as any)('deal_milestones').select('*'),
         supabase.from('internal_costs').select('*'),
         supabase.from('payments').select('*'),
         (supabase.from as any)('commission_payouts').select('*'),
@@ -149,6 +170,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       console.log('Supabase fetch results:', {
         quotes: quotesRes.data?.length, quotesErr: quotesRes.error,
         deals: dealsRes.data?.length, dealsErr: dealsRes.error,
+        opportunities: opportunitiesRes.data?.length, opportunitiesErr: opportunitiesRes.error,
+        dealMilestones: dealMilestonesRes.data?.length, dealMilestonesErr: dealMilestonesRes.error,
         costs: costsRes.data?.length, costsErr: costsRes.error,
         payments: paymentsRes.data?.length, paymentsErr: paymentsRes.error,
         commissionPayouts: commissionPayoutsRes.data?.length, commissionPayoutsErr: commissionPayoutsRes.error,
@@ -173,6 +196,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       const quotes = (quotesRes.data || []).map(quoteFromRow);
       const deals = (dealsRes.data || []).map(dealFromRow);
+      const opportunities = (opportunitiesRes.data || []).map(opportunityFromRow);
+      const dealMilestones = (dealMilestonesRes.data || []).map(dealMilestoneFromRow);
       const internalCosts = (costsRes.data || []).map(internalCostFromRow);
       const payments = (paymentsRes.data || []).map(paymentFromRow);
       const commissionPayouts = commissionPayoutsRes.error
@@ -204,6 +229,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setState({
         quotes,
         deals,
+        opportunities,
+        dealMilestones,
         internalCosts,
         payments,
         commissionPayouts,
@@ -232,6 +259,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setState({
           quotes: data.quotes || [],
           deals: data.deals || [],
+          opportunities: data.opportunities || [],
+          dealMilestones: data.dealMilestones || [],
           internalCosts: data.internalCosts || [],
           payments: data.payments || [],
           commissionPayouts: data.commissionPayouts || [],
@@ -299,9 +328,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       localStorage.removeItem('canada_steel_state');
 
       // Re-fetch from Supabase after migration
-      const [qR, dR, cR, pR, cpR, prR, fR, clR, vR] = await Promise.all([
+      const [qR, dR, oR, dmR, cR, pR, cpR, prR, fR, clR, vR] = await Promise.all([
         supabase.from('quotes').select('*'),
         supabase.from('deals').select('*'),
+        (supabase.from as any)('opportunities').select('*'),
+        (supabase.from as any)('deal_milestones').select('*'),
         supabase.from('internal_costs').select('*'),
         supabase.from('payments').select('*'),
         (supabase.from as any)('commission_payouts').select('*'),
@@ -314,6 +345,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setState({
         quotes: (qR.data || []).map(quoteFromRow),
         deals: (dR.data || []).map(dealFromRow),
+        opportunities: (oR.data || []).map(opportunityFromRow),
+        dealMilestones: (dmR.data || []).map(dealMilestoneFromRow),
         internalCosts: (cR.data || []).map(internalCostFromRow),
         payments: (pR.data || []).map(paymentFromRow),
         commissionPayouts: (cpR.data || []).map(commissionPayoutFromRow),
@@ -348,12 +381,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         console.warn('[Data] Supabase insert returned 0 rows — using SEED_DEALS in-memory');
         setState(prev => ({ ...prev, deals: SEED_DEALS, loading: false }));
         // Also save to localStorage so it persists
-        const currentState = { quotes: [], deals: SEED_DEALS, internalCosts: [], payments: [], commissionPayouts: [], production: [], freight: [], rfqs: [], clients: [], vendors: [], estimates: [], steelCostData: [], insulationCostData: [], storedDocuments: [] };
+        const currentState = { quotes: [], deals: SEED_DEALS, opportunities: [], dealMilestones: [], internalCosts: [], payments: [], commissionPayouts: [], production: [], freight: [], rfqs: [], clients: [], vendors: [], estimates: [], steelCostData: [], insulationCostData: [], storedDocuments: [] };
         localStorage.setItem('canada_steel_state', JSON.stringify(currentState));
       }
     } catch {
       setState(prev => ({ ...prev, deals: SEED_DEALS, loading: false }));
-      const currentState = { quotes: [], deals: SEED_DEALS, internalCosts: [], payments: [], commissionPayouts: [], production: [], freight: [], rfqs: [], clients: [], vendors: [], estimates: [], steelCostData: [], insulationCostData: [], storedDocuments: [] };
+      const currentState = { quotes: [], deals: SEED_DEALS, opportunities: [], dealMilestones: [], internalCosts: [], payments: [], commissionPayouts: [], production: [], freight: [], rfqs: [], clients: [], vendors: [], estimates: [], steelCostData: [], insulationCostData: [], storedDocuments: [] };
       localStorage.setItem('canada_steel_state', JSON.stringify(currentState));
     }
   }, []);
@@ -367,15 +400,137 @@ export function AppProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('canada_steel_state', JSON.stringify(dataToSave));
   }, [state]);
 
+  const upsertOpportunityRecord = useCallback(async (
+    source: Quote | Deal,
+    sourceType: 'quote' | 'deal',
+    overrides?: Partial<Opportunity>,
+  ) => {
+    const existing = state.opportunities.find(opportunity =>
+      opportunity.jobId === source.jobId || (source.opportunityId && opportunity.id === source.opportunityId),
+    );
+
+    const derived = sourceType === 'quote'
+      ? buildOpportunityFromQuote(source as Quote, existing)
+      : buildOpportunityFromDeal(source as Deal, existing);
+
+    const nextOpportunity: Opportunity = {
+      ...derived,
+      ...overrides,
+      id: overrides?.id || derived.id,
+      jobId: source.jobId,
+      clientId: overrides?.clientId ?? derived.clientId,
+      clientName: overrides?.clientName ?? derived.clientName,
+      name: overrides?.name ?? derived.name,
+      potentialRevenue: overrides?.potentialRevenue ?? derived.potentialRevenue,
+      status: overrides?.status ?? derived.status,
+      source: overrides?.source ?? derived.source,
+      updatedAt: new Date().toISOString(),
+      createdAt: existing?.createdAt || derived.createdAt,
+    };
+
+    setState(prev => ({
+      ...prev,
+      opportunities: [...prev.opportunities.filter(opportunity => opportunity.jobId !== nextOpportunity.jobId), nextOpportunity],
+    }));
+
+    try {
+      const { data } = await (supabase.from as any)('opportunities')
+        .upsert(opportunityToRow(nextOpportunity), { onConflict: 'job_id' })
+        .select()
+        .single();
+
+      if (data) {
+        const mapped = opportunityFromRow(data);
+        setState(prev => ({
+          ...prev,
+          opportunities: [...prev.opportunities.filter(opportunity => opportunity.jobId !== mapped.jobId), mapped],
+        }));
+        return mapped;
+      }
+    } catch {}
+
+    return nextOpportunity;
+  }, [state.opportunities]);
+
+  const updateOpportunityByJob = useCallback(async (jobId: string, updates: Partial<Opportunity>) => {
+    const existing = state.opportunities.find(opportunity => opportunity.jobId === jobId);
+    if (!existing) return;
+
+    const nextOpportunity = {
+      ...existing,
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    };
+
+    setState(prev => ({
+      ...prev,
+      opportunities: prev.opportunities.map(opportunity => opportunity.jobId === jobId ? nextOpportunity : opportunity),
+    }));
+
+    try {
+      await (supabase.from as any)('opportunities')
+        .update(opportunityToRow(nextOpportunity))
+        .eq('job_id', jobId);
+    } catch {}
+  }, [state.opportunities]);
+
+  const upsertDealMilestone = useCallback(async (
+    jobId: string,
+    milestoneKey: DealMilestone['milestoneKey'],
+    isComplete: boolean,
+    notes = '',
+  ) => {
+    const existing = state.dealMilestones.find(milestone =>
+      milestone.jobId === jobId && milestone.milestoneKey === milestoneKey,
+    );
+
+    const nextMilestone = buildDealMilestoneRecord({
+      jobId,
+      milestoneKey,
+      isComplete,
+      notes,
+      completedByUserId: currentUser?.id || null,
+      existing,
+    });
+
+    setState(prev => ({
+      ...prev,
+      dealMilestones: [
+        ...prev.dealMilestones.filter(milestone => !(milestone.jobId === jobId && milestone.milestoneKey === milestoneKey)),
+        nextMilestone,
+      ],
+    }));
+
+    try {
+      const { data } = await (supabase.from as any)('deal_milestones')
+        .upsert(dealMilestoneToRow(nextMilestone), { onConflict: 'job_id,milestone_key' })
+        .select()
+        .single();
+
+      if (data) {
+        const mapped = dealMilestoneFromRow(data);
+        setState(prev => ({
+          ...prev,
+          dealMilestones: [
+            ...prev.dealMilestones.filter(milestone => !(milestone.jobId === jobId && milestone.milestoneKey === milestoneKey)),
+            mapped,
+          ],
+        }));
+      }
+    } catch {}
+  }, [currentUser?.id, state.dealMilestones]);
+
   // --- Quotes ---
   const addQuote = useCallback(async (q: Quote) => {
-    setState(prev => ({ ...prev, quotes: [...prev.quotes, q] }));
-    logAudit(currentUser?.name || 'System', 'CREATE', 'Quote', q.id, q);
+    const opportunity = await upsertOpportunityRecord(q, 'quote');
+    const nextQuote = { ...q, opportunityId: q.opportunityId || opportunity?.id || null };
+    setState(prev => ({ ...prev, quotes: [...prev.quotes, nextQuote] }));
+    logAudit(currentUser?.name || 'System', 'CREATE', 'Quote', nextQuote.id, nextQuote);
     try {
-      const row = quoteToRow(q);
+      const row = quoteToRow(nextQuote);
       await supabase.from('quotes').insert(row as any).select().single();
     } catch {}
-  }, [currentUser]);
+  }, [currentUser, upsertOpportunityRecord]);
 
   const allocateJobId = useCallback(async (): Promise<string> => {
     const { data, error } = await (supabase.rpc as any)('allocate_job_id');
@@ -384,6 +539,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const updateQuote = useCallback(async (id: string, updates: Partial<Quote>) => {
+    const existingQuote = state.quotes.find(q => q.id === id);
+    const nextQuote = existingQuote ? { ...existingQuote, ...updates } : null;
     setState(prev => {
       const existing = prev.quotes.find(q => q.id === id);
       if (existing) logAudit(currentUser?.name || 'System', 'UPDATE', 'Quote', id, updates, existing);
@@ -392,11 +549,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
         quotes: prev.quotes.map(q => q.id === id ? { ...q, ...updates } : q),
       };
     });
+    if (nextQuote) {
+      void upsertOpportunityRecord(nextQuote, 'quote');
+    }
     try {
       const row = quoteToRow(updates);
       await supabase.from('quotes').update(row as any).eq('id', id);
     } catch {}
-  }, [currentUser]);
+  }, [currentUser, state.quotes, upsertOpportunityRecord]);
 
   const deleteQuote = useCallback(async (id: string) => {
     setState(prev => {
@@ -498,20 +658,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // --- Deals ---
   const addDeal = useCallback(async (d: Deal) => {
-    setState(prev => ({ ...prev, deals: [...prev.deals, d] }));
-    logAudit(currentUser?.name || 'System', 'CREATE', 'Deal', d.jobId, d);
+    const opportunity = await upsertOpportunityRecord(d, 'deal');
+    const nextDeal = { ...d, opportunityId: d.opportunityId || opportunity?.id || null };
+    setState(prev => ({ ...prev, deals: [...prev.deals, nextDeal] }));
+    logAudit(currentUser?.name || 'System', 'CREATE', 'Deal', nextDeal.jobId, nextDeal);
     try {
-      const row = dealToRow(d);
+      const row = dealToRow(nextDeal);
       await supabase.from('deals').insert(row as any).select().single();
     } catch {}
     // Upsert client record with the new job ID
-    if (d.clientName || d.clientId) {
-      const cId = d.clientId || `C-${Date.now().toString(36).toUpperCase()}`;
-      await upsertClientJob(cId, d.clientName, d.jobId);
+    if (nextDeal.clientName || nextDeal.clientId) {
+      const cId = nextDeal.clientId || `C-${Date.now().toString(36).toUpperCase()}`;
+      await upsertClientJob(cId, nextDeal.clientName, nextDeal.jobId);
     }
-  }, [currentUser, upsertClientJob]);
+  }, [currentUser, upsertClientJob, upsertOpportunityRecord]);
 
   const updateDeal = useCallback(async (jobId: string, updates: Partial<Deal>) => {
+    const existingDeal = state.deals.find(d => d.jobId === jobId);
+    const nextDeal = existingDeal ? { ...existingDeal, ...updates } : null;
     setState(prev => {
       const existing = prev.deals.find(d => d.jobId === jobId);
       if (existing) logAudit(currentUser?.name || 'System', 'UPDATE', 'Deal', jobId, updates, existing);
@@ -520,17 +684,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
         deals: prev.deals.map(d => d.jobId === jobId ? { ...d, ...updates } : d),
       };
     });
+    if (nextDeal) {
+      void upsertOpportunityRecord(nextDeal, 'deal');
+    }
     try {
       const row = dealToRow(updates);
       await supabase.from('deals').update(row as any).eq('job_id', jobId);
     } catch {}
-  }, [currentUser]);
+  }, [currentUser, state.deals, upsertOpportunityRecord]);
 
   const deleteDeal = useCallback(async (jobId: string) => {
     setState(prev => {
       const existing = prev.deals.find(d => d.jobId === jobId);
       if (existing) logAudit(currentUser?.name || 'System', 'DELETE', 'Deal', jobId, { jobId }, existing);
-      return { ...prev, deals: prev.deals.filter(d => d.jobId !== jobId) };
+      return {
+        ...prev,
+        deals: prev.deals.filter(d => d.jobId !== jobId),
+        dealMilestones: prev.dealMilestones.filter(milestone => milestone.jobId !== jobId),
+      };
     });
     try {
       await supabase.from('deals').delete().eq('job_id', jobId);
@@ -838,6 +1009,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   return (
     <AppContext.Provider value={{
       ...state, addQuote, updateQuote, deleteQuote, restoreQuote, addDeal, updateDeal, deleteDeal,
+      updateOpportunityByJob, upsertDealMilestone,
       addInternalCost, updateInternalCost, addPayment, updatePayment, deletePayment,
       upsertCommissionPayout, deleteCommissionPayout,
       addProduction, updateProduction, addFreight, updateFreight,

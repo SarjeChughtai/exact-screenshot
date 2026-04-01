@@ -37,6 +37,12 @@ Users belong to specialized portals:
   - estimator-specific RFQ visibility tightened in both queue and log views
   - structured RFQ details and PDF access added to expanded RFQ log rows
   - external quotes can now be reverted from deal state back to quote state from the document log
+  - operations tooling is now grouped under an explicit Operations workspace in the sidebar
+  - import review now detects duplicate document groups and lets operators mark one primary visible set
+  - operator-facing document pickers now hide non-primary duplicate files by default
+  - internal quote builder now prefers warehouse-normalized historical document data over raw AI output
+  - portal-native opportunity and deal milestone groundwork has been added to the domain model, mapper layer, and app state
+  - freight board now shows pickup, delivery, drop-off, execution mode, and milestone-derived freight readiness
 
 ## 📍 Navigational Rules
 - Dealers default to the `dealer-log` page.

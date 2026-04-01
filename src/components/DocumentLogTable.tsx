@@ -8,6 +8,7 @@ import { isEstimatorAssignedToQuote } from '@/lib/rfqWorkflow';
 import { useSharedJobs } from '@/lib/sharedJobs';
 import { supabase } from '@/integrations/supabase/client';
 import { quoteFileFromRow } from '@/lib/supabaseMappers';
+import { getVisibleOperatorQuoteFiles } from '@/lib/importReview';
 import type { Deal, DocumentType, Quote, QuoteFileRecord, QuoteStatus, SharedJobState } from '@/types';
 import { toast } from 'sonner';
 import { Archive, ChevronDown, ChevronRight, Download, Pencil, RotateCcw, Trash2 } from 'lucide-react';
@@ -43,7 +44,7 @@ export function DocumentLogTable({
   estimatorFilter,
 }: DocumentLogTableProps) {
   const navigate = useNavigate();
-  const { quotes, deals, updateQuote, deleteQuote, restoreQuote, addDeal, updateDeal, deleteDeal } = useAppContext();
+  const { quotes, deals, updateQuote, deleteQuote, restoreQuote, addDeal, updateDeal, deleteDeal, updateOpportunityByJob } = useAppContext();
   const { visibleJobIds, stateByJobId } = useSharedJobs();
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showTrash, setShowTrash] = useState(false);
@@ -101,7 +102,12 @@ export function DocumentLogTable({
           return accumulator;
         }, {});
 
-      setFilesByDocumentId(grouped);
+      const visibleGrouped = Object.entries(grouped).reduce<Record<string, QuoteFileRecord[]>>((accumulator, [key, files]) => {
+        accumulator[key] = getVisibleOperatorQuoteFiles(files);
+        return accumulator;
+      }, {});
+
+      setFilesByDocumentId(visibleGrouped);
     })();
   }, [visibleDocumentIdsKey]);
 
@@ -214,6 +220,11 @@ export function DocumentLogTable({
     }
 
     updateQuote(quote.id, { workflowStatus: 'converted_to_deal', status: 'Won' });
+    void updateOpportunityByJob(quote.jobId, {
+      status: 'won',
+      potentialRevenue: quote.grandTotal,
+      source: 'deal',
+    });
     toast.success(`Deal ${existingDeal ? 'updated' : 'created'} for ${quote.jobId}`);
   };
 
@@ -229,6 +240,11 @@ export function DocumentLogTable({
       workflowStatus: 'quote_sent',
       status: 'Sent',
       updatedAt: new Date().toISOString(),
+    });
+    void updateOpportunityByJob(quote.jobId, {
+      status: 'open',
+      source: quote.documentType,
+      potentialRevenue: quote.grandTotal,
     });
     toast.success(`Deal reverted back to quote for ${quote.jobId}`);
   };

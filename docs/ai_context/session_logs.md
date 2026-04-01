@@ -69,5 +69,17 @@ This file records the summary of work done in each interactive AI session.
   - `npm test` passed with 4 files / 10 tests
   - `npm run build` passed
   - pre-existing warnings remain for large Vite chunks and mixed static/dynamic `xlsx` / `pdfjs-dist` imports
+- Added operator documentation:
+  - `docs/TOOL_USER_MANUAL.md`
+  - `docs/TOOL_CHANGE_LOG.md`
+  - `docs/manuals/INDEX.md`
+  - department manuals for sales, estimating, operations, accounting, freight, dealer, vendor/manufacturer, and admin/owner
+- Implemented the next CRM/ERP completion slice:
+  - grouped internal quote builder, import review, draft log, and internal quote log under Operations in the sidebar
+  - added duplicate-document governance helpers and import-review primary-set controls
+  - operator-facing quote file retrieval now prefers one primary visible document set per duplicate group
+  - internal quote historical-file pulls now prefer normalized warehouse rows before raw AI output
+  - added portal-native `opportunities` and `deal_milestones` groundwork in code plus migration `20260331233000_add_portal_opportunities_and_document_governance.sql`
+  - added opportunity sync hooks in `AppContext`, milestone checklist UI in `MasterDeals`, and readiness visibility in `FreightBoard`
 
 ---
