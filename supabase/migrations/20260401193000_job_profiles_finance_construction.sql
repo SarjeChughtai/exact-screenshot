@@ -431,9 +431,9 @@ with quote_seed as (
     max(width) as width,
     max(length) as length,
     max(height) as height,
-    max(left_eave_height) as left_eave_height,
-    max(right_eave_height) as right_eave_height,
-    bool_or(coalesce(is_single_slope, false)) as is_single_slope,
+    max(nullif(coalesce(payload ->> 'leftEaveHeight', payload ->> 'left_eave_height'), '')::numeric) as left_eave_height,
+    max(nullif(coalesce(payload ->> 'rightEaveHeight', payload ->> 'right_eave_height'), '')::numeric) as right_eave_height,
+    bool_or(coalesce(nullif(coalesce(payload ->> 'singleSlope', payload ->> 'isSingleSlope', payload ->> 'is_single_slope'), '')::boolean, false)) as is_single_slope,
     max(pitch) as pitch,
     max(coalesce((payload ->> 'structureType'), '')) as structure_type
   from public.quotes
@@ -455,9 +455,9 @@ with quote_seed as (
     max(width) as width,
     max(length) as length,
     max(height) as height,
-    max(left_eave_height) as left_eave_height,
-    max(right_eave_height) as right_eave_height,
-    bool_or(coalesce(is_single_slope, false)) as is_single_slope
+    null::numeric as left_eave_height,
+    null::numeric as right_eave_height,
+    null::boolean as is_single_slope
   from public.deals
   where nullif(trim(job_id), '') is not null
   group by 1
