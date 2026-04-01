@@ -24,7 +24,7 @@ import { DocumentGallery } from '@/components/DocumentGallery';
 import { getQuoteFileUrl } from '@/lib/quoteFileStorage';
 import { downloadDocumentPdf, saveDocumentPdf } from '@/lib/documentPdf';
 import { notifyUsers } from '@/lib/workflowNotifications';
-import { steelCostDataFromRow, insulationCostDataFromRow } from '@/lib/supabaseMappers';
+import { steelCostDataFromRow, insulationCostDataFromRow, storedDocumentFromRow } from '@/lib/supabaseMappers';
 import {
   extractTextFromPdf as extractCostPdfText,
   isInsulationQuoteText,
@@ -416,6 +416,23 @@ export default function InternalQuoteBuilder() {
     }
   };
 
+  const snapshotHasHydrationData = (snapshot: ReturnType<typeof buildHistoricalQuoteFileSnapshot>) => {
+    return Boolean(
+      snapshot.documentType !== 'unknown' ||
+      snapshot.jobId ||
+      snapshot.jobName ||
+      snapshot.clientName ||
+      snapshot.city ||
+      snapshot.province ||
+      snapshot.postalCode ||
+      snapshot.weightLbs != null ||
+      snapshot.costPerLb != null ||
+      snapshot.totalSupplierCost != null ||
+      snapshot.insulationTotal != null ||
+      (snapshot.components && snapshot.components.length > 0),
+    );
+  };
+
   const handleSelectHistoricalFile = async (fileRecord: any) => {
     setAiProcessing(true);
     try {
@@ -432,18 +449,20 @@ export default function InternalQuoteBuilder() {
         i === activeBuildingIdx ? { ...b, files: [...b.files, newFile] } : b
       ));
 
-      const [steelWarehouseRes, insulationWarehouseRes] = await Promise.all([
+      const [steelWarehouseRes, insulationWarehouseRes, storedDocumentRes] = await Promise.all([
         (supabase.from as any)('steel_cost_data').select('*').eq('quote_file_id', fileRecord.id).maybeSingle(),
         (supabase.from as any)('insulation_cost_data').select('*').eq('quote_file_id', fileRecord.id).maybeSingle(),
+        (supabase.from as any)('stored_documents').select('*').eq('quote_file_id', fileRecord.id).maybeSingle(),
       ]);
 
       const snapshot = buildHistoricalQuoteFileSnapshot({
         file: fileRecord,
         steelWarehouseEntry: steelWarehouseRes.data ? steelCostDataFromRow(steelWarehouseRes.data) : null,
         insulationWarehouseEntry: insulationWarehouseRes.data ? insulationCostDataFromRow(insulationWarehouseRes.data) : null,
+        storedDocument: storedDocumentRes.data ? storedDocumentFromRow(storedDocumentRes.data) : null,
       });
 
-      if (snapshot.documentType !== 'unknown' || fileRecord.aiOutput) {
+      if (snapshotHasHydrationData(snapshot)) {
         applyHistoricalSnapshot(snapshot);
         toast.success(
           snapshot.documentType === 'insulation'

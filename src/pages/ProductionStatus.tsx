@@ -8,7 +8,12 @@ import { useSharedJobs } from '@/lib/sharedJobs';
 import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { getProductionProgressPct, normalizeProductionStage } from '@/lib/productionLifecycle';
-import { isDealFreightReady } from '@/lib/opportunities';
+import {
+  getDealFreightBlockedReason,
+  getDealPostSaleNextStep,
+  isDealFreightReady,
+  summarizeDealMilestoneProgress,
+} from '@/lib/opportunities';
 
 function derivePaymentStage(count: number, stages: string[]) {
   if (!count || stages.length === 0) return '';
@@ -82,18 +87,21 @@ export default function ProductionStatus() {
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-primary text-primary-foreground text-xs">
-              {['Job ID', 'Client', 'Building', 'Production', 'Insulation', 'Freight', 'Freight Ready', 'CX Payment', 'Factory Payment', 'Progress'].map(header => (
+              {['Job ID', 'Client', 'Building', 'Production', 'Insulation', 'Freight', 'Freight Ready', 'Milestones', 'Next Step', 'Blocked Reason', 'CX Payment', 'Factory Payment', 'Progress'].map(header => (
                 <th key={header} className="px-3 py-2 text-left font-medium whitespace-nowrap">{header}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {activeDeals.length === 0 ? (
-              <tr><td colSpan={10} className="px-3 py-8 text-center text-muted-foreground">No active production</td></tr>
+              <tr><td colSpan={13} className="px-3 py-8 text-center text-muted-foreground">No active production</td></tr>
             ) : activeDeals.map(deal => {
               const progress = getProductionProgressPct(deal.productionStatus, settings.productionStatuses);
               const milestonesForJob = dealMilestones.filter(item => item.jobId === deal.jobId);
               const freightReady = isDealFreightReady(milestonesForJob);
+              const milestoneProgress = summarizeDealMilestoneProgress(milestonesForJob);
+              const nextStep = getDealPostSaleNextStep(deal, milestonesForJob);
+              const blockedReason = getDealFreightBlockedReason(milestonesForJob);
               const clientPaymentCount = payments.filter(payment => payment.jobId === deal.jobId && payment.direction === 'Client Payment IN').length;
               const factoryPaymentCount = payments.filter(payment => payment.jobId === deal.jobId && payment.direction === 'Vendor Payment OUT').length;
               const clientStage = deal.cxPaymentStageOverride || derivePaymentStage(clientPaymentCount, settings.clientPaymentStatuses);
@@ -133,6 +141,11 @@ export default function ProductionStatus() {
                       {freightReady ? 'Ready' : 'Blocked'}
                     </span>
                   </td>
+                  <td className="px-3 py-2 text-xs">
+                    {milestoneProgress.completedCount}/{milestoneProgress.totalCount}
+                  </td>
+                  <td className="px-3 py-2 text-xs">{nextStep}</td>
+                  <td className="px-3 py-2 text-xs">{blockedReason || '-'}</td>
                   <td className="px-3 py-2">
                     {canEdit ? (
                       <div className="flex items-center gap-2">

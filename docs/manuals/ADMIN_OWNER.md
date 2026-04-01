@@ -25,6 +25,8 @@
 - review or correct settings and personnel mappings
 - inspect RFQ/quote/deal state issues
 - revert mistaken quote-to-deal conversions
+- filter `Quote Log` by estimator assignee in either `log` or `pipeline` mode
+- use `Opportunities` filters to review owner and estimator load across the CRM workspace
 
 ## Best practices
 - use admin visibility to audit, not to bypass normal workflow discipline

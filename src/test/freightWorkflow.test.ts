@@ -134,6 +134,28 @@ describe('freight workflow helpers', () => {
     expect(rows[0]?.freightReady).toBe(true);
     expect(rows[0]?.variance).toBe(200);
     expect(rows[0]?.paid).toBe(true);
+    expect(rows[0]?.nextStep).toBe('Post execution freight');
+    expect(rows[0]?.completedMilestones).toBe(10);
+  });
+
+  it('shows blocked reason and next step when execution freight is not ready', () => {
+    const rows = buildFreightExecutionRows({
+      deals: [buildDeal()],
+      freight: [buildFreight({ actualFreight: 0, status: 'Pending' })],
+      dealMilestones: [
+        buildDealMilestoneRecord({
+          jobId: 'JOB-300',
+          milestoneKey: 'signed_order_form_received',
+          isComplete: true,
+        }),
+      ],
+      internalCosts: [],
+      payments: [],
+    });
+
+    expect(rows[0]?.freightReady).toBe(false);
+    expect(rows[0]?.blockedReason).toBe('Waiting on 30% payment received');
+    expect(rows[0]?.nextStep).toBe('Complete 30% payment received');
   });
 
   it('builds pre-sale rows from manual freight records', () => {

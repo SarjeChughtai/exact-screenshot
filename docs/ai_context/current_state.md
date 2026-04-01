@@ -1,6 +1,6 @@
 # Current State: Canada Steel Platform
 
-Last updated: Mar 31, 2026
+Last updated: Apr 1, 2026
 
 ## 🛠️ Technology Stack
 - **Frontend**: React (Vite) with TypeScript.
@@ -51,6 +51,12 @@ Users belong to specialized portals:
   - quote, deal, and freight screens now deep-link into opportunities and freight workflows using query-param launch points
   - internal and dealer-facing document views now surface primary visible file sets, hidden duplicate counts, and direct file/PDF access without forcing a jump back into import review
   - the opportunities workspace now supports both table and CRM-style board views while preserving the same lifecycle controls and launch actions
+  - `QuoteLog` now acts as a single RFQ workspace with explicit `log` and `pipeline` modes on the same route
+  - internal RFQ users can filter the shared RFQ workspace by estimator assignee, while estimator-only users remain locked to their own assigned/submitted RFQs
+  - internal quote historical document pulls now use deterministic precedence: warehouse rows, corrected quote-file data, stored-document parsed data, raw AI output, then parser fallback
+  - `deals`, `production`, `freight`, and `opportunities` now share the same derived post-sale signals for next step, blocked reason, freight-ready state, and milestone progress
+  - `MasterDeals` and `FreightBoard` now expose document-vault summaries using the same primary-visible-set / hidden-duplicate language already used in logs and opportunities
+  - the opportunities workspace now supports internal filtering by sales rep owner and estimator in both table and board workflows
 
 ## 📍 Navigational Rules
 - Dealers default to the `dealer-log` page.
@@ -60,3 +66,4 @@ Users belong to specialized portals:
 - Freight should remain a single job-linked record that can move from `pre_sale` to `execution`, rather than creating duplicate freight rows for one job.
 - Opportunity management should happen from one portal-native workspace, with quote/deal pages acting as launch points rather than competing sources of lifecycle truth.
 - Production progress should be calculated from normalized deal stages, even when the UI uses custom configured display labels.
+- RFQ routing should stay on `/quote-log`; `view=log|pipeline`, `documentId`, and `assignee` query params are the supported deep-link pattern for RFQ workspace navigation.

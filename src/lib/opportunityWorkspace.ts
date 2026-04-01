@@ -1,4 +1,4 @@
-import { isDealFreightReady } from '@/lib/opportunities';
+import { getDealFreightBlockedReason, getDealPostSaleNextStep, isDealFreightReady } from '@/lib/opportunities';
 import type { Deal, DealMilestone, Opportunity, OpportunityStatus, Quote } from '@/types';
 
 export interface OpportunityWorkspaceRow {
@@ -9,6 +9,7 @@ export interface OpportunityWorkspaceRow {
   milestones: DealMilestone[];
   nextStep: string;
   freightReady: boolean;
+  blockedReason: string | null;
 }
 
 export function buildOpportunityWorkspaceRows(input: {
@@ -29,18 +30,22 @@ export function buildOpportunityWorkspaceRows(input: {
       const deal = deals.find(item => item.jobId === opportunity.jobId) || null;
       const milestones = dealMilestones.filter(item => item.jobId === opportunity.jobId);
 
+      const freightReady = isDealFreightReady(milestones);
+
       return {
         opportunity,
         latestQuote: relatedQuotes[0] || null,
         relatedQuotes,
         deal,
         milestones,
-        freightReady: isDealFreightReady(milestones),
+        freightReady,
+        blockedReason: deal ? getDealFreightBlockedReason(milestones) : null,
         nextStep: deriveOpportunityNextStep({
           opportunityStatus: opportunity.status,
           latestQuote: relatedQuotes[0] || null,
           deal,
           milestones,
+          freightReady,
         }),
       };
     })
@@ -64,23 +69,24 @@ function deriveOpportunityNextStep(input: {
   latestQuote: Quote | null;
   deal: Deal | null;
   milestones: DealMilestone[];
+  freightReady: boolean;
 }) {
-  const { opportunityStatus, latestQuote, deal, milestones } = input;
+  const { opportunityStatus, latestQuote, deal, milestones, freightReady } = input;
 
   if (opportunityStatus === 'lost') return 'Closed as lost';
   if (opportunityStatus === 'abandoned') return 'Closed as abandoned';
 
   if (deal) {
     if (deal.freightStatus === 'Booked' || deal.freightStatus === 'In Transit') {
-      return 'Monitor freight execution';
-    }
-    if (isDealFreightReady(milestones)) {
-      return 'Post execution freight';
+      return getDealPostSaleNextStep(deal, milestones);
     }
     if (deal.productionStatus === 'Delivered' || deal.dealStatus === 'Delivered' || deal.dealStatus === 'Complete') {
       return 'Delivered';
     }
-    return 'Advance post-sale milestones';
+    if (freightReady) {
+      return 'Post execution freight';
+    }
+    return getDealPostSaleNextStep(deal, milestones);
   }
 
   if (!latestQuote) return 'Review RFQ and assign next owner';

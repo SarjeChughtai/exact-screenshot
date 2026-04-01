@@ -1,5 +1,10 @@
 import { formatCurrency } from '@/lib/calculations';
-import { isDealFreightReady } from '@/lib/opportunities';
+import {
+  getDealFreightBlockedReason,
+  getDealPostSaleNextStep,
+  isDealFreightReady,
+  summarizeDealMilestoneProgress,
+} from '@/lib/opportunities';
 import type { Deal, DealMilestone, FreightRecord, InternalCost, PaymentEntry, Quote } from '@/types';
 
 export interface FreightExecutionRow {
@@ -20,6 +25,10 @@ export interface FreightExecutionRow {
   status: FreightRecord['status'];
   freightReady: boolean;
   assignedFreightUserId?: string | null;
+  blockedReason: string | null;
+  nextStep: string;
+  completedMilestones: number;
+  totalMilestones: number;
 }
 
 export interface FreightPreSaleRow {
@@ -61,6 +70,8 @@ export function buildFreightExecutionRows(input: {
 
       const estFreight = costs?.trueFreight || freightRecord?.estFreight || 0;
       const actualFreight = freightRecord?.actualFreight || 0;
+      const progress = summarizeDealMilestoneProgress(milestonesForJob);
+      const freightReady = isDealFreightReady(milestonesForJob);
 
       return {
         jobId: deal.jobId,
@@ -78,8 +89,12 @@ export function buildFreightExecutionRows(input: {
         paid: freightPaid > 0 || freightRecord?.paid || false,
         carrier: freightRecord?.carrier || '',
         status: freightRecord?.status || 'Pending',
-        freightReady: isDealFreightReady(milestonesForJob),
+        freightReady,
         assignedFreightUserId: freightRecord?.assignedFreightUserId || null,
+        blockedReason: getDealFreightBlockedReason(milestonesForJob),
+        nextStep: getDealPostSaleNextStep(deal, milestonesForJob),
+        completedMilestones: progress.completedCount,
+        totalMilestones: progress.totalCount,
       };
     });
 }

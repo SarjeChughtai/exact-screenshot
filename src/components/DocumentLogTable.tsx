@@ -6,7 +6,7 @@ import { formatCurrency, formatNumber, getProvinceTax } from '@/lib/calculations
 import { useAppContext } from '@/context/AppContext';
 import { useRoles } from '@/context/RoleContext';
 import { getQuoteLifecycleForOpportunityStatus } from '@/lib/opportunities';
-import { isEstimatorAssignedToQuote } from '@/lib/rfqWorkflow';
+import { doesQuoteMatchAssigneeFilter, type QuoteAssigneeFilter } from '@/lib/rfqWorkflow';
 import { useSharedJobs } from '@/lib/sharedJobs';
 import { summarizeQuoteFiles } from '@/lib/documentVault';
 import { supabase } from '@/integrations/supabase/client';
@@ -31,10 +31,7 @@ interface DocumentLogTableProps {
   filterDocumentTypes: DocumentType[];
   filterWorkflowStatuses?: string[];
   focusDocumentId?: string;
-  estimatorFilter?: {
-    userId: string;
-    name: string;
-  };
+  rfqAssigneeFilter?: QuoteAssigneeFilter;
 }
 
 export function DocumentLogTable({
@@ -43,7 +40,7 @@ export function DocumentLogTable({
   filterDocumentTypes,
   filterWorkflowStatuses,
   focusDocumentId,
-  estimatorFilter,
+  rfqAssigneeFilter,
 }: DocumentLogTableProps) {
   const navigate = useNavigate();
   const { quotes, deals, opportunities, updateQuote, deleteQuote, restoreQuote, addDeal, updateDeal, deleteDeal, updateOpportunityByJob } = useAppContext();
@@ -66,9 +63,9 @@ export function DocumentLogTable({
     if (!filterDocumentTypes.includes(quote.documentType)) return false;
     if (filterWorkflowStatuses && !filterWorkflowStatuses.includes(quote.workflowStatus)) return false;
     if (
-      estimatorFilter &&
+      rfqAssigneeFilter &&
       (quote.documentType === 'rfq' || quote.documentType === 'dealer_rfq') &&
-      !isEstimatorAssignedToQuote(quote, estimatorFilter.userId, estimatorFilter.name)
+      !doesQuoteMatchAssigneeFilter(quote, rfqAssigneeFilter)
     ) {
       return false;
     }

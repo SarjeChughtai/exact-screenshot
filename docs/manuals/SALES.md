@@ -36,9 +36,15 @@
 - `Import to RFQ` transfers estimate data to Quote RFQ
 
 ### RFQ Log
-- use the expanded row to verify RFQ details and attached PDF
+- use the `log` view for expanded RFQ details and attached PDF checks
+- use the `pipeline` view when you need queue-style workflow handoff visibility
 - use `Convert to Deal` only once the customer quote is truly won
 - use `Revert to Quote` if a deal was created by mistake
+
+## Opportunities
+- use `Opportunities` as the CRM home for shared job lifecycle visibility
+- filter by status, search text, sales rep, or estimator to narrow active work
+- launch into RFQ log, deal, freight estimate, chat, or saved PDF from the same workspace
 
 ## Common mistakes to avoid
 - skipping city, province, or postal code before RFQ submission

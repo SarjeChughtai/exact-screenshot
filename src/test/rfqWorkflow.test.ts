@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { isEstimatorAssignedToQuote } from '@/lib/rfqWorkflow';
+import { doesQuoteMatchAssigneeFilter, isEstimatorAssignedToQuote } from '@/lib/rfqWorkflow';
 
 describe('rfq workflow visibility helpers', () => {
   it('allows an estimator when the assigned user id matches', () => {
@@ -30,6 +30,31 @@ describe('rfq workflow visibility helpers', () => {
         'user-2',
         'Estimator One',
       )
+    ).toBe(false);
+  });
+
+  it('matches an explicit assignee filter by user id', () => {
+    expect(
+      doesQuoteMatchAssigneeFilter(
+        { assignedEstimatorUserId: 'user-3', estimator: 'Estimator Two' },
+        { userId: 'user-3', name: 'Estimator One' },
+      ),
+    ).toBe(true);
+  });
+
+  it('matches the unassigned filter only when no estimator is set', () => {
+    expect(
+      doesQuoteMatchAssigneeFilter(
+        { assignedEstimatorUserId: null, estimator: '' },
+        { mode: 'unassigned' },
+      ),
+    ).toBe(true);
+
+    expect(
+      doesQuoteMatchAssigneeFilter(
+        { assignedEstimatorUserId: null, estimator: 'Estimator Two' },
+        { mode: 'unassigned' },
+      ),
     ).toBe(false);
   });
 });

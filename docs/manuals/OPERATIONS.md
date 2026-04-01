@@ -39,6 +39,13 @@ Use Import Review as the correction gate for uploaded supplier files.
 Best practice:
 - correct the warehouse/source extraction first
 - then rebuild or refresh the internal quote if needed
+- prefer the primary visible document set when duplicates exist
+- treat hidden duplicates as audit artifacts, not default operator inputs
+
+## RFQ Workspace
+- use `Quote Log` in `pipeline` mode for queue-style RFQ movement across sales, estimating, and operations
+- use `Quote Log` in `log` mode for detailed RFQ review, saved PDF checks, and document actions
+- admin, owner, and operations users can filter RFQs by estimator assignee from the same route
 
 ## Draft Log
 Use when internal quote work is incomplete and should not be finalized yet.
@@ -46,6 +53,11 @@ Use when internal quote work is incomplete and should not be finalized yet.
 ## Production Status
 Current rule:
 - treat the deal record as the main production state until the future opportunity redesign lands
+- use milestone count, next step, and blocked reason to understand why a deal is or is not freight-ready
+
+## Opportunities
+- use `Opportunities` as the internal CRM home for shared job lifecycle status
+- filter by sales rep and estimator when reviewing load or ownership
 
 ## Common mistakes to avoid
 - building an internal quote against the wrong job ID

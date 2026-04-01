@@ -142,6 +142,25 @@ describe('opportunity workspace helpers', () => {
     expect(rows[0]?.nextStep).toBe('Post execution freight');
   });
 
+  it('surfaces blocked reason when required freight milestones are still missing', () => {
+    const rows = buildOpportunityWorkspaceRows({
+      opportunities: [buildOpportunity({ status: 'won', source: 'deal' })],
+      quotes: [buildQuote()],
+      deals: [buildDeal()],
+      dealMilestones: [
+        buildDealMilestoneRecord({
+          jobId: 'JOB-500',
+          milestoneKey: 'signed_order_form_received',
+          isComplete: true,
+        }),
+      ],
+    });
+
+    expect(rows[0]?.freightReady).toBe(false);
+    expect(rows[0]?.blockedReason).toBe('Waiting on 30% payment received');
+    expect(rows[0]?.nextStep).toBe('Complete 30% payment received');
+  });
+
   it('summarizes counts by opportunity status', () => {
     const summary = summarizeOpportunities([
       buildOpportunity({ status: 'open' }),

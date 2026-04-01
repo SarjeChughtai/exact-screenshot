@@ -11,12 +11,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { JobIdSelect } from '@/components/JobIdSelect';
 import { useAppContext } from '@/context/AppContext';
 import { formatCurrency, formatNumber } from '@/lib/calculations';
+import { buildJobDocumentVaultSummary } from '@/lib/documentVault';
 import { useRoles } from '@/context/RoleContext';
 import { useSettings } from '@/context/SettingsContext';
 import { useSharedJobs } from '@/lib/sharedJobs';
 import { supabase } from '@/integrations/supabase/client';
 import { buildFreightBuildingSize, buildFreightExecutionRows, buildPreSaleFreightRows } from '@/lib/freightWorkflow';
-import type { FreightRecord, FreightStatus, Quote } from '@/types';
+import { quoteFileFromRow } from '@/lib/supabaseMappers';
+import type { FreightRecord, FreightStatus, Quote, QuoteFileRecord } from '@/types';
 
 type FreightMode = 'pre_sale' | 'execution';
 
@@ -72,6 +74,7 @@ export default function FreightBoard() {
   const [editingJobId, setEditingJobId] = useState<string | null>(null);
   const [form, setForm] = useState<FreightFormState>(EMPTY_FORM);
   const [assigneeNames, setAssigneeNames] = useState<Record<string, string>>({});
+  const [filesByJobId, setFilesByJobId] = useState<Record<string, QuoteFileRecord[]>>({});
 
   const isRestrictedFreightUser = hasAnyRole('freight') && !hasAnyRole('admin', 'owner', 'operations') && !profile.canViewAllFreightBoard;
   const canManageAllFreight = hasAnyRole('admin', 'owner', 'operations');
@@ -160,6 +163,48 @@ export default function FreightBoard() {
       return row.assignedFreightUserId === currentUser.id;
     });
   }, [canManageAllFreight, currentUser.id, executionVisibleJobIds, freight, isRestrictedFreightUser, quotes]);
+
+  const freightJobIds = useMemo(
+    () => [...new Set([...executionRows.map(row => row.jobId), ...preSaleRows.map(row => row.jobId)].filter(Boolean))].sort(),
+    [executionRows, preSaleRows],
+  );
+
+  const documentSummaryByJobId = useMemo(() => {
+    return freightJobIds.reduce<Record<string, ReturnType<typeof buildJobDocumentVaultSummary>>>((accumulator, jobId) => {
+      accumulator[jobId] = buildJobDocumentVaultSummary({
+        jobId,
+        quotes: quotes.filter(quote => quote.jobId === jobId),
+        files: filesByJobId[jobId] || [],
+      });
+      return accumulator;
+    }, {});
+  }, [filesByJobId, freightJobIds, quotes]);
+
+  useEffect(() => {
+    if (freightJobIds.length === 0) {
+      setFilesByJobId({});
+      return;
+    }
+
+    void (async () => {
+      const { data, error } = await (supabase.from as any)('quote_files')
+        .select('*')
+        .in('job_id', freightJobIds)
+        .order('created_at', { ascending: false });
+
+      if (error) return;
+
+      const grouped = (data || [])
+        .map((row: any) => quoteFileFromRow(row))
+        .reduce<Record<string, QuoteFileRecord[]>>((accumulator, file) => {
+          const key = file.jobId || '';
+          if (!key) return accumulator;
+          accumulator[key] = [...(accumulator[key] || []), file];
+          return accumulator;
+        }, {});
+      setFilesByJobId(grouped);
+    })();
+  }, [freightJobIds]);
 
   useEffect(() => {
     const assignedIds = Array.from(new Set([
@@ -401,15 +446,17 @@ export default function FreightBoard() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-primary text-primary-foreground text-xs">
-                {['Job ID', 'Client', 'Building', 'Province', 'Est Distance', 'Est Freight', 'Pickup', 'Delivery', 'Drop-Off', 'Assigned', 'Status', 'Actions'].map(header => (
+                {['Job ID', 'Client', 'Building', 'Province', 'Est Distance', 'Est Freight', 'Pickup', 'Delivery', 'Drop-Off', 'Assigned', 'Docs', 'Status', 'Actions'].map(header => (
                   <th key={header} className="px-3 py-2 text-left font-medium whitespace-nowrap">{header}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {preSaleRows.length === 0 ? (
-                <tr><td colSpan={12} className="px-3 py-8 text-center text-muted-foreground">No pre-sale freight estimates.</td></tr>
-              ) : preSaleRows.map(row => (
+                <tr><td colSpan={13} className="px-3 py-8 text-center text-muted-foreground">No pre-sale freight estimates.</td></tr>
+              ) : preSaleRows.map(row => {
+                const documentSummary = documentSummaryByJobId[row.jobId];
+                return (
                 <tr key={`pre-sale-${row.jobId}`} className="border-b hover:bg-muted/50">
                   <td className="px-3 py-2 font-mono text-xs">{row.jobId}</td>
                   <td className="px-3 py-2">{row.clientName}</td>
@@ -421,6 +468,11 @@ export default function FreightBoard() {
                   <td className="px-3 py-2 text-xs">{row.deliveryDate || '-'}</td>
                   <td className="px-3 py-2 text-xs">{row.dropOffLocation || '-'}</td>
                   <td className="px-3 py-2 text-xs">{getAssigneeLabel(row.assignedFreightUserId)}</td>
+                  <td className="px-3 py-2 text-xs">
+                    {documentSummary
+                      ? `${documentSummary.visibleFiles.length} primary / ${documentSummary.hiddenDuplicateCount} hidden / ${documentSummary.pdfQuotes.length} PDFs`
+                      : '-'}
+                  </td>
                   <td className="px-3 py-2 text-xs">{row.status}</td>
                   <td className="px-3 py-2">
                     {canEditRecord(row.assignedFreightUserId) && (
@@ -431,7 +483,7 @@ export default function FreightBoard() {
                     )}
                   </td>
                 </tr>
-              ))}
+              )})}
             </tbody>
           </table>
         </div>
@@ -448,15 +500,17 @@ export default function FreightBoard() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-primary text-primary-foreground text-xs">
-                {['Job ID', 'Client', 'Building', 'Weight', 'Province', 'Pickup', 'Delivery', 'Drop-Off', 'Assigned', 'Ready', 'Est Freight', 'Actual', 'Variance', 'Paid', 'Status', 'Actions'].map(header => (
+                {['Job ID', 'Client', 'Building', 'Weight', 'Province', 'Pickup', 'Delivery', 'Drop-Off', 'Assigned', 'Ready', 'Milestones', 'Next Step', 'Blocked Reason', 'Docs', 'Est Freight', 'Actual', 'Variance', 'Paid', 'Status', 'Actions'].map(header => (
                   <th key={header} className="px-3 py-2 text-left font-medium whitespace-nowrap">{header}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {executionRows.length === 0 ? (
-                <tr><td colSpan={16} className="px-3 py-8 text-center text-muted-foreground">No deal-stage freight rows.</td></tr>
-              ) : executionRows.map(row => (
+                <tr><td colSpan={20} className="px-3 py-8 text-center text-muted-foreground">No deal-stage freight rows.</td></tr>
+              ) : executionRows.map(row => {
+                const documentSummary = documentSummaryByJobId[row.jobId];
+                return (
                 <tr key={row.jobId} className="border-b hover:bg-muted/50">
                   <td className="px-3 py-2 font-mono text-xs">{row.jobId}</td>
                   <td className="px-3 py-2">{row.clientName}</td>
@@ -471,6 +525,14 @@ export default function FreightBoard() {
                     <span className={`text-xs px-2 py-0.5 rounded-full ${row.freightReady ? 'status-paid' : 'status-partial'}`}>
                       {row.freightReady ? 'Ready' : 'Blocked'}
                     </span>
+                  </td>
+                  <td className="px-3 py-2 text-xs">{row.completedMilestones}/{row.totalMilestones}</td>
+                  <td className="px-3 py-2 text-xs">{row.nextStep}</td>
+                  <td className="px-3 py-2 text-xs">{row.blockedReason || '-'}</td>
+                  <td className="px-3 py-2 text-xs">
+                    {documentSummary
+                      ? `${documentSummary.visibleFiles.length} primary / ${documentSummary.hiddenDuplicateCount} hidden / ${documentSummary.pdfQuotes.length} PDFs`
+                      : '-'}
                   </td>
                   <td className="px-3 py-2 font-mono">{formatCurrency(row.estFreight)}</td>
                   <td className="px-3 py-2 font-mono">{row.actualFreight ? formatCurrency(row.actualFreight) : '-'}</td>
@@ -509,7 +571,7 @@ export default function FreightBoard() {
                     )}
                   </td>
                 </tr>
-              ))}
+              )})}
             </tbody>
           </table>
         </div>

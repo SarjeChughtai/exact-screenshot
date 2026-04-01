@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAppContext } from '@/context/AppContext';
 import { useRoles } from '@/context/RoleContext';
+import { useSettings } from '@/context/SettingsContext';
 import { buildJobDocumentVaultSummary } from '@/lib/documentVault';
 import { useSharedJobs } from '@/lib/sharedJobs';
 import { supabase } from '@/integrations/supabase/client';
@@ -29,14 +30,18 @@ export default function Opportunities() {
     updateOpportunityByJob,
   } = useAppContext();
   const { hasAnyRole } = useRoles();
+  const { getSalesReps, getEstimators } = useSettings();
   const { visibleJobIds } = useSharedJobs();
   const [statusFilter, setStatusFilter] = useState<OpportunityStatus | 'all'>((searchParams.get('status') as OpportunityStatus | 'all') || 'all');
   const [search, setSearch] = useState(searchParams.get('jobId') || '');
+  const [ownerFilter, setOwnerFilter] = useState('all');
+  const [estimatorFilter, setEstimatorFilter] = useState('all');
   const [editingRevenueJobId, setEditingRevenueJobId] = useState<string | null>(null);
   const [editingRevenueValue, setEditingRevenueValue] = useState('');
   const [filesByJobId, setFilesByJobId] = useState<Record<string, QuoteFileRecord[]>>({});
   const [openingPdfJobId, setOpeningPdfJobId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'table' | 'board'>('table');
+  const canFilterOwnership = hasAnyRole('admin', 'owner', 'operations', 'sales_rep', 'estimator');
 
   useEffect(() => {
     const nextStatus = (searchParams.get('status') as OpportunityStatus | 'all') || 'all';
@@ -47,17 +52,37 @@ export default function Opportunities() {
 
   const canEdit = hasAnyRole('admin', 'owner', 'operations', 'sales_rep');
 
-  const rows = useMemo(() => {
-    const baseRows = buildOpportunityWorkspaceRows({
+  const baseRows = useMemo(() => {
+    return buildOpportunityWorkspaceRows({
       opportunities,
       quotes,
       deals,
       dealMilestones,
       visibleJobIds,
     });
+  }, [dealMilestones, deals, opportunities, quotes, visibleJobIds]);
 
+  const ownerOptions = useMemo(() => {
+    const names = new Set([
+      ...getSalesReps().map(item => item.name).filter(Boolean),
+      ...baseRows.map(row => row.opportunity.salesRep).filter(Boolean),
+    ]);
+    return Array.from(names).sort((left, right) => left.localeCompare(right));
+  }, [baseRows, getSalesReps]);
+
+  const estimatorOptions = useMemo(() => {
+    const names = new Set([
+      ...getEstimators().map(item => item.name).filter(Boolean),
+      ...baseRows.map(row => row.opportunity.estimator).filter(Boolean),
+    ]);
+    return Array.from(names).sort((left, right) => left.localeCompare(right));
+  }, [baseRows, getEstimators]);
+
+  const rows = useMemo(() => {
     return baseRows.filter(row => {
       if (statusFilter !== 'all' && row.opportunity.status !== statusFilter) return false;
+      if (ownerFilter !== 'all' && row.opportunity.salesRep !== ownerFilter) return false;
+      if (estimatorFilter !== 'all' && row.opportunity.estimator !== estimatorFilter) return false;
       if (!search.trim()) return true;
       const normalized = search.trim().toLowerCase();
       return [
@@ -68,7 +93,7 @@ export default function Opportunities() {
         row.opportunity.estimator,
       ].some(value => (value || '').toLowerCase().includes(normalized));
     });
-  }, [dealMilestones, deals, opportunities, quotes, search, statusFilter, visibleJobIds]);
+  }, [baseRows, estimatorFilter, ownerFilter, search, statusFilter]);
 
   const summary = useMemo(() => summarizeOpportunities(rows.map(row => row.opportunity)), [rows]);
   const totalPipeline = useMemo(() => rows.reduce((sum, row) => sum + (row.opportunity.potentialRevenue || 0), 0), [rows]);
@@ -207,6 +232,28 @@ export default function Opportunities() {
           value={search}
           onChange={event => setSearch(event.target.value)}
         />
+        {canFilterOwnership && (
+          <Select value={ownerFilter} onValueChange={setOwnerFilter}>
+            <SelectTrigger className="w-48"><SelectValue placeholder="All sales reps" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All sales reps</SelectItem>
+              {ownerOptions.map(option => (
+                <SelectItem key={option} value={option}>{option}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        {canFilterOwnership && (
+          <Select value={estimatorFilter} onValueChange={setEstimatorFilter}>
+            <SelectTrigger className="w-48"><SelectValue placeholder="All estimators" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All estimators</SelectItem>
+              {estimatorOptions.map(option => (
+                <SelectItem key={option} value={option}>{option}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         <div className="inline-flex rounded-md border bg-card p-1">
           <Button
             type="button"
@@ -323,6 +370,7 @@ export default function Opportunities() {
                   <div>
                     <p>{row.nextStep}</p>
                     {row.freightReady && <p className="text-green-700">Freight ready</p>}
+                    {!row.freightReady && row.blockedReason && <p className="text-amber-700">{row.blockedReason}</p>}
                   </div>
                 </td>
                 <td className="px-3 py-2">
@@ -423,6 +471,7 @@ export default function Opportunities() {
                         <p>Source: {row.opportunity.source || '-'}</p>
                         <p>Owner: {row.opportunity.salesRep || 'Unassigned'}</p>
                         <p>Next: {row.nextStep}</p>
+                        {!row.freightReady && row.blockedReason && <p className="text-amber-700">{row.blockedReason}</p>}
                         <p>
                           Docs: {documentSummary?.pdfQuotes.length || 0} PDFs / {documentSummary?.visibleFiles.length || 0} visible
                           {documentSummary?.hiddenDuplicateCount ? ` / ${documentSummary.hiddenDuplicateCount} hidden` : ''}

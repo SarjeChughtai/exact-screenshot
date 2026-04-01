@@ -4,7 +4,11 @@ import { useAppContext } from '@/context/AppContext';
 import { useRoles } from '@/context/RoleContext';
 import { useSettings } from '@/context/SettingsContext';
 import { formatNumber, formatCurrency } from '@/lib/calculations';
+import { buildJobDocumentVaultSummary } from '@/lib/documentVault';
 import { useSharedJobs } from '@/lib/sharedJobs';
+import { supabase } from '@/integrations/supabase/client';
+import { getQuoteFileUrl } from '@/lib/quoteFileStorage';
+import { quoteFileFromRow } from '@/lib/supabaseMappers';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -13,8 +17,15 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { ChevronDown, ChevronRight, Edit, Trash2, Plus, EyeOff, Eye, MessageSquare } from 'lucide-react';
-import type { Deal, DealStatus } from '@/types';
-import { DEAL_MILESTONE_DEFINITIONS, isDealFreightReady } from '@/lib/opportunities';
+import type { Deal, DealStatus, QuoteFileRecord } from '@/types';
+import {
+  DEAL_MILESTONE_DEFINITIONS,
+  getDealFreightBlockedReason,
+  getDealPostSaleNextStep,
+  isDealFreightReady,
+  summarizeDealMilestoneProgress,
+} from '@/lib/opportunities';
+import { toast } from 'sonner';
 
 const DEAL_STATUS_LABELS: Record<string, string> = {
   Lead: 'Request for Quote',
@@ -28,11 +39,17 @@ const EMPTY_DEAL: Partial<Deal> = {
   dealStatus: 'Lead',
 };
 
+function derivePaymentStage(count: number, stages: string[]) {
+  if (!count || stages.length === 0) return '';
+  return stages[Math.min(count, stages.length) - 1] || '';
+}
+
 export default function MasterDeals() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const {
     deals,
+    quotes,
     updateDeal,
     deleteDeal,
     addDeal,
@@ -54,6 +71,7 @@ export default function MasterDeals() {
   const [newDeal, setNewDeal] = useState<Partial<Deal>>(EMPTY_DEAL);
   const [draggedDealId, setDraggedDealId] = useState<string | null>(null);
   const [pipelineView, setPipelineView] = useState(true);
+  const [filesByJobId, setFilesByJobId] = useState<Record<string, QuoteFileRecord[]>>({});
   const { visibleJobIds, stateByJobId } = useSharedJobs({ allowedStates: ['deal'] });
 
   const canEdit = hasAnyRole('admin', 'owner', 'operations');
@@ -63,6 +81,10 @@ export default function MasterDeals() {
 
   const visibleDeals = deals.filter(deal =>
     visibleJobIds.has(deal.jobId) && stateByJobId[deal.jobId] === 'deal',
+  );
+  const visibleDealJobIds = useMemo(
+    () => [...new Set(visibleDeals.map(deal => deal.jobId).filter(Boolean))].sort(),
+    [visibleDeals],
   );
 
   const reps = [...new Set(visibleDeals.map(d => d.salesRep).filter(Boolean))];
@@ -92,6 +114,17 @@ export default function MasterDeals() {
     }, {})
   ), [pipelineDeals, pipelineStatuses]);
 
+  const documentSummaryByJobId = useMemo(() => {
+    return visibleDeals.reduce<Record<string, ReturnType<typeof buildJobDocumentVaultSummary>>>((accumulator, deal) => {
+      accumulator[deal.jobId] = buildJobDocumentVaultSummary({
+        jobId: deal.jobId,
+        quotes: quotes.filter(quote => quote.jobId === deal.jobId),
+        files: filesByJobId[deal.jobId] || [],
+      });
+      return accumulator;
+    }, {});
+  }, [filesByJobId, quotes, visibleDeals]);
+
   const toggle = (jobId: string) => setExpandedJob(prev => prev === jobId ? null : jobId);
 
   const focusedJobId = searchParams.get('jobId') || '';
@@ -103,6 +136,48 @@ export default function MasterDeals() {
     setExpandedJob(focusedJobId);
     setPipelineView(false);
   }, [expandedJob, focusedJobId, searchClient]);
+
+  useEffect(() => {
+    if (visibleDealJobIds.length === 0) {
+      setFilesByJobId({});
+      return;
+    }
+
+    void (async () => {
+      const { data, error } = await (supabase.from as any)('quote_files')
+        .select('*')
+        .in('job_id', visibleDealJobIds)
+        .order('created_at', { ascending: false });
+
+      if (error) return;
+
+      const grouped = (data || [])
+        .map((row: any) => quoteFileFromRow(row))
+        .reduce<Record<string, QuoteFileRecord[]>>((accumulator, file) => {
+          const key = file.jobId || '';
+          if (!key) return accumulator;
+          accumulator[key] = [...(accumulator[key] || []), file];
+          return accumulator;
+        }, {});
+      setFilesByJobId(grouped);
+    })();
+  }, [visibleDealJobIds]);
+
+  const openLatestPdf = async (jobId: string) => {
+    const summary = documentSummaryByJobId[jobId];
+    const latestPdf = summary?.latestPdfQuote;
+    if (!latestPdf?.pdfStoragePath) {
+      toast.error('No saved PDF is attached to this job yet.');
+      return;
+    }
+
+    const url = await getQuoteFileUrl(latestPdf.pdfStoragePath);
+    if (!url) {
+      toast.error('Unable to load the saved PDF.');
+      return;
+    }
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
 
   const handlePipelineDrop = (status: string) => {
     if (!draggedDealId) return;
@@ -285,10 +360,15 @@ export default function MasterDeals() {
               const opportunity = opportunities.find(item => item.jobId === d.jobId);
               const milestonesForJob = dealMilestones.filter(item => item.jobId === d.jobId);
               const freightReady = isDealFreightReady(milestonesForJob);
+              const milestoneProgress = summarizeDealMilestoneProgress(milestonesForJob);
+              const blockedReason = getDealFreightBlockedReason(milestonesForJob);
+              const nextStep = getDealPostSaleNextStep(d, milestonesForJob);
+              const documentSummary = documentSummaryByJobId[d.jobId];
               const clientPmts = payments.filter(p => p.jobId === d.jobId && p.direction === 'Client Payment IN');
               const vendorPmts = payments.filter(p => p.jobId === d.jobId && p.direction === 'Vendor Payment OUT');
               const clientIn = clientPmts.reduce((s, p) => s + p.amountExclTax, 0);
               const vendorOut = vendorPmts.reduce((s, p) => s + p.amountExclTax, 0);
+              const factoryStage = d.factoryPaymentStageOverride || derivePaymentStage(vendorPmts.length, settings.factoryPaymentStatuses);
 
               return (
                 <>
@@ -310,7 +390,7 @@ export default function MasterDeals() {
                     <td className="px-2 py-2">
                       <span className={`text-xs px-2 py-0.5 rounded-full ${d.paymentStatus === 'PAID' ? 'status-paid' : d.paymentStatus === 'PARTIAL' ? 'status-partial' : 'status-unpaid'}`}>{d.paymentStatus}</span>
                     </td>
-                    <td className="px-2 py-2 text-xs">{d.productionStatus}</td>
+                    <td className="px-2 py-2 text-xs">{factoryStage || 'Auto'}</td>
                     <td className="px-2 py-2 text-xs">{d.productionStatus}</td>
                     <td className="px-2 py-2 text-xs">{d.insulationStatus || '—'}</td>
                     <td className="px-2 py-2 text-xs">{d.freightStatus}</td>
@@ -391,6 +471,11 @@ export default function MasterDeals() {
                               <p>Source: <span className="font-medium">{opportunity?.source || 'deal'}</span></p>
                               <p>Potential Revenue: <span className="font-medium">{formatCurrency(opportunity?.potentialRevenue || 0)}</span></p>
                               <p>Owner: <span className="font-medium">{opportunity?.salesRep || d.salesRep || 'Unassigned'}</span></p>
+                              <p>Milestones: <span className="font-medium">{milestoneProgress.completedCount}/{milestoneProgress.totalCount}</span></p>
+                              <p>Next Step: <span className="font-medium">{nextStep}</span></p>
+                              {!freightReady && blockedReason && (
+                                <p>Blocked: <span className="font-medium text-amber-700">{blockedReason}</span></p>
+                              )}
                             </div>
                           </div>
                           <div className="rounded-md border bg-background p-4">
@@ -427,6 +512,23 @@ export default function MasterDeals() {
                                 );
                               })}
                             </div>
+                          </div>
+                        </div>
+                        <div className="mt-4 rounded-md border bg-background p-4 text-xs">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                              <p className="font-semibold text-muted-foreground">Document Vault</p>
+                              <p className="mt-1">Primary visible sets: <span className="font-medium">{documentSummary?.visibleFiles.length || 0}</span></p>
+                              <p>Hidden duplicates: <span className="font-medium">{documentSummary?.hiddenDuplicateCount || 0}</span></p>
+                              <p>PDFs: <span className="font-medium">{documentSummary?.pdfQuotes.length || 0}</span></p>
+                              <p>Support files: <span className="font-medium">{documentSummary?.supportFiles.length || 0}</span></p>
+                              <p>Cost files: <span className="font-medium">{documentSummary?.costFiles.length || 0}</span></p>
+                            </div>
+                            {documentSummary?.latestPdfQuote && (
+                              <Button size="sm" variant="outline" onClick={() => void openLatestPdf(d.jobId)}>
+                                Open Saved PDF
+                              </Button>
+                            )}
                           </div>
                         </div>
                         <div className="mt-3">

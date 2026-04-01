@@ -1,4 +1,4 @@
-import type { InsulationCostDataRecord, QuoteFileRecord, SteelCostDataRecord } from '@/types';
+import type { InsulationCostDataRecord, QuoteFileRecord, SteelCostDataRecord, StoredDocument } from '@/types';
 
 export interface HistoricalQuoteFileSnapshot {
   documentType: 'mbs' | 'insulation' | 'unknown';
@@ -21,12 +21,94 @@ export interface HistoricalQuoteFileSnapshot {
   components?: Array<{ name: string; weight?: number; cost: number }>;
 }
 
+function pickValue(source: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    if (source[key] !== undefined && source[key] !== null && source[key] !== '') return source[key];
+  }
+  return undefined;
+}
+
+function pickString(source: Record<string, unknown>, keys: string[]) {
+  const value = pickValue(source, keys);
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function pickNumber(source: Record<string, unknown>, keys: string[]) {
+  const value = pickValue(source, keys);
+  if (value === undefined || value === null || value === '') return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseComponents(value: unknown) {
+  if (!Array.isArray(value)) return [];
+
+  return value.map(component => {
+    const record = (component || {}) as Record<string, unknown>;
+    return {
+      name: String(record.name || record.label || record.component || 'Component'),
+      weight: record.weight != null ? Number(record.weight) : record.weight_lb != null ? Number(record.weight_lb) : undefined,
+      cost: Number(record.cost || record.total_cost || record.amount || 0),
+    };
+  });
+}
+
+function buildStructuredFallbackSnapshot(input: {
+  file: QuoteFileRecord;
+  storedDocument?: StoredDocument | null;
+}) {
+  const { file, storedDocument } = input;
+  const fallback = (
+    file.correctedData ||
+    storedDocument?.parsedData ||
+    file.aiOutput ||
+    {}
+  ) as Record<string, unknown>;
+
+  const resolvedDocumentType = (
+    pickString(fallback, ['document_type', 'documentType', 'file_type', 'fileType']) ||
+    file.fileType
+  )?.toLowerCase();
+
+  return {
+    documentType: resolvedDocumentType === 'insulation'
+      ? 'insulation'
+      : resolvedDocumentType === 'mbs'
+      ? 'mbs'
+      : file.fileType === 'insulation'
+      ? 'insulation'
+      : file.fileType === 'mbs'
+      ? 'mbs'
+      : 'unknown',
+    jobId: pickString(fallback, ['job_id', 'jobId']) || file.jobId || null,
+    clientName: pickString(fallback, ['client_name', 'clientName']) || file.clientName || null,
+    clientId: pickString(fallback, ['client_id', 'clientId']) || file.clientId || null,
+    jobName: pickString(fallback, ['job_name', 'jobName', 'project_name', 'projectName']),
+    width: pickNumber(fallback, ['width', 'width_ft', 'widthFt']),
+    length: pickNumber(fallback, ['length', 'length_ft', 'lengthFt']),
+    height: pickNumber(fallback, ['height', 'height_ft', 'heightFt', 'eave_height_ft', 'eaveHeightFt']),
+    roofPitch: pickNumber(fallback, ['roof_pitch', 'roofPitch', 'roof_slope', 'roofSlope']),
+    province: pickString(fallback, ['province']),
+    city: pickString(fallback, ['city']),
+    postalCode: pickString(fallback, ['postal_code', 'postalCode']),
+    insulationGrade: pickString(fallback, ['insulation_grade', 'insulationGrade', 'grade']),
+    insulationTotal: pickNumber(fallback, ['insulation_total', 'insulationTotal', 'total_insulation_cost', 'totalCost']),
+    weightLbs: pickNumber(fallback, ['weight', 'weight_lb', 'weightLbs', 'steel_weight_lbs', 'steelWeightLbs', 'total_weight_lb', 'totalWeightLb']),
+    costPerLb: pickNumber(fallback, ['cost_per_lb', 'costPerLb', 'price_per_lb', 'pricePerLb', 'supplier_cost_per_lb', 'supplierCostPerLb']),
+    totalSupplierCost: pickNumber(fallback, ['total_cost', 'totalCost', 'supplier_total_cost', 'supplierTotalCost']),
+    components: parseComponents(pickValue(fallback, ['components', 'component_rows', 'componentRows'])),
+  } satisfies HistoricalQuoteFileSnapshot;
+}
+
 export function buildHistoricalQuoteFileSnapshot(input: {
   file: QuoteFileRecord;
   steelWarehouseEntry?: SteelCostDataRecord | null;
   insulationWarehouseEntry?: InsulationCostDataRecord | null;
+  storedDocument?: StoredDocument | null;
 }): HistoricalQuoteFileSnapshot {
-  const { file, steelWarehouseEntry, insulationWarehouseEntry } = input;
+  const { file, steelWarehouseEntry, insulationWarehouseEntry, storedDocument } = input;
 
   if (steelWarehouseEntry) {
     return {
@@ -34,12 +116,14 @@ export function buildHistoricalQuoteFileSnapshot(input: {
       jobId: steelWarehouseEntry.jobId || file.jobId,
       clientName: file.clientName,
       clientId: file.clientId,
+      jobName: pickString((steelWarehouseEntry.rawExtraction || {}) as Record<string, unknown>, ['job_name', 'jobName']),
       width: steelWarehouseEntry.widthFt,
       length: steelWarehouseEntry.lengthFt,
       height: steelWarehouseEntry.eaveHeightFt,
       roofPitch: steelWarehouseEntry.roofSlope,
       province: steelWarehouseEntry.province,
       city: steelWarehouseEntry.city,
+      postalCode: pickString((steelWarehouseEntry.rawExtraction || {}) as Record<string, unknown>, ['postal_code', 'postalCode']),
       weightLbs: steelWarehouseEntry.totalWeightLb,
       costPerLb: steelWarehouseEntry.pricePerLb,
       totalSupplierCost: steelWarehouseEntry.totalCost,
@@ -57,40 +141,18 @@ export function buildHistoricalQuoteFileSnapshot(input: {
       jobId: insulationWarehouseEntry.jobId || file.jobId,
       clientName: file.clientName,
       clientId: file.clientId,
+      jobName: pickString((insulationWarehouseEntry.rawExtraction || {}) as Record<string, unknown>, ['job_name', 'jobName']),
       width: insulationWarehouseEntry.widthFt,
       length: insulationWarehouseEntry.lengthFt,
       height: insulationWarehouseEntry.eaveHeightFt,
       roofPitch: insulationWarehouseEntry.roofSlope,
+      province: pickString((insulationWarehouseEntry.rawExtraction || {}) as Record<string, unknown>, ['province']),
+      city: pickString((insulationWarehouseEntry.rawExtraction || {}) as Record<string, unknown>, ['city']),
+      postalCode: pickString((insulationWarehouseEntry.rawExtraction || {}) as Record<string, unknown>, ['postal_code', 'postalCode']),
       insulationGrade: insulationWarehouseEntry.grade,
       insulationTotal: insulationWarehouseEntry.totalCost,
     };
   }
 
-  const fallback = (file.correctedData || file.aiOutput || {}) as Record<string, unknown>;
-  return {
-    documentType: file.fileType === 'insulation' ? 'insulation' : file.fileType === 'mbs' ? 'mbs' : 'unknown',
-    jobId: String(fallback.job_id || file.jobId || ''),
-    clientName: String(fallback.client_name || file.clientName || ''),
-    clientId: String(fallback.client_id || file.clientId || ''),
-    jobName: typeof fallback.job_name === 'string' ? fallback.job_name : null,
-    width: fallback.width ? Number(fallback.width) : null,
-    length: fallback.length ? Number(fallback.length) : null,
-    height: fallback.height ? Number(fallback.height) : null,
-    roofPitch: fallback.roof_pitch ? Number(fallback.roof_pitch) : null,
-    province: typeof fallback.province === 'string' ? fallback.province : null,
-    city: typeof fallback.city === 'string' ? fallback.city : null,
-    postalCode: typeof fallback.postal_code === 'string' ? fallback.postal_code : null,
-    insulationGrade: typeof fallback.insulation_grade === 'string' ? fallback.insulation_grade : null,
-    insulationTotal: fallback.insulation_total ? Number(fallback.insulation_total) : null,
-    weightLbs: fallback.weight ? Number(fallback.weight) : null,
-    costPerLb: fallback.cost_per_lb ? Number(fallback.cost_per_lb) : null,
-    totalSupplierCost: fallback.total_cost ? Number(fallback.total_cost) : null,
-    components: Array.isArray(fallback.components)
-      ? fallback.components.map(component => ({
-          name: String((component as Record<string, unknown>).name || 'Component'),
-          weight: (component as Record<string, unknown>).weight ? Number((component as Record<string, unknown>).weight) : undefined,
-          cost: Number((component as Record<string, unknown>).cost || 0),
-        }))
-      : [],
-  };
+  return buildStructuredFallbackSnapshot({ file, storedDocument });
 }

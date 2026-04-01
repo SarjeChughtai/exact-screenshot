@@ -6,6 +6,7 @@ import type {
   OpportunityStatus,
   Quote,
 } from '@/types';
+import { normalizeProductionStage } from '@/lib/productionLifecycle';
 
 export const DEAL_MILESTONE_DEFINITIONS: Array<{
   key: DealMilestoneKey;
@@ -34,6 +35,13 @@ export const DEAL_MILESTONE_DEFINITIONS: Array<{
 const FREIGHT_READY_KEYS = DEAL_MILESTONE_DEFINITIONS
   .filter(item => item.requiredForFreightReady)
   .map(item => item.key);
+
+export interface DealMilestoneProgressSummary {
+  completedCount: number;
+  totalCount: number;
+  requiredCompletedCount: number;
+  requiredTotalCount: number;
+}
 
 export function deriveOpportunityStatusFromQuote(quote: Pick<Quote, 'workflowStatus' | 'status'>): OpportunityStatus {
   if (quote.workflowStatus === 'converted_to_deal' || quote.status === 'Won') {
@@ -171,4 +179,74 @@ export function isDealFreightReady(milestones: DealMilestone[]) {
     milestoneMap.freight_ready_achieved ||
     FREIGHT_READY_KEYS.every(key => milestoneMap[key]),
   );
+}
+
+export function summarizeDealMilestoneProgress(milestones: DealMilestone[]): DealMilestoneProgressSummary {
+  const completedKeys = new Set(
+    milestones
+      .filter(milestone => milestone.isComplete)
+      .map(milestone => milestone.milestoneKey),
+  );
+
+  return {
+    completedCount: DEAL_MILESTONE_DEFINITIONS.filter(definition => completedKeys.has(definition.key)).length,
+    totalCount: DEAL_MILESTONE_DEFINITIONS.length,
+    requiredCompletedCount: DEAL_MILESTONE_DEFINITIONS.filter(
+      definition => definition.requiredForFreightReady && completedKeys.has(definition.key),
+    ).length,
+    requiredTotalCount: FREIGHT_READY_KEYS.length,
+  };
+}
+
+export function getFirstMissingFreightReadyMilestone(milestones: DealMilestone[]) {
+  const completedKeys = new Set(
+    milestones
+      .filter(milestone => milestone.isComplete)
+      .map(milestone => milestone.milestoneKey),
+  );
+
+  return DEAL_MILESTONE_DEFINITIONS.find(
+    definition => definition.requiredForFreightReady && !completedKeys.has(definition.key),
+  ) || null;
+}
+
+export function getDealFreightBlockedReason(milestones: DealMilestone[]) {
+  if (isDealFreightReady(milestones)) return null;
+
+  const missingMilestone = getFirstMissingFreightReadyMilestone(milestones);
+  if (!missingMilestone) return 'Waiting on post-sale milestones';
+
+  return `Waiting on ${missingMilestone.label.toLowerCase()}`;
+}
+
+export function getDealPostSaleNextStep(
+  deal: Pick<Deal, 'dealStatus' | 'productionStatus' | 'freightStatus'> | null,
+  milestones: DealMilestone[],
+) {
+  if (!deal) return 'Review opportunity';
+
+  if (deal.productionStatus === 'Delivered' || deal.dealStatus === 'Delivered' || deal.dealStatus === 'Complete') {
+    return 'Delivered';
+  }
+
+  if (deal.freightStatus === 'In Transit') return 'Monitor freight delivery';
+  if (deal.freightStatus === 'Booked') return 'Coordinate freight execution';
+  if (isDealFreightReady(milestones)) return 'Post execution freight';
+
+  const missingMilestone = getFirstMissingFreightReadyMilestone(milestones);
+  if (missingMilestone) return `Complete ${missingMilestone.label.toLowerCase()}`;
+
+  switch (normalizeProductionStage(deal.productionStatus)) {
+    case 'Ship Ready':
+      return 'Book freight carrier';
+    case 'Shipped':
+      return 'Track shipment to delivery';
+    case 'In Production':
+    case 'QC Complete':
+      return 'Advance production toward ship-ready';
+    case 'Acknowledged':
+      return 'Advance production package';
+    default:
+      return 'Advance post-sale milestones';
+  }
 }
