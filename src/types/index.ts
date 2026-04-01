@@ -245,6 +245,8 @@ export interface Estimate {
   height: number;
   pitch: number;
   province: string;
+  city: string;
+  postalCode: string;
   grandTotal: number;
   sqft: number;
   estimatedTotal: number;

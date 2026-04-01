@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { formatCurrency, formatNumber, getProvinceTax } from '@/lib/calculations';
 import { useAppContext } from '@/context/AppContext';
+import { isEstimatorAssignedToQuote } from '@/lib/rfqWorkflow';
 import { useSharedJobs } from '@/lib/sharedJobs';
 import { supabase } from '@/integrations/supabase/client';
 import { quoteFileFromRow } from '@/lib/supabaseMappers';
@@ -26,11 +27,23 @@ interface DocumentLogTableProps {
   subtitle: string;
   filterDocumentTypes: DocumentType[];
   filterWorkflowStatuses?: string[];
+  focusDocumentId?: string;
+  estimatorFilter?: {
+    userId: string;
+    name: string;
+  };
 }
 
-export function DocumentLogTable({ title, subtitle, filterDocumentTypes, filterWorkflowStatuses }: DocumentLogTableProps) {
+export function DocumentLogTable({
+  title,
+  subtitle,
+  filterDocumentTypes,
+  filterWorkflowStatuses,
+  focusDocumentId,
+  estimatorFilter,
+}: DocumentLogTableProps) {
   const navigate = useNavigate();
-  const { quotes, deals, updateQuote, deleteQuote, restoreQuote, addDeal, updateDeal } = useAppContext();
+  const { quotes, deals, updateQuote, deleteQuote, restoreQuote, addDeal, updateDeal, deleteDeal } = useAppContext();
   const { visibleJobIds, stateByJobId } = useSharedJobs();
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showTrash, setShowTrash] = useState(false);
@@ -46,6 +59,13 @@ export function DocumentLogTable({ title, subtitle, filterDocumentTypes, filterW
   const visibleQuotes = quotes.filter(quote => {
     if (!filterDocumentTypes.includes(quote.documentType)) return false;
     if (filterWorkflowStatuses && !filterWorkflowStatuses.includes(quote.workflowStatus)) return false;
+    if (
+      estimatorFilter &&
+      (quote.documentType === 'rfq' || quote.documentType === 'dealer_rfq') &&
+      !isEstimatorAssignedToQuote(quote, estimatorFilter.userId, estimatorFilter.name)
+    ) {
+      return false;
+    }
     if (!visibleJobIds.has(quote.jobId)) return false;
     return stateByJobId[quote.jobId] === expectedStateByType[quote.documentType];
   });
@@ -84,6 +104,12 @@ export function DocumentLogTable({ title, subtitle, filterDocumentTypes, filterW
       setFilesByDocumentId(grouped);
     })();
   }, [visibleDocumentIdsKey]);
+
+  useEffect(() => {
+    if (!focusDocumentId) return;
+    if (!visibleQuotes.some(quote => quote.id === focusDocumentId)) return;
+    setExpandedId(focusDocumentId);
+  }, [focusDocumentId, visibleQuotes]);
 
   const changeStatus = (id: string, status: QuoteStatus) => {
     updateQuote(id, { status });
@@ -191,6 +217,22 @@ export function DocumentLogTable({ title, subtitle, filterDocumentTypes, filterW
     toast.success(`Deal ${existingDeal ? 'updated' : 'created'} for ${quote.jobId}`);
   };
 
+  const revertDealToQuote = (quote: Quote) => {
+    const existingDeal = deals.find(deal => deal.jobId === quote.jobId);
+    if (!existingDeal) {
+      toast.error('No deal exists for this quote');
+      return;
+    }
+
+    deleteDeal(quote.jobId);
+    updateQuote(quote.id, {
+      workflowStatus: 'quote_sent',
+      status: 'Sent',
+      updatedAt: new Date().toISOString(),
+    });
+    toast.success(`Deal reverted back to quote for ${quote.jobId}`);
+  };
+
   const renderRows = (items: Quote[], isTrash = false) => {
     if (items.length === 0) {
       return (
@@ -202,12 +244,16 @@ export function DocumentLogTable({ title, subtitle, filterDocumentTypes, filterW
 
       return items.map(quote => {
       const isExpanded = expandedId === quote.id;
+      const isFocused = focusDocumentId === quote.id;
       const existingDeal = deals.find(deal => deal.jobId === quote.jobId);
       const attachedFiles = filesByDocumentId[quote.id] || [];
+      const payload = (quote.payload || {}) as Record<string, unknown>;
+      const openings = Array.isArray(payload.openings) ? payload.openings as Array<Record<string, unknown>> : [];
+      const isRfqDocument = quote.documentType === 'rfq' || quote.documentType === 'dealer_rfq';
 
       return (
         <Fragment key={quote.id}>
-          <tr key={quote.id} className="border-b hover:bg-muted/50">
+          <tr key={quote.id} className={`border-b hover:bg-muted/50 ${isFocused ? 'bg-accent/10' : ''}`}>
             <td className="px-2 py-2">
               <button onClick={() => setExpandedId(isExpanded ? null : quote.id)}>
                 {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
@@ -241,7 +287,9 @@ export function DocumentLogTable({ title, subtitle, filterDocumentTypes, filterW
                     </Button>
                     {quote.documentType === 'external_quote' && (
                       existingDeal ? (
-                        <span className="text-xs text-muted-foreground">Deal exists</span>
+                        <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => revertDealToQuote(quote)}>
+                          <RotateCcw className="h-3 w-3 mr-1" />Revert to Quote
+                        </Button>
                       ) : (
                         <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => convertToDeal(quote)}>
                           Convert to Deal
@@ -282,7 +330,7 @@ export function DocumentLogTable({ title, subtitle, filterDocumentTypes, filterW
                     <p>Dimensions: {quote.width}x{quote.length}x{quote.height}</p>
                     <p>Sqft: {formatNumber(quote.sqft)}</p>
                     <p>Weight: {formatNumber(quote.weight)} lbs</p>
-                    <p>Province: {quote.province}</p>
+                    <p>Location: {[quote.city, quote.province, quote.postalCode].filter(Boolean).join(', ') || quote.province}</p>
                   </div>
                   <div className="space-y-1 text-xs">
                     <p className="font-semibold text-muted-foreground">Commercial</p>
@@ -292,6 +340,37 @@ export function DocumentLogTable({ title, subtitle, filterDocumentTypes, filterW
                     <p>Source Document: {quote.sourceDocumentId || 'None'}</p>
                   </div>
                 </div>
+                {isRfqDocument && (
+                  <div className="mt-4 grid gap-4 md:grid-cols-3">
+                    <div className="space-y-1 text-xs">
+                      <p className="font-semibold text-muted-foreground">RFQ Details</p>
+                      <p>Contact Email: {String(payload.contactEmail ?? 'Not set')}</p>
+                      <p>Contact Phone: {String(payload.contactPhone ?? 'Not set')}</p>
+                      <p>Building Style: {String(payload.buildingStyle ?? 'Symmetrical')}</p>
+                      <p>Roof Pitch: {String(payload.roofPitch ?? 'Not set')}</p>
+                    </div>
+                    <div className="space-y-1 text-xs">
+                      <p className="font-semibold text-muted-foreground">Envelope</p>
+                      <p>Insulation Required: {payload.insulationRequired ? 'Yes' : 'No'}</p>
+                      <p>Roof Insulation: {String(payload.insulationRoofGrade ?? 'Not set')}</p>
+                      <p>Wall Insulation: {String(payload.insulationWallGrade ?? 'Not set')}</p>
+                      <p>Liners: {String(payload.linersMode ?? payload.linerLocation ?? 'none')}</p>
+                      <p>Gutters: {String(payload.guttersMode ?? (payload.gutters ? 'enabled' : 'none'))}</p>
+                    </div>
+                    <div className="space-y-1 text-xs">
+                      <p className="font-semibold text-muted-foreground">Openings and PDF</p>
+                      <p>Openings: {openings.length}</p>
+                      <p>Notes: {String(payload.notes ?? 'None')}</p>
+                      {quote.pdfStoragePath ? (
+                        <Button size="sm" variant="outline" className="h-7 px-2 text-xs mt-2" onClick={() => void openPdf(quote)}>
+                          <Download className="h-3 w-3 mr-1" />Open Saved PDF
+                        </Button>
+                      ) : (
+                        <p>No saved PDF attached yet.</p>
+                      )}
+                    </div>
+                  </div>
+                )}
                 {quote.payload && Object.keys(quote.payload).length > 0 && (
                   <div className="mt-4">
                     <p className="text-xs font-semibold text-muted-foreground mb-2">Payload Snapshot</p>

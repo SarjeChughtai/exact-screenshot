@@ -1,9 +1,8 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
@@ -11,11 +10,26 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import {
   calcSteelCost, calcEngineering, lookupFoundation, lookupInsulation,
   calcInsulationArea, calcFreight, calcTax, formatCurrency, formatNumber,
-  PROVINCES, INSULATION_GRADES, ENGINEERING_FACTORS, REMOTE_LEVELS, getProvinceTax,
-  calcMarkup, getMarkupRate
+  PROVINCES, INSULATION_GRADES, ENGINEERING_FACTORS, calcMarkup, getMarkupRate,
 } from '@/lib/calculations';
 import { estimateFreightFromLocation } from '@/lib/freightEstimate';
-import { MapPin, Lightbulb, ChevronDown, Save } from 'lucide-react';
+import {
+  clearQuickEstimatorActiveState,
+  createInitialQuickEstimatorState,
+  getNextEstimateLabel,
+  getQuickEstimatorDraftTitle,
+  loadQuickEstimatorActiveState,
+  loadQuickEstimatorDrafts,
+  quickEstimatorStateFromEstimate,
+  QUICK_ESTIMATOR_ACTIVE_STATE_KEY,
+  QUICK_ESTIMATOR_DRAFTS_KEY,
+  saveQuickEstimatorActiveState,
+  saveQuickEstimatorDrafts,
+  type QuickEstimatorDraft,
+  type QuickEstimatorPersistedState,
+  type QuickEstimatorResultSnapshot,
+} from '@/lib/estimateWorkflow';
+import { MapPin, Lightbulb, ChevronDown, Save, FolderOpen, PlusCircle, Trash2 } from 'lucide-react';
 import { useAppContext } from '@/context/AppContext';
 import { useRoles } from '@/context/RoleContext';
 import { useAuth } from '@/context/AuthContext';
@@ -25,23 +39,12 @@ import { PersonnelSelect } from '@/components/PersonnelSelect';
 import { ClientSelect } from '@/components/ClientSelect';
 import { SimilarJobs } from '@/components/SimilarJobs';
 
-interface EstimateResult {
-  sqft: number; weight: number;
-  steelCost: number; engineering: number; foundation: number;
-  insulation: number; gutters: number; liners: number; freight: number;
-  subtotal: number; internalMargin: number; estimatedTotal: number;
-  contingency: number; gstHst: number; qst: number; grandTotal: number;
-  province: string;
-  // Baked steel (margin included)
-  steelWithMargin: number;
-  markupType: string;
-  markupRate: number;
-  markupAmount: number;
-}
+const isBrowser = typeof window !== 'undefined';
 
 export default function QuickEstimator() {
   const navigate = useNavigate();
-  const { addEstimate, estimates } = useAppContext();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { addEstimate, estimates, updateEstimate } = useAppContext();
   const { currentUser, hasAnyRole } = useRoles();
   const { user } = useAuth();
   const isAdminOwner = hasAnyRole('admin', 'owner');
@@ -51,6 +54,8 @@ export default function QuickEstimator() {
   const [height, setHeight] = useState('');
   const [pitch, setPitch] = useState('1');
   const [province, setProvince] = useState('ON');
+  const [city, setCity] = useState('');
+  const [postalCode, setPostalCode] = useState('');
   const [distance, setDistance] = useState('200');
   const [remoteLevel, setRemoteLevel] = useState('none');
   const [locationInput, setLocationInput] = useState('');
@@ -62,7 +67,7 @@ export default function QuickEstimator() {
   const [foundationType, setFoundationType] = useState<'slab' | 'frost_wall'>('slab');
   const [selectedFactors, setSelectedFactors] = useState<string[]>(['Clear span up to 80ft']);
   const [contingencyPct, setContingencyPct] = useState('5');
-  const [result, setResult] = useState<EstimateResult | null>(null);
+  const [result, setResult] = useState<QuickEstimatorResultSnapshot | null>(null);
   const [costSavingTips, setCostSavingTips] = useState<string[]>([]);
   const [singleSlope, setSingleSlope] = useState(false);
   const [leftEaveHeight, setLeftEaveHeight] = useState('');
@@ -86,6 +91,142 @@ export default function QuickEstimator() {
   const [useFlat, setUseFlat] = useState(false);
   const [flatMarkupPct, setFlatMarkupPct] = useState('5');
 
+  const [editingEstimateId, setEditingEstimateId] = useState<string | null>(null);
+  const [loadedDraftId, setLoadedDraftId] = useState<string | null>(null);
+  const [selectedEstimateId, setSelectedEstimateId] = useState('');
+  const [selectedDraftId, setSelectedDraftId] = useState('');
+  const [drafts, setDrafts] = useState<QuickEstimatorDraft[]>(() => (
+    isBrowser ? loadQuickEstimatorDrafts(window.localStorage) : []
+  ));
+
+  const initializedRef = useRef(false);
+  const lastLoadedRouteEstimateRef = useRef<string | null>(null);
+
+  const editingEstimate = useMemo(
+    () => estimates.find(estimate => estimate.id === editingEstimateId) || null,
+    [editingEstimateId, estimates],
+  );
+
+  const sortedEstimates = useMemo(
+    () => [...estimates].sort((left, right) => new Date(right.updatedAt || right.date).getTime() - new Date(left.updatedAt || left.date).getTime()),
+    [estimates],
+  );
+
+  const sortedDrafts = useMemo(
+    () => [...drafts].sort((left, right) => new Date(right.savedAt).getTime() - new Date(left.savedAt).getTime()),
+    [drafts],
+  );
+
+  const nextEstimateLabel = useMemo(() => getNextEstimateLabel(estimates), [estimates]);
+
+  const currentWorkflowLabel = editingEstimate
+    ? `Editing ${editingEstimate.label}`
+    : loadedDraftId
+      ? 'Loaded draft'
+      : 'New estimate';
+
+  const persistedState = useMemo<QuickEstimatorPersistedState>(() => createInitialQuickEstimatorState({
+    width,
+    length,
+    height,
+    pitch,
+    province,
+    city,
+    postalCode,
+    distance,
+    remoteLevel,
+    locationInput,
+    freightSource,
+    includeInsulation,
+    insulationGrade,
+    includeGutters,
+    linerOption: linerOption as QuickEstimatorPersistedState['linerOption'],
+    foundationType,
+    selectedFactors,
+    contingencyPct,
+    singleSlope,
+    leftEaveHeight,
+    rightEaveHeight,
+    clientName,
+    clientId,
+    salesRep,
+    useFlat,
+    flatMarkupPct,
+    result,
+  }), [
+    city,
+    clientId,
+    clientName,
+    contingencyPct,
+    distance,
+    flatMarkupPct,
+    foundationType,
+    freightSource,
+    height,
+    includeGutters,
+    includeInsulation,
+    insulationGrade,
+    leftEaveHeight,
+    length,
+    linerOption,
+    locationInput,
+    pitch,
+    postalCode,
+    province,
+    remoteLevel,
+    result,
+    rightEaveHeight,
+    salesRep,
+    selectedFactors,
+    singleSlope,
+    useFlat,
+    width,
+  ]);
+
+  const applyPersistedState = useCallback((nextState: QuickEstimatorPersistedState) => {
+    setWidth(nextState.width);
+    setLength(nextState.length);
+    setHeight(nextState.height);
+    setPitch(nextState.pitch);
+    setProvince(nextState.province);
+    setCity(nextState.city);
+    setPostalCode(nextState.postalCode);
+    setDistance(nextState.distance);
+    setRemoteLevel(nextState.remoteLevel);
+    setLocationInput(nextState.locationInput);
+    setFreightSource(nextState.freightSource);
+    setIncludeInsulation(nextState.includeInsulation);
+    setInsulationGrade(nextState.insulationGrade);
+    setIncludeGutters(nextState.includeGutters);
+    setLinerOption(nextState.linerOption);
+    setFoundationType(nextState.foundationType);
+    setSelectedFactors(nextState.selectedFactors);
+    setContingencyPct(nextState.contingencyPct);
+    setSingleSlope(nextState.singleSlope);
+    setLeftEaveHeight(nextState.leftEaveHeight);
+    setRightEaveHeight(nextState.rightEaveHeight);
+    setClientName(nextState.clientName);
+    setClientId(nextState.clientId);
+    setSalesRep(nextState.salesRep);
+    setUseFlat(nextState.useFlat);
+    setFlatMarkupPct(nextState.flatMarkupPct);
+    setResult(nextState.result);
+  }, []);
+
+  const startNewEstimate = useCallback(() => {
+    applyPersistedState(createInitialQuickEstimatorState());
+    setCostSavingTips([]);
+    setEditingEstimateId(null);
+    setLoadedDraftId(null);
+    setSelectedEstimateId('');
+    setSelectedDraftId('');
+    setSearchParams({});
+    lastLoadedRouteEstimateRef.current = null;
+    if (isBrowser) {
+      clearQuickEstimatorActiveState(window.localStorage);
+    }
+  }, [applyPersistedState, setSearchParams]);
+
   const toggleFactor = (item: string) => {
     setSelectedFactors(prev => prev.includes(item) ? prev.filter(f => f !== item) : [...prev, item]);
   };
@@ -94,6 +235,107 @@ export default function QuickEstimator() {
     setClientId(client.clientId);
     setClientName(client.clientName);
   };
+
+  const loadEstimateIntoForm = useCallback((estimateId: string, updateRoute = true) => {
+    const estimate = estimates.find(item => item.id === estimateId);
+    if (!estimate) {
+      toast.error('Estimate not found.');
+      return;
+    }
+
+    applyPersistedState(quickEstimatorStateFromEstimate(estimate));
+    setCostSavingTips([]);
+    setEditingEstimateId(estimateId);
+    setLoadedDraftId(null);
+    setSelectedEstimateId(estimateId);
+    setSelectedDraftId('');
+    lastLoadedRouteEstimateRef.current = estimateId;
+    if (updateRoute) {
+      setSearchParams({ estimateId });
+    }
+  }, [applyPersistedState, estimates, setSearchParams]);
+
+  const loadDraftIntoForm = useCallback((draftId: string) => {
+    const draft = drafts.find(item => item.id === draftId);
+    if (!draft) {
+      toast.error('Draft not found.');
+      return;
+    }
+
+    applyPersistedState(draft.state);
+    setCostSavingTips([]);
+    setLoadedDraftId(draftId);
+    setSelectedDraftId(draftId);
+    setEditingEstimateId(null);
+    setSelectedEstimateId('');
+    setSearchParams({});
+    lastLoadedRouteEstimateRef.current = null;
+  }, [applyPersistedState, drafts, setSearchParams]);
+
+  const saveDraft = useCallback(() => {
+    const draftId = loadedDraftId || crypto.randomUUID();
+    const draft: QuickEstimatorDraft = {
+      id: draftId,
+      title: getQuickEstimatorDraftTitle(persistedState),
+      savedAt: new Date().toISOString(),
+      state: persistedState,
+    };
+
+    setDrafts(prev => {
+      const next = [draft, ...prev.filter(item => item.id !== draftId)];
+      return next.sort((left, right) => new Date(right.savedAt).getTime() - new Date(left.savedAt).getTime());
+    });
+    setLoadedDraftId(draftId);
+    setSelectedDraftId(draftId);
+    toast.success(loadedDraftId ? 'Draft updated' : 'Draft saved');
+  }, [loadedDraftId, persistedState]);
+
+  const deleteDraft = useCallback((draftId: string) => {
+    setDrafts(prev => prev.filter(item => item.id !== draftId));
+    if (loadedDraftId === draftId) setLoadedDraftId(null);
+    if (selectedDraftId === draftId) setSelectedDraftId('');
+    toast.success('Draft removed');
+  }, [loadedDraftId, selectedDraftId]);
+
+  useEffect(() => {
+    const routeEstimateId = searchParams.get('estimateId');
+
+    if (routeEstimateId) {
+      if (lastLoadedRouteEstimateRef.current === routeEstimateId) return;
+      const estimate = estimates.find(item => item.id === routeEstimateId);
+      if (!estimate) return;
+
+      applyPersistedState(quickEstimatorStateFromEstimate(estimate));
+      setCostSavingTips([]);
+      setEditingEstimateId(routeEstimateId);
+      setLoadedDraftId(null);
+      setSelectedEstimateId(routeEstimateId);
+      setSelectedDraftId('');
+      lastLoadedRouteEstimateRef.current = routeEstimateId;
+      initializedRef.current = true;
+      return;
+    }
+
+    lastLoadedRouteEstimateRef.current = null;
+    if (!initializedRef.current && isBrowser) {
+      const activeState = loadQuickEstimatorActiveState(window.localStorage);
+      if (activeState) {
+        applyPersistedState(activeState);
+        setCostSavingTips([]);
+      }
+      initializedRef.current = true;
+    }
+  }, [applyPersistedState, estimates, searchParams]);
+
+  useEffect(() => {
+    if (!initializedRef.current || !isBrowser) return;
+    saveQuickEstimatorActiveState(window.localStorage, persistedState);
+  }, [persistedState]);
+
+  useEffect(() => {
+    if (!isBrowser) return;
+    saveQuickEstimatorDrafts(window.localStorage, drafts);
+  }, [drafts]);
 
   const handleLocationLookup = async () => {
     if (!locationInput.trim()) {
@@ -192,15 +434,7 @@ export default function QuickEstimator() {
     setCostSavingTips(tips);
   };
 
-  const getNextEstimateLabel = () => {
-    const maxNum = estimates.reduce((max, estimate) => {
-      const match = estimate.label.match(/EST-(\d+)/);
-      return match ? Math.max(max, parseInt(match[1], 10)) : max;
-    }, 0);
-    return `EST-${String(maxNum + 1).padStart(3, '0')}`;
-  };
-
-  const saveEstimate = async (): Promise<Estimate | null> => {
+  const saveEstimate = (): Estimate | null => {
     if (!result) {
       toast.error('Calculate an estimate first.');
       return null;
@@ -210,43 +444,66 @@ export default function QuickEstimator() {
     const h = parseFloat(height) || 14;
     const p = parseFloat(pitch) || 1;
     const rep = salesRep || currentUser.name || user?.email || '';
+    const nowIso = new Date().toISOString();
 
     const auditNotes: string[] = [
       `Steel base: ${formatCurrency(result.steelCost)} at ${formatNumber(result.weight)} lbs`,
       `Margin baked in: ${result.markupType} = ${formatCurrency(result.markupAmount)}`,
       `Steel shown to client: ${formatCurrency(result.steelWithMargin)}`,
       `Engineering factors: ${selectedFactors.join(', ')}`,
+      `Location: ${[city, province, postalCode].filter(Boolean).join(', ') || province}`,
     ];
 
-    const label = getNextEstimateLabel();
+    const label = editingEstimate?.label || nextEstimateLabel;
     const estimate: Estimate = {
-      id: crypto.randomUUID(),
+      id: editingEstimate?.id || crypto.randomUUID(),
       label,
-      date: new Date().toISOString().split('T')[0],
+      date: editingEstimate?.date || nowIso.split('T')[0],
       clientName: clientName || 'TBD',
       clientId: clientId || '',
       salesRep: rep,
       width: w, length: l, height: h, pitch: p,
       province,
+      city,
+      postalCode,
       grandTotal: result.grandTotal,
       sqft: result.sqft,
       estimatedTotal: result.estimatedTotal,
-      notes: '',
+      notes: editingEstimate?.notes || '',
       auditNotes,
       payload: {
         distance, remoteLevel, foundationType, contingencyPct,
         includeInsulation, insulationGrade, includeGutters, linerOption,
-        locationInput, useFlat, flatMarkupPct,
+        locationInput, freightSource, useFlat, flatMarkupPct,
+        singleSlope, leftEaveHeight, rightEaveHeight, selectedFactors,
         result,
       },
+      createdByUserId: editingEstimate?.createdByUserId || currentUser.id || user?.id || null,
+      createdAt: editingEstimate?.createdAt || nowIso,
+      updatedAt: nowIso,
     };
 
-    await addEstimate(estimate);
-    toast.success(`Estimate ${label} saved`);
+    if (editingEstimate) {
+      void updateEstimate(editingEstimate.id, estimate);
+      toast.success(`Estimate ${label} updated`);
+    } else {
+      void addEstimate(estimate);
+      toast.success(`Estimate ${label} saved`);
+    }
+
+    if (loadedDraftId) {
+      setDrafts(prev => prev.filter(item => item.id !== loadedDraftId));
+      setLoadedDraftId(null);
+      setSelectedDraftId('');
+    }
+
+    setEditingEstimateId(estimate.id);
+    setSelectedEstimateId(estimate.id);
+    setSearchParams({ estimateId: estimate.id });
     return estimate;
   };
 
-  const convertToRFQ = async () => {
+  const convertToRFQ = () => {
     if (!result) {
       toast.error('Calculate an estimate first.');
       return;
@@ -260,14 +517,11 @@ export default function QuickEstimator() {
       return;
     }
 
-    // Auto-save estimate first
-    const savedEstimate = await saveEstimate();
+    const savedEstimate = saveEstimate();
     if (!savedEstimate) return;
 
     toast.success('Estimate imported into RFQ builder');
     navigate(`/quote-rfq?estimateId=${savedEstimate.id}`);
-    return;
-    toast.success('Quote created & saved — navigating to RFQ');
 
   };
 
@@ -286,6 +540,100 @@ export default function QuickEstimator() {
       <div>
         <h2 className="text-2xl font-bold">Quick Estimator</h2>
         <p className="text-sm text-muted-foreground mt-1">Instant ballpark pricing before a factory quote</p>
+        <p className="text-xs text-muted-foreground mt-2">{currentWorkflowLabel}</p>
+      </div>
+
+      <div className="bg-card border rounded-lg p-5 space-y-4">
+        <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Workflow Continuity</h3>
+            <p className="text-xs text-muted-foreground mt-1">
+              Active estimator state is stored locally in
+              {' '}
+              <span className="font-mono">{QUICK_ESTIMATOR_ACTIVE_STATE_KEY}</span>
+              {' '}
+              and drafts in
+              {' '}
+              <span className="font-mono">{QUICK_ESTIMATOR_DRAFTS_KEY}</span>.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={startNewEstimate}>
+              <PlusCircle className="h-4 w-4 mr-2" />
+              New Estimate
+            </Button>
+            <Button variant="outline" onClick={saveDraft}>
+              <Save className="h-4 w-4 mr-2" />
+              {loadedDraftId ? 'Update Draft' : 'Save Draft'}
+            </Button>
+          </div>
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="space-y-2">
+            <Label className="text-xs">Load Existing Estimate</Label>
+            <div className="flex gap-2">
+              <Select value={selectedEstimateId} onValueChange={setSelectedEstimateId}>
+                <SelectTrigger className="input-blue">
+                  <SelectValue placeholder="Select a saved estimate" />
+                </SelectTrigger>
+                <SelectContent>
+                  {sortedEstimates.length === 0 ? (
+                    <SelectItem value="__none__" disabled>No saved estimates</SelectItem>
+                  ) : sortedEstimates.map(estimate => (
+                    <SelectItem key={estimate.id} value={estimate.id}>
+                      {estimate.label} | {estimate.clientName || 'TBD'} | {estimate.updatedAt?.split('T')[0] || estimate.date}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                variant="outline"
+                disabled={!selectedEstimateId}
+                onClick={() => loadEstimateIntoForm(selectedEstimateId)}
+              >
+                <FolderOpen className="h-4 w-4 mr-2" />
+                Load
+              </Button>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-xs">Load Draft</Label>
+            <div className="flex gap-2">
+              <Select value={selectedDraftId} onValueChange={setSelectedDraftId}>
+                <SelectTrigger className="input-blue">
+                  <SelectValue placeholder="Select a saved draft" />
+                </SelectTrigger>
+                <SelectContent>
+                  {sortedDrafts.length === 0 ? (
+                    <SelectItem value="__none__" disabled>No drafts saved</SelectItem>
+                  ) : sortedDrafts.map(draft => (
+                    <SelectItem key={draft.id} value={draft.id}>
+                      {draft.title} | {new Date(draft.savedAt).toLocaleString()}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                variant="outline"
+                disabled={!selectedDraftId}
+                onClick={() => loadDraftIntoForm(selectedDraftId)}
+              >
+                <FolderOpen className="h-4 w-4 mr-2" />
+                Load
+              </Button>
+              <Button
+                variant="ghost"
+                className="text-destructive"
+                disabled={!selectedDraftId}
+                onClick={() => deleteDraft(selectedDraftId)}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="grid lg:grid-cols-2 gap-6">
@@ -364,6 +712,14 @@ export default function QuickEstimator() {
                 <SelectTrigger className="input-blue mt-1"><SelectValue /></SelectTrigger>
                 <SelectContent>{PROVINCES.map(p => <SelectItem key={p.code} value={p.code}>{p.code} — {p.name}</SelectItem>)}</SelectContent>
               </Select>
+            </div>
+            <div>
+              <Label className="text-xs">City</Label>
+              <Input className="input-blue mt-1" value={city} onChange={e => setCity(e.target.value)} placeholder="City" />
+            </div>
+            <div>
+              <Label className="text-xs">Postal Code</Label>
+              <Input className="input-blue mt-1" value={postalCode} onChange={e => setPostalCode(e.target.value)} placeholder="A1A 1A1" />
             </div>
             <div><Label className="text-xs">Distance from Bradford (km)</Label><Input className="input-blue mt-1" value={distance} onChange={e => setDistance(e.target.value)} /></div>
           </div>
@@ -467,6 +823,10 @@ export default function QuickEstimator() {
               {parseFloat(width)}&apos; × {parseFloat(length)}&apos; × {parseFloat(height)}&apos; | Pitch: {pitch}:12 | {formatNumber(result.sqft)} sqft | {formatNumber(result.weight)} lbs
             </div>
 
+            <div className="text-xs text-muted-foreground">
+              Client: {clientName || 'TBD'} | Location: {[city, province, postalCode].filter(Boolean).join(', ') || province}
+            </div>
+
             <div className="space-y-2 text-sm">
               <Row label="Steel" value={result.steelWithMargin} bold />
               <Row label="Engineering Fee" value={result.engineering} />
@@ -492,9 +852,10 @@ export default function QuickEstimator() {
 
               <div className="pt-2 space-y-2">
                 <Button onClick={saveEstimate} variant="outline" className="w-full">
-                  <Save className="h-4 w-4 mr-2" />Save Estimate ({getNextEstimateLabel()})
+                  <Save className="h-4 w-4 mr-2" />
+                  {editingEstimate ? `Update Estimate (${editingEstimate.label})` : `Save Estimate (${nextEstimateLabel})`}
                 </Button>
-                <Button onClick={() => void convertToRFQ()} className="w-full">
+                <Button onClick={convertToRFQ} className="w-full">
                   Convert to RFQ (Stage 1)
                 </Button>
               </div>

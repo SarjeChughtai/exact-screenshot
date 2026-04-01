@@ -9,6 +9,7 @@ import { useSettings } from '@/context/SettingsContext';
 import { supabase } from '@/integrations/supabase/client';
 import { quoteFileFromRow } from '@/lib/supabaseMappers';
 import { getQuoteFileUrl, uploadQuoteFile } from '@/lib/quoteFileStorage';
+import { isEstimatorAssignedToQuote } from '@/lib/rfqWorkflow';
 import { getUserIdsForRole, notifyUsers } from '@/lib/workflowNotifications';
 import type { Quote, QuoteFileRecord, WorkflowStatus } from '@/types';
 import { toast } from 'sonner';
@@ -125,8 +126,16 @@ export function RFQWorkflowQueues() {
   ), [currentUser.id, currentUser.name, hasAnyRole, rfqDocuments]);
 
   const estimatorQueue = useMemo(() => (
-    rfqDocuments.filter(quote => ESTIMATOR_QUEUE_STATUSES.includes(quote.workflowStatus))
-  ), [rfqDocuments]);
+    rfqDocuments.filter(quote =>
+      ESTIMATOR_QUEUE_STATUSES.includes(quote.workflowStatus) &&
+      isEstimatorAssignedToQuote(
+        quote,
+        currentUser.id,
+        currentUser.name,
+        hasAnyRole('admin', 'owner'),
+      )
+    )
+  ), [currentUser.id, currentUser.name, hasAnyRole, rfqDocuments]);
 
   const operationsQueue = useMemo(() => (
     rfqDocuments.filter(quote => OPERATIONS_QUEUE_STATUSES.includes(quote.workflowStatus))

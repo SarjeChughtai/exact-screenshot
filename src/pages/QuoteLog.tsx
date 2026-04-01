@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { DocumentLogTable } from '@/components/DocumentLogTable';
 import { RFQWorkflowQueues } from '@/components/RFQWorkflowQueues';
@@ -6,9 +7,11 @@ import { useRoles } from '@/context/RoleContext';
 import type { DocumentType } from '@/types';
 
 export default function QuoteLog() {
-  const { hasAnyRole } = useRoles();
+  const [searchParams] = useSearchParams();
+  const { currentUser, hasAnyRole } = useRoles();
   const isEstimatorOnly = hasAnyRole('estimator') && !hasAnyRole('admin', 'owner', 'operations', 'sales_rep');
   const [activeTab, setActiveTab] = useState<'rfq' | 'dealer_rfq' | 'external_quote' | 'all'>(isEstimatorOnly ? 'rfq' : 'all');
+  const focusedDocumentId = searchParams.get('documentId') || undefined;
 
   const filterTypes: DocumentType[] = isEstimatorOnly
     ? ['rfq', 'dealer_rfq']
@@ -19,6 +22,13 @@ export default function QuoteLog() {
   const workflowStatuses = isEstimatorOnly
     ? ['estimate_needed', 'estimating', 'estimate_complete', 'internal_quote_in_progress']
     : undefined;
+
+  const estimatorFilter = useMemo(
+    () => isEstimatorOnly
+      ? { userId: currentUser.id, name: currentUser.name }
+      : undefined,
+    [currentUser.id, currentUser.name, isEstimatorOnly],
+  );
 
   return (
     <div className="space-y-6">
@@ -42,6 +52,8 @@ export default function QuoteLog() {
           : 'RFQs, dealer RFQs, and external quotes share the same document lifecycle. Internal quotes stay in their own log and do not count as deals.'}
         filterDocumentTypes={filterTypes}
         filterWorkflowStatuses={workflowStatuses}
+        focusDocumentId={focusedDocumentId}
+        estimatorFilter={estimatorFilter}
       />
     </div>
   );

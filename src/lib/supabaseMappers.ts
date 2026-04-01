@@ -540,6 +540,8 @@ export function estimateFromRow(r: any): Estimate {
     height: Number(r.height) || 0,
     pitch: Number(r.pitch) || 0,
     province: r.province ?? 'ON',
+    city: r.city ?? '',
+    postalCode: r.postal_code ?? '',
     grandTotal: Number(r.grand_total) || 0,
     sqft: Number(r.sqft) || 0,
     estimatedTotal: Number(r.estimated_total) || 0,
@@ -556,7 +558,8 @@ export function estimateToRow(e: Partial<Estimate>): Record<string, any> {
   const map: Record<string, string> = {
     id: 'id', label: 'label', date: 'date', clientName: 'client_name', clientId: 'client_id',
     salesRep: 'sales_rep', width: 'width', length: 'length', height: 'height', pitch: 'pitch',
-    province: 'province', grandTotal: 'grand_total', sqft: 'sqft', estimatedTotal: 'estimated_total',
+    province: 'province', city: 'city', postalCode: 'postal_code',
+    grandTotal: 'grand_total', sqft: 'sqft', estimatedTotal: 'estimated_total',
     notes: 'notes', auditNotes: 'audit_notes', payload: 'payload', createdByUserId: 'created_by_user_id',
     updatedAt: 'updated_at',
   };

@@ -107,6 +107,8 @@ export function mapEstimateToSharedRFQForm(estimate: Estimate): Partial<SharedRF
     clientName: estimate.clientName,
     jobName: `${estimate.width}x${estimate.length} steel building`,
     province: estimate.province,
+    city: estimate.city,
+    postalCode: estimate.postalCode,
     width: String(estimate.width),
     length: String(estimate.length),
     height: String(estimate.height),
