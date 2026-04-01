@@ -5,7 +5,7 @@ import { formatCurrency, formatNumber } from '@/lib/calculations';
 import { useRoles } from '@/context/RoleContext';
 import { useAppContext } from '@/context/AppContext';
 import { toast } from 'sonner';
-import { Trash2, ArrowRight, ChevronDown, ChevronRight } from 'lucide-react';
+import { Trash2, ArrowRight, ChevronDown, ChevronRight, Pencil } from 'lucide-react';
 
 export default function EstimatesLog() {
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -21,6 +21,10 @@ export default function EstimatesLog() {
 
   const importToRfq = (estimateId: string) => {
     navigate(`/quote-rfq?estimateId=${estimateId}`);
+  };
+
+  const editEstimate = (estimateId: string) => {
+    navigate(`/estimator?estimateId=${estimateId}`);
   };
 
   return (
@@ -57,6 +61,9 @@ export default function EstimatesLog() {
                   <td className="px-3 py-2 font-mono font-semibold">{formatCurrency(estimate.grandTotal)}</td>
                   <td className="px-3 py-2" onClick={event => event.stopPropagation()}>
                     <div className="flex gap-1">
+                      <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => editEstimate(estimate.id)}>
+                        <Pencil className="h-3 w-3 mr-1" />Edit
+                      </Button>
                       <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => importToRfq(estimate.id)}>
                         <ArrowRight className="h-3 w-3 mr-1" />Import to RFQ
                       </Button>
@@ -72,7 +79,9 @@ export default function EstimatesLog() {
                       <div className="grid gap-3 md:grid-cols-2">
                         <div>
                           <p className="text-xs font-semibold text-muted-foreground mb-1">Estimate Payload</p>
+                          <p className="text-xs">City: {estimate.city || 'Not set'}</p>
                           <p className="text-xs">Province: {estimate.province}</p>
+                          <p className="text-xs">Postal Code: {estimate.postalCode || 'Not set'}</p>
                           <p className="text-xs">Pitch: {estimate.pitch}:12</p>
                           <p className="text-xs">Client ID: {estimate.clientId || 'Not set'}</p>
                         </div>

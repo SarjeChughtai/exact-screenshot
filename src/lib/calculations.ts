@@ -1,4 +1,5 @@
 import data from '@/data/referenceData.json';
+import type { FoundationType } from '@/types';
 
 const { steel_pricing, insulation_pricing, foundation_schedule, engineering_fees, tax_rates, freight_logic, markup_rules } = data;
 
@@ -32,7 +33,9 @@ export function calcEngineeringFromFactor(factor: number): number {
   return engineering_fees.base_fee * factor + engineering_fees.sell_markup;
 }
 
-export function lookupFoundation(sqft: number, type: 'slab' | 'frost_wall'): number {
+export function lookupFoundation(sqft: number, type: FoundationType): number {
+  if (type === 'none') return 0;
+
   const tiers = foundation_schedule.tiers;
   // Round up to next tier
   let slabCost = tiers[tiers.length - 1].slab_cost;

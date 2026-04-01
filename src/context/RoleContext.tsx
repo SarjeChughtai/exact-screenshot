@@ -28,6 +28,7 @@ const MODULE_ACCESS: Record<string, UserRole[]> = {
   'quote-builder': ['admin', 'owner', 'sales_rep'],
   'internal-quote-builder': ['admin', 'owner', 'operations'],
   'quote-log': ['admin', 'owner', 'sales_rep', 'operations', 'estimator', 'dealer'],
+  opportunities: ['admin', 'owner', 'operations', 'sales_rep', 'estimator'],
   deals: ['admin', 'owner', 'operations', 'sales_rep'],
   'deal-pl': ['admin', 'owner', 'accounting'],
   'commission': ['admin', 'owner', 'accounting'],

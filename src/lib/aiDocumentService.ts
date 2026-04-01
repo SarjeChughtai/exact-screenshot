@@ -195,7 +195,7 @@ export async function extractTextFromCSV(file: File): Promise<string> {
 }
 
 export async function extractTextFromXLSX(file: File): Promise<string> {
-  const XLSX = await import('xlsx');
+  const XLSX = await import('xlsx-js-style');
   const arrayBuffer = await file.arrayBuffer();
   const workbook = XLSX.read(arrayBuffer, { type: 'array' });
 

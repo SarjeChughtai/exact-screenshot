@@ -1,5 +1,8 @@
 import { supabase } from '@/integrations/supabase/client';
 import { upsertStoredDocument } from '@/lib/costDataWarehouse';
+import { quoteFileFromRow } from '@/lib/supabaseMappers';
+import { buildDuplicateDocumentGroupKey, getVisibleOperatorQuoteFiles } from '@/lib/importReview';
+import type { StructureType } from '@/types';
 
 interface UploadQuoteFileParams {
   file: File;
@@ -7,6 +10,7 @@ interface UploadQuoteFileParams {
   jobId: string;
   clientName: string;
   clientId: string;
+  structureType?: StructureType | null;
   buildingLabel: string;
   documentId?: string | null;
   fileCategory?: 'generated_pdf' | 'cost_file' | 'support_file';
@@ -58,6 +62,7 @@ export async function uploadQuoteFile({
   jobId,
   clientName,
   clientId,
+  structureType = null,
   buildingLabel,
   documentId = null,
   fileCategory = 'support_file',
@@ -109,6 +114,15 @@ export async function uploadQuoteFile({
         gdrive_status: 'pending',
         ai_output: aiOutput || null,
         extraction_source: extractionSource,
+        duplicate_group_key: buildDuplicateDocumentGroupKey({
+          jobId: jobId || null,
+          fileType,
+          extractedDocumentType: fileType,
+          documentId,
+          buildingLabel,
+          clientId,
+        }),
+        is_primary_document: true,
         review_status: reviewStatus || (extractionSource === 'unknown' ? 'needs_review' : 'pending'),
         parse_error: parseError || null,
       } as any)
@@ -128,6 +142,7 @@ export async function uploadQuoteFile({
         documentId: documentId || null,
         jobId: jobId || null,
         clientId: clientId || null,
+        structureType,
         fileName: file.name,
         fileSize: file.size,
         fileType: file.type || fileType,
@@ -138,6 +153,12 @@ export async function uploadQuoteFile({
         parseError: parseError || null,
         parserName: extractionSource === 'regex' ? 'regex-pdf-parser' : extractionSource === 'ai' ? 'ai-extractor' : null,
       });
+      if (storedDocumentId && record.id) {
+        await supabase
+          .from('quote_files')
+          .update({ stored_document_id: storedDocumentId } as any)
+          .eq('id', record.id);
+      }
     } catch (storedDocError) {
       console.warn('Stored document insert error:', storedDocError);
     }
@@ -210,7 +231,7 @@ export async function getQuoteFiles(jobId: string) {
     console.error('Error fetching quote files:', error);
     return [];
   }
-  return data || [];
+  return getVisibleOperatorQuoteFiles((data || []).map(quoteFileFromRow));
 }
 
 /**
@@ -221,13 +242,13 @@ export async function getRecentQuoteFiles(limit = 20) {
     .from('quote_files')
     .select('*')
     .order('created_at', { ascending: false })
-    .limit(limit);
+    .limit(limit * 3);
 
   if (error) {
     console.error('Error fetching recent quote files:', error);
     return [];
   }
-  return data || [];
+  return getVisibleOperatorQuoteFiles((data || []).map(quoteFileFromRow)).slice(0, limit);
 }
 
 /**

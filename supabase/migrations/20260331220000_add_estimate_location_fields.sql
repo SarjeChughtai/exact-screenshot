@@ -1,0 +1,3 @@
+ALTER TABLE public.estimates
+  ADD COLUMN IF NOT EXISTS city text NOT NULL DEFAULT '',
+  ADD COLUMN IF NOT EXISTS postal_code text NOT NULL DEFAULT '';

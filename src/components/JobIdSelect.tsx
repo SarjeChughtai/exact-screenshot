@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { CreateJobDialog } from '@/components/CreateJobDialog';
+import { buildJobIdSearchAlias, normalizeJobIdKey } from '@/lib/jobIds';
 import { cn } from '@/lib/utils';
 import { useSharedJobs } from '@/lib/sharedJobs';
 import type { Deal, SharedJobState } from '@/types';
@@ -29,6 +30,7 @@ interface JobIdSelectProps {
   allowedStates?: SharedJobState[];
   searchPlaceholder?: string;
   includeCreateNew?: boolean;
+  triggerTestId?: string;
 }
 
 export function JobIdSelect({
@@ -42,13 +44,15 @@ export function JobIdSelect({
   allowedStates,
   searchPlaceholder = 'Search by job ID, client, or job name...',
   includeCreateNew = true,
+  triggerTestId,
 }: JobIdSelectProps) {
   const [open, setOpen] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const shouldLimitToDeals = !allowedStates?.length || allowedStates.every(state => state === 'deal');
 
   const limitToJobIds = useMemo(
-    () => deals?.map(deal => deal.jobId).filter(Boolean),
-    [deals],
+    () => shouldLimitToDeals ? deals?.map(deal => deal.jobId).filter(Boolean) : undefined,
+    [deals, shouldLimitToDeals],
   );
 
   const { allJobs, visibleJobs } = useSharedJobs({ allowedStates, limitToJobIds });
@@ -83,6 +87,7 @@ export function JobIdSelect({
             variant="outline"
             role="combobox"
             aria-expanded={open}
+            data-testid={triggerTestId}
             className={cn('w-full justify-between font-normal', triggerClassName)}
           >
             <span className="truncate text-left">
@@ -108,7 +113,14 @@ export function JobIdSelect({
                 {visibleJobs.map(job => (
                   <CommandItem
                     key={job.jobId}
-                    value={`${job.jobId} ${job.clientName} ${job.jobName} ${job.state}`}
+                    value={[
+                      job.jobId,
+                      job.clientName,
+                      job.jobName,
+                      job.state,
+                      normalizeJobIdKey(job.jobId),
+                      buildJobIdSearchAlias(job.jobId),
+                    ].join(' ')}
                     onSelect={() => handleSelect(job.jobId)}
                     className="items-start gap-2 py-2"
                   >

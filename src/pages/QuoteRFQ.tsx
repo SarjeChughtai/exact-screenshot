@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useAppContext } from '@/context/AppContext';
 import { useSettings } from '@/context/SettingsContext';
@@ -18,6 +18,7 @@ import { createOpening, renumberOpenings, type RFQOpening, type WallLocation } f
 import type { Quote } from '@/types';
 
 export default function QuoteRFQ() {
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { deals, quotes, estimates, addQuote, updateQuote, allocateJobId } = useAppContext();
   const { settings } = useSettings();
@@ -193,6 +194,7 @@ export default function QuoteRFQ() {
         updatedAt: new Date().toISOString(),
       });
       toast.success('RFQ updated');
+      navigate(`/quote-log?documentId=${existingQuote.id}&view=log`);
       return;
     }
 
@@ -216,6 +218,7 @@ export default function QuoteRFQ() {
       link: '/quote-log',
     });
     toast.success('RFQ submitted');
+    navigate(`/quote-log?documentId=${document.id}&view=log`);
   };
 
   return (

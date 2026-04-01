@@ -4,14 +4,15 @@ import { Button } from '@/components/ui/button';
 import { FileText, Download, Loader2, RefreshCw, History, Search } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
+import type { QuoteFileRecord } from '@/types';
 
 interface DocumentGalleryProps {
   jobId: string;
-  onSelectFile: (file: any) => void;
+  onSelectFile: (file: QuoteFileRecord) => void;
 }
 
 export function DocumentGallery({ jobId, onSelectFile }: DocumentGalleryProps) {
-  const [files, setFiles] = useState<any[]>([]);
+  const [files, setFiles] = useState<QuoteFileRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [viewMode, setViewMode] = useState<'job' | 'recent'>('job');
 
@@ -42,12 +43,13 @@ export function DocumentGallery({ jobId, onSelectFile }: DocumentGalleryProps) {
   }, [jobId, viewMode]);
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" data-testid="document-gallery">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Document sets</h3>
           <div className="flex bg-muted rounded-md p-0.5 ml-2">
             <button
+              data-testid="document-gallery-current-job"
               onClick={() => setViewMode('job')}
               disabled={!jobId}
               className={cn(
@@ -58,6 +60,7 @@ export function DocumentGallery({ jobId, onSelectFile }: DocumentGalleryProps) {
               <Search className="h-2.5 w-2.5" /> Current Job
             </button>
             <button
+              data-testid="document-gallery-all-recent"
               onClick={() => setViewMode('recent')}
               className={cn(
                 "px-2 py-1 text-[10px] rounded-sm transition-all flex items-center gap-1",
@@ -91,17 +94,24 @@ export function DocumentGallery({ jobId, onSelectFile }: DocumentGalleryProps) {
       ) : (
         <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
           {files.map((file) => (
-            <div key={file.id} className="group flex items-center justify-between p-2 rounded border bg-card hover:border-primary/50 transition-colors">
+            <div key={file.id} className="group flex items-center justify-between p-2 rounded border bg-card hover:border-primary/50 transition-colors" data-testid={`document-gallery-file-${file.id}`}>
               <div className="flex items-center gap-2 overflow-hidden">
                 <FileText className="h-4 w-4 text-primary shrink-0" />
                 <div className="overflow-hidden">
-                  <p className="text-xs font-medium truncate" title={file.file_name}>{file.file_name}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs font-medium truncate" title={file.fileName}>{file.fileName}</p>
+                    {file.isPrimaryDocument && (
+                      <span className="rounded-full bg-green-100 px-1.5 py-0.5 text-[9px] font-medium text-green-700">
+                        Primary
+                      </span>
+                    )}
+                  </div>
                   <div className="flex items-center gap-2">
                     <p className="text-[9px] text-muted-foreground">
-                      {file.created_at ? format(new Date(file.created_at), 'MMM d, h:mm a') : 'Unknown date'}
+                      {file.createdAt ? format(new Date(file.createdAt), 'MMM d, h:mm a') : 'Unknown date'}
                     </p>
-                    {viewMode === 'recent' && file.job_id && (
-                      <span className="text-[9px] font-mono text-accent truncate border-l pl-2">Job: {file.job_id}</span>
+                    {viewMode === 'recent' && file.jobId && (
+                      <span className="text-[9px] font-mono text-accent truncate border-l pl-2">Job: {file.jobId}</span>
                     )}
                   </div>
                 </div>
@@ -110,6 +120,7 @@ export function DocumentGallery({ jobId, onSelectFile }: DocumentGalleryProps) {
                 variant="outline" 
                 size="sm" 
                 className="h-7 px-2 text-[10px] bg-primary/5 hover:bg-primary/10 border-primary/20 text-primary" 
+                data-testid={`document-gallery-pull-${file.id}`}
                 onClick={() => onSelectFile(file)}
               >
                 Pull Data

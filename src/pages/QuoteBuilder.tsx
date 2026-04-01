@@ -17,6 +17,7 @@ import { MapPin } from 'lucide-react';
 import { PersonnelSelect } from '@/components/PersonnelSelect';
 import { ClientSelect } from '@/components/ClientSelect';
 import { saveDocumentPdf } from '@/lib/documentPdf';
+import type { FoundationType } from '@/types';
 
 const INITIAL_FORM = {
   jobId: '',
@@ -42,7 +43,7 @@ const INITIAL_FORM = {
   remoteLevel: 'none',
   overrideFreight: '',
   complexityFactor: '1.0',
-  foundationType: 'slab' as 'slab' | 'frost_wall',
+  foundationType: 'slab' as FoundationType,
   contingencyPct: '5',
 };
 
@@ -288,7 +289,7 @@ export default function QuoteBuilder() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label className="text-xs">Job ID</Label>
-              <JobIdSelect value={form.jobId} onValueChange={value => set('jobId', value)} deals={deals} allowedStates={['internal_quote', 'external_quote']} placeholder="Auto-generated" />
+              <JobIdSelect value={form.jobId} onValueChange={value => set('jobId', value)} placeholder="Auto-generated" />
             </div>
             <div>
               <Label className="text-xs">Job Name</Label>
@@ -373,11 +374,12 @@ export default function QuoteBuilder() {
             <div><Label className="text-xs">Complexity Factor</Label><Input className="input-blue mt-1" value={form.complexityFactor} onChange={event => set('complexityFactor', event.target.value)} /></div>
             <div>
               <Label className="text-xs">Foundation</Label>
-              <Select value={form.foundationType} onValueChange={value => set('foundationType', value as 'slab' | 'frost_wall')}>
+              <Select value={form.foundationType} onValueChange={value => set('foundationType', value as FoundationType)}>
                 <SelectTrigger className="input-blue mt-1"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="slab">Slab</SelectItem>
                   <SelectItem value="frost_wall">Frost Wall</SelectItem>
+                  <SelectItem value="none">None</SelectItem>
                 </SelectContent>
               </Select>
             </div>

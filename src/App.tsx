@@ -23,6 +23,7 @@ import InternalQuoteBuilder from "@/pages/InternalQuoteBuilder";
 import InternalQuoteLog from "@/pages/InternalQuoteLog";
 import QuoteLog from "@/pages/QuoteLog";
 import EstimatesLog from "@/pages/EstimatesLog";
+import Opportunities from "@/pages/Opportunities";
 import MasterDeals from "@/pages/MasterDeals";
 import InternalCosts from "@/pages/InternalCosts";
 import ProjectedFinancials from "@/pages/ProjectedFinancials";
@@ -90,6 +91,7 @@ const App = () => (
                           <Route path="/internal-quote-log" element={withModule('internal-quote-log', <InternalQuoteLog />)} />
                           <Route path="/quote-builder" element={withModule('quote-builder', <QuoteBuilder />)} />
                           <Route path="/quote-log" element={withModule('quote-log', <QuoteLog />)} />
+                          <Route path="/opportunities" element={withModule('opportunities', <Opportunities />)} />
                           <Route path="/estimates-log" element={withModule('estimator', <EstimatesLog />)} />
                           <Route path="/quote-rfq" element={withModule('quote-log', <QuoteRFQ />)} />
                           <Route path="/deals" element={withModule('deals', <MasterDeals />)} />

@@ -3,7 +3,19 @@ import { useQuery } from '@tanstack/react-query';
 import { useAppContext } from '@/context/AppContext';
 import { useRoles, type UserProfile, type UserRole } from '@/context/RoleContext';
 import { supabase } from '@/integrations/supabase/client';
-import type { Deal, DocumentType, FreightRecord, Quote, SharedJobRecord, SharedJobState } from '@/types';
+import type {
+  Client,
+  Deal,
+  DocumentType,
+  FreightRecord,
+  InsulationCostDataRecord,
+  Quote,
+  SharedJobRecord,
+  SharedJobState,
+  SteelCostDataRecord,
+  StoredDocument,
+} from '@/types';
+import { normalizeJobIdKey, resolveCanonicalJobId, resolveCanonicalJobIdFromRecord } from '@/lib/jobIds';
 
 const STATE_PRECEDENCE: Record<SharedJobState, number> = {
   estimate: 0,
@@ -35,18 +47,24 @@ export const getSharedJobStateForDocumentType = (documentType: DocumentType): Sh
   return 'rfq';
 };
 
-const ensureRecord = (records: Map<string, SharedJobRecord>, jobId: string): SharedJobRecord => {
-  const existing = records.get(jobId);
+const ensureRecord = (records: Map<string, SharedJobRecord>, rawJobId: string): SharedJobRecord => {
+  const jobId = resolveCanonicalJobId(rawJobId);
+  if (!jobId) {
+    throw new Error('Cannot build shared job record without a canonical job ID');
+  }
+
+  const key = normalizeJobIdKey(jobId);
+  const existing = records.get(key);
   if (existing) return existing;
 
   const next: SharedJobRecord = {
     jobId,
     clientName: '',
     jobName: '',
-    state: 'rfq',
+    state: 'estimate',
     vendorUserIds: [],
   };
-  records.set(jobId, next);
+  records.set(key, next);
   return next;
 };
 
@@ -67,17 +85,26 @@ export function buildSharedJobRecords({
   quotes,
   deals,
   freight,
+  steelCostData,
+  insulationCostData,
+  storedDocuments,
+  clients = [],
 }: {
   quotes: Quote[];
   deals: Deal[];
   freight: FreightRecord[];
+  steelCostData: SteelCostDataRecord[];
+  insulationCostData: InsulationCostDataRecord[];
+  storedDocuments: StoredDocument[];
+  clients?: Client[];
 }): SharedJobRecord[] {
   const records = new Map<string, SharedJobRecord>();
 
   for (const quote of quotes) {
-    if (!quote.jobId) continue;
+    const jobId = resolveCanonicalJobId(quote.jobId);
+    if (!jobId) continue;
 
-    const record = ensureRecord(records, quote.jobId);
+    const record = ensureRecord(records, jobId);
     record.clientName = record.clientName || quote.clientName || '';
     record.jobName = record.jobName || quote.jobName || '';
     record.salesRep = record.salesRep || quote.salesRep || '';
@@ -97,9 +124,10 @@ export function buildSharedJobRecords({
   }
 
   for (const deal of deals) {
-    if (!deal.jobId) continue;
+    const jobId = resolveCanonicalJobId(deal.jobId);
+    if (!jobId) continue;
 
-    const record = ensureRecord(records, deal.jobId);
+    const record = ensureRecord(records, jobId);
     record.clientName = deal.clientName || record.clientName;
     record.jobName = deal.jobName || record.jobName;
     record.salesRep = deal.salesRep || record.salesRep;
@@ -109,11 +137,121 @@ export function buildSharedJobRecords({
   }
 
   for (const freightRecord of freight) {
-    if (!freightRecord.jobId) continue;
+    const jobId = resolveCanonicalJobId(freightRecord.jobId);
+    if (!jobId) continue;
 
-    const record = ensureRecord(records, freightRecord.jobId);
+    const record = ensureRecord(records, jobId);
     record.clientName = record.clientName || freightRecord.clientName || '';
     record.assignedFreightUserId = record.assignedFreightUserId || freightRecord.assignedFreightUserId || null;
+  }
+
+  const mergeWarehouseJob = (
+    source: SteelCostDataRecord | InsulationCostDataRecord | StoredDocument,
+    options?: {
+      jobName?: string | null;
+      clientName?: string | null;
+      salesRep?: string | null;
+      estimator?: string | null;
+    },
+  ) => {
+    const jobId = resolveCanonicalJobIdFromRecord(source as Record<string, unknown>);
+    if (!jobId) return;
+
+    const record = ensureRecord(records, jobId);
+    record.clientName = record.clientName || options?.clientName || '';
+    record.jobName = record.jobName || options?.jobName || '';
+    record.salesRep = record.salesRep || options?.salesRep || '';
+    record.estimator = record.estimator || options?.estimator || '';
+    setStateIfHigher(record, 'internal_quote');
+  };
+
+  for (const steelRecord of steelCostData) {
+    const raw = (steelRecord.rawExtraction || {}) as Record<string, unknown>;
+    mergeWarehouseJob(steelRecord, {
+      clientName: typeof raw.client_name === 'string'
+        ? raw.client_name
+        : typeof raw.clientName === 'string'
+          ? raw.clientName
+          : '',
+      jobName: typeof raw.job_name === 'string'
+        ? raw.job_name
+        : typeof raw.jobName === 'string'
+          ? raw.jobName
+          : typeof raw.project_name === 'string'
+            ? raw.project_name
+            : typeof raw.projectName === 'string'
+              ? raw.projectName
+              : '',
+      salesRep: typeof raw.sales_rep === 'string'
+        ? raw.sales_rep
+        : typeof raw.salesRep === 'string'
+          ? raw.salesRep
+          : '',
+      estimator: typeof raw.estimator === 'string' ? raw.estimator : '',
+    });
+  }
+
+  for (const insulationRecord of insulationCostData) {
+    const raw = (insulationRecord.rawExtraction || {}) as Record<string, unknown>;
+    mergeWarehouseJob(insulationRecord, {
+      clientName: typeof raw.client_name === 'string'
+        ? raw.client_name
+        : typeof raw.clientName === 'string'
+          ? raw.clientName
+          : '',
+      jobName: typeof raw.job_name === 'string'
+        ? raw.job_name
+        : typeof raw.jobName === 'string'
+          ? raw.jobName
+          : typeof raw.project_name === 'string'
+            ? raw.project_name
+            : typeof raw.projectName === 'string'
+              ? raw.projectName
+              : '',
+      salesRep: typeof raw.sales_rep === 'string'
+        ? raw.sales_rep
+        : typeof raw.salesRep === 'string'
+          ? raw.salesRep
+          : '',
+      estimator: typeof raw.estimator === 'string' ? raw.estimator : '',
+    });
+  }
+
+  for (const storedDocument of storedDocuments) {
+    const parsed = (storedDocument.parsedData || {}) as Record<string, unknown>;
+    mergeWarehouseJob(storedDocument, {
+      clientName: typeof parsed.client_name === 'string'
+        ? parsed.client_name
+        : typeof parsed.clientName === 'string'
+          ? parsed.clientName
+          : '',
+      jobName: typeof parsed.job_name === 'string'
+        ? parsed.job_name
+        : typeof parsed.jobName === 'string'
+          ? parsed.jobName
+          : typeof parsed.project_name === 'string'
+            ? parsed.project_name
+            : typeof parsed.projectName === 'string'
+              ? parsed.projectName
+              : '',
+      salesRep: typeof parsed.sales_rep === 'string'
+        ? parsed.sales_rep
+        : typeof parsed.salesRep === 'string'
+          ? parsed.salesRep
+          : '',
+      estimator: typeof parsed.estimator === 'string' ? parsed.estimator : '',
+    });
+  }
+
+  for (const client of clients) {
+    for (const rawJobId of client.jobIds || []) {
+      const jobId = resolveCanonicalJobId(rawJobId);
+      if (!jobId) continue;
+
+      const record = ensureRecord(records, jobId);
+      record.clientName = record.clientName || client.clientName || client.name || '';
+      setStateIfHigher(record, 'estimate');
+    }
   }
 
   return Array.from(records.values()).sort((left, right) =>
@@ -165,10 +303,12 @@ export function filterSharedJobsForUser(
   } = {},
 ) {
   const allowedStateSet = allowedStates?.length ? new Set(allowedStates) : null;
-  const allowedJobIds = limitToJobIds?.length ? new Set(limitToJobIds) : null;
+  const allowedJobIds = limitToJobIds?.length
+    ? new Set(limitToJobIds.map(jobId => normalizeJobIdKey(jobId)).filter(Boolean))
+    : null;
 
   return records.filter(record => {
-    if (allowedJobIds && !allowedJobIds.has(record.jobId)) return false;
+    if (allowedJobIds && !allowedJobIds.has(normalizeJobIdKey(record.jobId))) return false;
     if (allowedStateSet && !allowedStateSet.has(record.state)) return false;
     return canUserAccessSharedJob(record, currentUser);
   });
@@ -192,13 +332,50 @@ function sharedJobFromRpcRow(row: any): SharedJobRecord {
   };
 }
 
+function mergeSharedJobRecordCollections(...collections: SharedJobRecord[][]): SharedJobRecord[] {
+  const records = new Map<string, SharedJobRecord>();
+
+  for (const collection of collections) {
+    for (const item of collection) {
+      const jobId = resolveCanonicalJobId(item.jobId);
+      if (!jobId) continue;
+
+      const key = normalizeJobIdKey(jobId);
+      const existing = records.get(key);
+      if (!existing) {
+        records.set(key, {
+          ...item,
+          jobId,
+          vendorUserIds: [...(item.vendorUserIds || [])],
+        });
+        continue;
+      }
+
+      existing.clientName = existing.clientName || item.clientName || '';
+      existing.jobName = existing.jobName || item.jobName || '';
+      existing.salesRep = existing.salesRep || item.salesRep || '';
+      existing.salesRepUserId = existing.salesRepUserId || item.salesRepUserId || null;
+      existing.estimator = existing.estimator || item.estimator || '';
+      existing.assignedEstimatorUserId = existing.assignedEstimatorUserId || item.assignedEstimatorUserId || null;
+      existing.assignedFreightUserId = existing.assignedFreightUserId || item.assignedFreightUserId || null;
+      existing.dealerUserId = existing.dealerUserId || item.dealerUserId || null;
+      existing.vendorUserIds = Array.from(new Set([...(existing.vendorUserIds || []), ...(item.vendorUserIds || [])]));
+      setStateIfHigher(existing, item.state, item.sourceDocumentType, item.sourceDocumentId);
+    }
+  }
+
+  return Array.from(records.values()).sort((left, right) =>
+    left.jobId.localeCompare(right.jobId, undefined, { numeric: true }),
+  );
+}
+
 export function useSharedJobs(options?: { allowedStates?: SharedJobState[]; limitToJobIds?: string[] }) {
-  const { quotes, deals, freight } = useAppContext();
+  const { quotes, deals, freight, steelCostData, insulationCostData, storedDocuments, clients } = useAppContext();
   const { currentUser } = useRoles();
 
   const localAllJobs = useMemo(
-    () => buildSharedJobRecords({ quotes, deals, freight }),
-    [deals, freight, quotes],
+    () => buildSharedJobRecords({ quotes, deals, freight, steelCostData, insulationCostData, storedDocuments, clients }),
+    [clients, deals, freight, insulationCostData, quotes, steelCostData, storedDocuments],
   );
 
   const visibleJobsQuery = useQuery({
@@ -217,15 +394,20 @@ export function useSharedJobs(options?: { allowedStates?: SharedJobState[]; limi
 
   const visibleJobs = useMemo(
     () => {
-      const baseJobs = visibleJobsQuery.data || filterSharedJobsForUser(localAllJobs, currentUser, options);
-      const allowedJobIds = options?.limitToJobIds?.length ? new Set(options.limitToJobIds) : null;
-      return allowedJobIds ? baseJobs.filter(job => allowedJobIds.has(job.jobId)) : baseJobs;
+      const localVisibleJobs = filterSharedJobsForUser(localAllJobs, currentUser, options);
+      const baseJobs = mergeSharedJobRecordCollections(visibleJobsQuery.data || [], localVisibleJobs);
+      const allowedJobIds = options?.limitToJobIds?.length
+        ? new Set(options.limitToJobIds.map(jobId => normalizeJobIdKey(jobId)).filter(Boolean))
+        : null;
+      return allowedJobIds
+        ? baseJobs.filter(job => allowedJobIds.has(normalizeJobIdKey(job.jobId)))
+        : baseJobs;
     },
     [visibleJobsQuery.data, localAllJobs, currentUser, options],
   );
 
   const allJobs = useMemo(
-    () => visibleJobsQuery.data || localAllJobs,
+    () => mergeSharedJobRecordCollections(localAllJobs, visibleJobsQuery.data || []),
     [visibleJobsQuery.data, localAllJobs],
   );
 

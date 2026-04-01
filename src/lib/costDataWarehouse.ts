@@ -1,5 +1,5 @@
 import JSZip from 'jszip';
-import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx-js-style';
 import { supabase } from '@/integrations/supabase/client';
 import {
   insulationCostDataFromRow,
@@ -21,6 +21,9 @@ import {
   parseCostDocumentFromPages,
   type ParsedCostDocument,
 } from '@/lib/pdfParsers';
+import { buildDuplicateDocumentGroupKey } from '@/lib/importReview';
+import { resolveCanonicalJobId } from '@/lib/jobIds';
+import { normalizeStructureType } from '@/lib/internalQuoteNormalization';
 
 export interface CostDocumentImportContext {
   fileName: string;
@@ -31,6 +34,7 @@ export interface CostDocumentImportContext {
   documentId?: string | null;
   jobId?: string | null;
   projectId?: string | null;
+  structureType?: StoredDocument['structureType'];
   clientId?: string | null;
   vendorId?: string | null;
   uploadedBy?: string | null;
@@ -73,13 +77,16 @@ export async function upsertStoredDocument(
   context: CostDocumentImportContext,
   parsedResult?: ParsedCostDocument | null,
 ): Promise<string | null> {
+  const canonicalJobId = resolveCanonicalJobId(context.jobId, context.projectId);
+  const structureType = normalizeStructureType(context.structureType || 'steel_building');
   const payload = storedDocumentToRow({
     quoteFileId: context.quoteFileId ?? null,
     documentId: context.documentId ?? null,
-    jobId: context.jobId ?? null,
+    jobId: canonicalJobId,
     projectId: context.projectId ?? null,
     clientId: context.clientId ?? null,
     vendorId: context.vendorId ?? null,
+    structureType,
     sourceType: context.sourceType || 'uploaded',
     sourceFilename: context.fileName,
     sourceFileExtension: context.fileName.split('.').pop()?.toLowerCase() || null,
@@ -91,6 +98,15 @@ export async function upsertStoredDocument(
     parserName: context.parserName || (parsedResult ? 'regex-pdf-parser' : null),
     parserVersion: context.parserVersion || COST_PARSER_VERSION,
     parseError: context.parseError ?? parsedResult?.parseError ?? null,
+    duplicateGroupKey: buildDuplicateDocumentGroupKey({
+      jobId: canonicalJobId,
+      fileType: context.fileType || 'unknown',
+      extractedDocumentType: parsedResult?.type === 'unknown' ? null : parsedResult?.type || null,
+      documentId: context.documentId ?? null,
+      buildingLabel: null,
+      clientId: context.clientId ?? null,
+    }),
+    isPrimaryDocument: true,
     reviewStatus:
       context.reviewStatus
       || parsedResult?.reviewStatus
@@ -182,6 +198,8 @@ export async function persistParsedCostDocument(
   parsedResult: ParsedCostDocument | null,
 ): Promise<{ storedDocumentId: string | null; steelId: string | null; insulationId: string | null }> {
   const uploadedBy = context.uploadedBy ?? (await getCurrentUserId());
+  const canonicalJobId = resolveCanonicalJobId(context.jobId, context.projectId);
+  const structureType = normalizeStructureType(context.structureType || 'steel_building');
   const storedDocumentId = await upsertStoredDocument({ ...context, uploadedBy }, parsedResult);
 
   if (!parsedResult || parsedResult.type === 'unknown') {
@@ -194,10 +212,11 @@ export async function persistParsedCostDocument(
       storedDocumentId,
       quoteFileId: context.quoteFileId ?? null,
       documentId: context.documentId ?? null,
-      jobId: context.jobId ?? steel.projectId ?? null,
+      jobId: canonicalJobId ?? resolveCanonicalJobId(steel.projectId),
       projectId: context.projectId ?? steel.projectId ?? null,
       clientId: context.clientId ?? steel.clientId ?? null,
       vendorId: context.vendorId ?? null,
+      structureType,
       widthFt: steel.widthFt,
       lengthFt: steel.lengthFt,
       eaveHeightFt: steel.eaveHeightFt,
@@ -233,10 +252,11 @@ export async function persistParsedCostDocument(
     storedDocumentId,
     quoteFileId: context.quoteFileId ?? null,
     documentId: context.documentId ?? null,
-    jobId: context.jobId ?? insulation.projectId ?? null,
+    jobId: canonicalJobId ?? resolveCanonicalJobId(insulation.projectId),
     projectId: context.projectId ?? insulation.projectId ?? null,
     clientId: context.clientId ?? null,
     vendorId: context.vendorId ?? null,
+    structureType,
     widthFt: insulation.widthFt,
     lengthFt: insulation.lengthFt,
     eaveHeightFt: insulation.eaveHeightFt,
@@ -275,9 +295,11 @@ export async function persistParsedCostDocument(
 }
 
 function mapSteelSeedRow(row: Record<string, unknown>): Partial<SteelCostDataRecord> {
+  const canonicalJobId = resolveCanonicalJobId(row.job_id, row.project_id);
   return {
     projectId: safeString(row.project_id),
-    jobId: safeString(row.job_id) || safeString(row.project_id),
+    jobId: canonicalJobId,
+    structureType: normalizeStructureType(row.structure_type || 'steel_building'),
     widthFt: safeNumber(row.width_ft),
     lengthFt: safeNumber(row.length_ft),
     eaveHeightFt: safeNumber(row.eave_height_ft),
@@ -303,9 +325,11 @@ function mapSteelSeedRow(row: Record<string, unknown>): Partial<SteelCostDataRec
 }
 
 function mapInsulationSeedRow(row: Record<string, unknown>): Partial<InsulationCostDataRecord> {
+  const canonicalJobId = resolveCanonicalJobId(row.job_id, row.project_id);
   return {
     projectId: safeString(row.project_id),
-    jobId: safeString(row.job_id) || safeString(row.project_id),
+    jobId: canonicalJobId,
+    structureType: normalizeStructureType(row.structure_type || 'steel_building'),
     widthFt: safeNumber(row.width_ft),
     lengthFt: safeNumber(row.length_ft),
     eaveHeightFt: safeNumber(row.eave_height_ft),

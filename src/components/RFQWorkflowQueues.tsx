@@ -9,6 +9,7 @@ import { useSettings } from '@/context/SettingsContext';
 import { supabase } from '@/integrations/supabase/client';
 import { quoteFileFromRow } from '@/lib/supabaseMappers';
 import { getQuoteFileUrl, uploadQuoteFile } from '@/lib/quoteFileStorage';
+import { doesQuoteMatchAssigneeFilter, isEstimatorAssignedToQuote, type QuoteAssigneeFilter } from '@/lib/rfqWorkflow';
 import { getUserIdsForRole, notifyUsers } from '@/lib/workflowNotifications';
 import type { Quote, QuoteFileRecord, WorkflowStatus } from '@/types';
 import { toast } from 'sonner';
@@ -97,7 +98,11 @@ function QueueCard({
   );
 }
 
-export function RFQWorkflowQueues() {
+export function RFQWorkflowQueues({
+  assigneeFilter,
+}: {
+  assigneeFilter?: QuoteAssigneeFilter;
+}) {
   const navigate = useNavigate();
   const { quotes, updateQuote } = useAppContext();
   const { currentUser, hasAnyRole } = useRoles();
@@ -107,9 +112,10 @@ export function RFQWorkflowQueues() {
   const rfqDocuments = useMemo(
     () => quotes.filter(quote =>
       !quote.isDeleted &&
-      (quote.documentType === 'rfq' || quote.documentType === 'dealer_rfq')
+      (quote.documentType === 'rfq' || quote.documentType === 'dealer_rfq') &&
+      doesQuoteMatchAssigneeFilter(quote, assigneeFilter)
     ),
-    [quotes],
+    [assigneeFilter, quotes],
   );
 
   const salesQueue = useMemo(() => (
@@ -125,8 +131,16 @@ export function RFQWorkflowQueues() {
   ), [currentUser.id, currentUser.name, hasAnyRole, rfqDocuments]);
 
   const estimatorQueue = useMemo(() => (
-    rfqDocuments.filter(quote => ESTIMATOR_QUEUE_STATUSES.includes(quote.workflowStatus))
-  ), [rfqDocuments]);
+    rfqDocuments.filter(quote =>
+      ESTIMATOR_QUEUE_STATUSES.includes(quote.workflowStatus) &&
+      isEstimatorAssignedToQuote(
+        quote,
+        currentUser.id,
+        currentUser.name,
+        hasAnyRole('admin', 'owner'),
+      )
+    )
+  ), [currentUser.id, currentUser.name, hasAnyRole, rfqDocuments]);
 
   const operationsQueue = useMemo(() => (
     rfqDocuments.filter(quote => OPERATIONS_QUEUE_STATUSES.includes(quote.workflowStatus))
