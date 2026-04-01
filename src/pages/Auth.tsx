@@ -141,7 +141,7 @@ export default function Auth() {
   // Render Password Reset Form
   if (forgotMode) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-background p-4">
+      <div className="flex items-center justify-center min-h-screen bg-background p-4" data-testid="auth-page">
         <Card className="w-full max-w-md border-border/50 shadow-md">
           <CardHeader className="text-center">
             <Building2 className="mx-auto h-10 w-10 text-primary mb-2" />
@@ -170,7 +170,7 @@ export default function Auth() {
   // Render Portal Selection
   if (!portalType) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-background p-4 flex-col gap-6">
+      <div className="flex items-center justify-center min-h-screen bg-background p-4 flex-col gap-6" data-testid="auth-page">
         <div className="text-center space-y-2 max-w-lg mb-4">
           <div className="inline-flex items-center justify-center p-4 bg-primary/10 rounded-full mb-2">
             <Building2 className="h-10 w-10 text-primary" />
@@ -188,6 +188,7 @@ export default function Auth() {
             return (
               <Card 
                 key={key} 
+                data-testid={`auth-portal-${key}`}
                 className="cursor-pointer border-border/50 shadow-sm hover:shadow-lg hover:border-primary/50 transition-all group overflow-hidden relative"
                 onClick={() => setPortalType(key)}
               >
@@ -214,7 +215,7 @@ export default function Auth() {
   const Icon = details.icon;
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-background p-4 flex-col">
+    <div className="flex items-center justify-center min-h-screen bg-background p-4 flex-col" data-testid="auth-page">
       <div className="w-full max-w-md mb-6">
         <Button 
           variant="ghost" 
@@ -251,7 +252,7 @@ export default function Auth() {
                   <Label htmlFor="signin-password">{t('auth.password')}</Label>
                   <Input id="signin-password" type="password" value={password} onChange={e => setPassword(e.target.value)} required />
                 </div>
-                <Button type="submit" className="w-full" disabled={submitting}>
+                <Button type="submit" className="w-full" disabled={submitting} data-testid="auth-signin-submit">
                   {submitting ? t('auth.signingIn') : t('auth.signIn')}
                 </Button>
                 <Button type="button" variant="link" className="w-full text-sm" onClick={() => setForgotMode(true)}>

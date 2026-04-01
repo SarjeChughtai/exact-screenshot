@@ -72,7 +72,7 @@ export default function QuoteLog() {
   }, [assigneeParam, canFilterAssignee, currentUser.id, currentUser.name, estimatorOptions, isEstimatorOnly]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-testid="quote-log-page" data-workspace-view={workspaceView}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Tabs value={workspaceView} onValueChange={value => updateSearchParam('view', value)}>
           <TabsList>
@@ -83,7 +83,7 @@ export default function QuoteLog() {
 
         {canFilterAssignee && (
           <Select value={assigneeParam} onValueChange={value => updateSearchParam('assignee', value)}>
-            <SelectTrigger className="w-56">
+            <SelectTrigger className="w-56" data-testid="quote-log-assignee-filter">
               <SelectValue placeholder="All assignees" />
             </SelectTrigger>
             <SelectContent>

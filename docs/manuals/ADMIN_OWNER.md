@@ -27,8 +27,10 @@
 - revert mistaken quote-to-deal conversions
 - filter `Quote Log` by estimator assignee in either `log` or `pipeline` mode
 - use `Opportunities` filters to review owner and estimator load across the CRM workspace
+- review dealer-facing project state from `/dealer-log` using stage, search, and table/cards views without exposing hidden duplicates or internal cost-file detail
 
 ## Best practices
 - use admin visibility to audit, not to bypass normal workflow discipline
 - check the tool change log after deployments or major merges
+- use `docs/WORKFLOW_COMPLETION_PHASE_2_RELEASE_CHECKLIST.md` before deployment when workflow-completion features are in scope
 - keep the dealer and vendor experience clean by avoiding unnecessary manual overrides

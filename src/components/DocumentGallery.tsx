@@ -43,12 +43,13 @@ export function DocumentGallery({ jobId, onSelectFile }: DocumentGalleryProps) {
   }, [jobId, viewMode]);
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" data-testid="document-gallery">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Document sets</h3>
           <div className="flex bg-muted rounded-md p-0.5 ml-2">
             <button
+              data-testid="document-gallery-current-job"
               onClick={() => setViewMode('job')}
               disabled={!jobId}
               className={cn(
@@ -59,6 +60,7 @@ export function DocumentGallery({ jobId, onSelectFile }: DocumentGalleryProps) {
               <Search className="h-2.5 w-2.5" /> Current Job
             </button>
             <button
+              data-testid="document-gallery-all-recent"
               onClick={() => setViewMode('recent')}
               className={cn(
                 "px-2 py-1 text-[10px] rounded-sm transition-all flex items-center gap-1",
@@ -92,7 +94,7 @@ export function DocumentGallery({ jobId, onSelectFile }: DocumentGalleryProps) {
       ) : (
         <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
           {files.map((file) => (
-            <div key={file.id} className="group flex items-center justify-between p-2 rounded border bg-card hover:border-primary/50 transition-colors">
+            <div key={file.id} className="group flex items-center justify-between p-2 rounded border bg-card hover:border-primary/50 transition-colors" data-testid={`document-gallery-file-${file.id}`}>
               <div className="flex items-center gap-2 overflow-hidden">
                 <FileText className="h-4 w-4 text-primary shrink-0" />
                 <div className="overflow-hidden">
@@ -118,6 +120,7 @@ export function DocumentGallery({ jobId, onSelectFile }: DocumentGalleryProps) {
                 variant="outline" 
                 size="sm" 
                 className="h-7 px-2 text-[10px] bg-primary/5 hover:bg-primary/10 border-primary/20 text-primary" 
+                data-testid={`document-gallery-pull-${file.id}`}
                 onClick={() => onSelectFile(file)}
               >
                 Pull Data

@@ -136,5 +136,21 @@ This file records the summary of work done in each interactive AI session.
   - `npm test` passed with 12 files / 42 tests
   - `npm run build` passed
   - pre-existing Vite warnings remain for large chunks and mixed static/dynamic `xlsx` / `pdfjs-dist` imports
+- Implemented workflow completion close-out plus dealer experience phase 3:
+  - normalized dealer workspace aggregation now lives in `src/lib/dealerProjectTracker.ts`
+  - `DealerLog` now supports stage filtering, text search, and `cards` / `table` views with query-param persistence
+  - dealer project rows now show latest quote status, next dealer-visible action, latest update timestamp, and dealer-safe document summaries
+  - added minimal stable test selectors for auth, RFQ workspace, dealer workspace, opportunities, deals, production, freight, document gallery, and internal quote builder hydration fields
+  - replaced the broken Playwright setup with a plain local config and fixture:
+    - `playwright.config.ts`
+    - `playwright-fixture.ts`
+    - `tests/e2e/workflow-smoke.spec.ts`
+  - added `npm run test:e2e`
+  - added `docs/WORKFLOW_COMPLETION_PHASE_2_RELEASE_CHECKLIST.md`
+- Verification:
+  - `npm test` passed with 12 files / 44 tests
+  - `npm run build` passed
+  - `npm run test:e2e` passed the unauthenticated smoke path and skipped authenticated flows because local smoke credentials were not configured in this session
+  - pre-existing Vite warnings remain for large chunks and mixed static/dynamic `xlsx` / `pdfjs-dist` imports
 
 ---

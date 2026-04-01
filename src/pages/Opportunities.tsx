@@ -180,7 +180,7 @@ export default function Opportunities() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-testid="opportunities-page">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold flex items-center gap-2">
@@ -218,7 +218,7 @@ export default function Opportunities() {
 
       <div className="flex flex-wrap gap-3">
         <Select value={statusFilter} onValueChange={value => setStatusFilter(value as OpportunityStatus | 'all')}>
-          <SelectTrigger className="w-44"><SelectValue placeholder="All statuses" /></SelectTrigger>
+          <SelectTrigger className="w-44" data-testid="opportunities-status-filter"><SelectValue placeholder="All statuses" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All statuses</SelectItem>
             {STATUS_OPTIONS.map(status => (
@@ -228,13 +228,14 @@ export default function Opportunities() {
         </Select>
         <Input
           className="w-72"
+          data-testid="opportunities-search-input"
           placeholder="Search job, client, owner, estimator..."
           value={search}
           onChange={event => setSearch(event.target.value)}
         />
         {canFilterOwnership && (
           <Select value={ownerFilter} onValueChange={setOwnerFilter}>
-            <SelectTrigger className="w-48"><SelectValue placeholder="All sales reps" /></SelectTrigger>
+            <SelectTrigger className="w-48" data-testid="opportunities-owner-filter"><SelectValue placeholder="All sales reps" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All sales reps</SelectItem>
               {ownerOptions.map(option => (
@@ -245,7 +246,7 @@ export default function Opportunities() {
         )}
         {canFilterOwnership && (
           <Select value={estimatorFilter} onValueChange={setEstimatorFilter}>
-            <SelectTrigger className="w-48"><SelectValue placeholder="All estimators" /></SelectTrigger>
+            <SelectTrigger className="w-48" data-testid="opportunities-estimator-filter"><SelectValue placeholder="All estimators" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All estimators</SelectItem>
               {estimatorOptions.map(option => (

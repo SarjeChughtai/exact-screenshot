@@ -57,6 +57,11 @@ Users belong to specialized portals:
   - `deals`, `production`, `freight`, and `opportunities` now share the same derived post-sale signals for next step, blocked reason, freight-ready state, and milestone progress
   - `MasterDeals` and `FreightBoard` now expose document-vault summaries using the same primary-visible-set / hidden-duplicate language already used in logs and opportunities
   - the opportunities workspace now supports internal filtering by sales rep owner and estimator in both table and board workflows
+  - `DealerLog` is now a full dealer workspace with normalized project rows, stage filtering, text search, and `cards` / `table` views on the same route
+  - each dealer project now exposes current stage, latest quote status, next dealer-visible action, latest activity timestamp, and dealer-safe document summaries
+  - Playwright verification is now repo-local and no longer depends on the missing `lovable-agent-playwright-config` package
+  - authenticated smoke coverage now lives in `tests/e2e/workflow-smoke.spec.ts`, gated by local env credentials and optional target data
+  - branch release verification is documented in `docs/WORKFLOW_COMPLETION_PHASE_2_RELEASE_CHECKLIST.md`
 
 ## 📍 Navigational Rules
 - Dealers default to the `dealer-log` page.
@@ -67,3 +72,4 @@ Users belong to specialized portals:
 - Opportunity management should happen from one portal-native workspace, with quote/deal pages acting as launch points rather than competing sources of lifecycle truth.
 - Production progress should be calculated from normalized deal stages, even when the UI uses custom configured display labels.
 - RFQ routing should stay on `/quote-log`; `view=log|pipeline`, `documentId`, and `assignee` query params are the supported deep-link pattern for RFQ workspace navigation.
+- Dealer workspace routing should stay on `/dealer-log`; `stage`, `search`, and `view` are the supported query params for dealer workflow navigation.

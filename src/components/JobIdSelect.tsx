@@ -29,6 +29,7 @@ interface JobIdSelectProps {
   allowedStates?: SharedJobState[];
   searchPlaceholder?: string;
   includeCreateNew?: boolean;
+  triggerTestId?: string;
 }
 
 export function JobIdSelect({
@@ -42,6 +43,7 @@ export function JobIdSelect({
   allowedStates,
   searchPlaceholder = 'Search by job ID, client, or job name...',
   includeCreateNew = true,
+  triggerTestId,
 }: JobIdSelectProps) {
   const [open, setOpen] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -83,6 +85,7 @@ export function JobIdSelect({
             variant="outline"
             role="combobox"
             aria-expanded={open}
+            data-testid={triggerTestId}
             className={cn('w-full justify-between font-normal', triggerClassName)}
           >
             <span className="truncate text-left">

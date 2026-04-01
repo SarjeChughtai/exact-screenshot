@@ -1123,7 +1123,7 @@ export default function InternalQuoteBuilder() {
   const perLbInRange = perLbCheck !== null && perLbCheck >= 2.15 && perLbCheck <= 2.30;
 
   return (
-    <div className="max-w-6xl space-y-6">
+    <div className="max-w-6xl space-y-6" data-testid="internal-quote-builder-page">
       <div>
         <h2 className="text-2xl font-bold text-foreground">Internal Quote Builder</h2>
         <p className="text-sm text-muted-foreground mt-1">Drop MBS + insulation cost files, apply markups, generate internal sales quotes</p>
@@ -1221,15 +1221,15 @@ export default function InternalQuoteBuilder() {
             <div className="grid grid-cols-3 gap-3">
               <div>
                 <Label className="text-xs">Weight (lbs)</Label>
-                <Input className="input-blue mt-1" type="number" value={costData.steelWeightLbs || ''} onChange={e => setCostData(d => ({ ...d, steelWeightLbs: parseFloat(e.target.value) || 0, totalSupplierCost: (parseFloat(e.target.value) || 0) * d.supplierCostPerLb }))} />
+                <Input className="input-blue mt-1" data-testid="internal-quote-weight" type="number" value={costData.steelWeightLbs || ''} onChange={e => setCostData(d => ({ ...d, steelWeightLbs: parseFloat(e.target.value) || 0, totalSupplierCost: (parseFloat(e.target.value) || 0) * d.supplierCostPerLb }))} />
               </div>
               <div>
                 <Label className="text-xs">Supplier $/lb</Label>
-                <Input className="input-blue mt-1" type="number" step="0.01" value={costData.supplierCostPerLb || ''} onChange={e => setCostData(d => ({ ...d, supplierCostPerLb: parseFloat(e.target.value) || 0, totalSupplierCost: d.steelWeightLbs * (parseFloat(e.target.value) || 0) }))} />
+                <Input className="input-blue mt-1" data-testid="internal-quote-cost-per-lb" type="number" step="0.01" value={costData.supplierCostPerLb || ''} onChange={e => setCostData(d => ({ ...d, supplierCostPerLb: parseFloat(e.target.value) || 0, totalSupplierCost: d.steelWeightLbs * (parseFloat(e.target.value) || 0) }))} />
               </div>
               <div>
                 <Label className="text-xs">Total Supplier Cost</Label>
-                <Input className="input-blue mt-1" type="number" value={costData.totalSupplierCost || ''} readOnly />
+                <Input className="input-blue mt-1" data-testid="internal-quote-total-cost" type="number" value={costData.totalSupplierCost || ''} readOnly />
               </div>
             </div>
             {costData.accessories.length > 0 && (
@@ -1282,7 +1282,7 @@ export default function InternalQuoteBuilder() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label className="text-xs">Job ID</Label>
-                <JobIdSelect value={form.jobId} onValueChange={handleJobIdChange} deals={deals} allowedStates={['rfq', 'internal_quote']} placeholder="Auto / type to search" />
+                <JobIdSelect value={form.jobId} onValueChange={handleJobIdChange} deals={deals} allowedStates={['rfq', 'internal_quote']} placeholder="Auto / type to search" triggerTestId="internal-quote-job-id" />
               </div>
               <div>
                 <Label className="text-xs">Job Name</Label>
@@ -1313,8 +1313,8 @@ export default function InternalQuoteBuilder() {
                 Location & Auto Freight
               </Label>
               <div className="grid grid-cols-3 gap-2">
-                <Input className="input-blue" value={form.postalCode} onChange={e => set('postalCode', e.target.value)} placeholder="Postal code" onKeyDown={e => e.key === 'Enter' && void handleLocationLookup()} />
-                <Input className="input-blue" value={form.city} onChange={e => set('city', e.target.value)} placeholder="City" />
+                <Input className="input-blue" data-testid="internal-quote-postal-code" value={form.postalCode} onChange={e => set('postalCode', e.target.value)} placeholder="Postal code" onKeyDown={e => e.key === 'Enter' && void handleLocationLookup()} />
+                <Input className="input-blue" data-testid="internal-quote-city" value={form.city} onChange={e => set('city', e.target.value)} placeholder="City" />
                 <Button size="sm" variant="outline" onClick={() => void handleLocationLookup()}>Lookup</Button>
               </div>
               {locationSource && <p className="text-[10px] text-muted-foreground">{locationSource}</p>}

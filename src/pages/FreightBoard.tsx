@@ -392,7 +392,7 @@ export default function FreightBoard() {
   const canEditRecord = (assignedFreightUserId?: string | null) => canManageAllFreight || assignedFreightUserId === currentUser.id;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-testid="freight-board-page">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold flex items-center gap-2">
