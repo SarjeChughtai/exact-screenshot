@@ -17,6 +17,7 @@ import { supabase } from '@/integrations/supabase/client';
 import type { PaymentEntry, PaymentDirection, PaymentType } from '@/types';
 import { toast } from 'sonner';
 import { Pencil, Trash2, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { jobIdsMatch, resolveCanonicalJobId } from '@/lib/jobIds';
 
 const DIRECTIONS: PaymentDirection[] = ['Client Payment IN', 'Vendor Payment OUT', 'Refund IN', 'Refund OUT'];
 const TYPES: PaymentType[] = ['Deposit', 'Progress Payment', 'Final Payment', 'Freight', 'Insulation', 'Drawings', 'Other'];
@@ -56,7 +57,7 @@ function computeTax(amount: number, province: string, taxOverride: boolean, taxO
 
 export default function PaymentLedger() {
   const { payments, deals, clients, vendors, addPayment, updatePayment, refreshData, deletePayment } = useAppContext();
-  const { visibleJobIds } = useSharedJobs({ allowedStates: ['deal'] });
+  const { visibleJobIds } = useSharedJobs();
   const [showForm, setShowForm] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncSummary, setSyncSummary] = useState('');
@@ -100,11 +101,12 @@ export default function PaymentLedger() {
   };
 
   const resolveProvince = (f: typeof BLANK_FORM, jobId: string) => {
+    const matchingDeal = visibleDeals.find(deal => jobIdsMatch(deal.jobId, jobId));
     if (!isClientDirection(f.direction)) {
       return f.vendorProvinceOverride || vendors.find(v => v.id === f.vendorId)?.province
-        || visibleDeals.find(d => d.jobId === jobId)?.province || 'ON';
+        || matchingDeal?.province || 'ON';
     }
-    return visibleDeals.find(d => d.jobId === jobId)?.province || 'ON';
+    return matchingDeal?.province || 'ON';
   };
 
   const visibleDeals = useMemo(
@@ -113,18 +115,19 @@ export default function PaymentLedger() {
   );
 
   const visiblePayments = useMemo(
-    () => payments.filter(payment => visibleJobIds.has(payment.jobId)),
+    () => payments.filter(payment => visibleJobIds.has(resolveCanonicalJobId(payment.jobId) || payment.jobId)),
     [payments, visibleJobIds],
   );
 
-  const save = () => {
+  const save = async () => {
+    const normalizedJobId = resolveCanonicalJobId(form.jobId) || form.jobId.trim();
     const amount = parseFloat(form.amountExclTax) || 0;
-    if (!form.jobId || !amount) { toast.error('Job ID and amount required'); return; }
-    const province = resolveProvince(form, form.jobId);
+    if (!normalizedJobId || !amount) { toast.error('Job ID and amount required'); return; }
+    const province = resolveProvince(form, normalizedJobId);
     const { taxRate, taxAmount, totalInclTax } = computeTax(amount, province, form.taxOverride, form.taxOverrideRate);
     const entry: PaymentEntry = {
       id: crypto.randomUUID(),
-      date: form.date, jobId: form.jobId,
+      date: form.date, jobId: normalizedJobId,
       clientVendorName: form.clientVendorName,
       clientId: isClientDirection(form.direction) ? (form.clientId && form.clientId !== '__manual' ? form.clientId : undefined) : undefined,
       vendorId: !isClientDirection(form.direction) ? (form.vendorId && form.vendorId !== '__manual' ? form.vendorId : undefined) : undefined,
@@ -136,7 +139,7 @@ export default function PaymentLedger() {
       paymentMethod: form.paymentMethod, referenceNumber: form.referenceNumber,
       qbSynced: false, notes: form.notes,
     };
-    addPayment(entry);
+    await addPayment(entry);
     setShowForm(false);
     setForm(BLANK_FORM);
     toast.success('Payment recorded');
@@ -166,14 +169,15 @@ export default function PaymentLedger() {
     setPendingConfirmEdit(true);
   };
 
-  const confirmSaveEdit = () => {
+  const confirmSaveEdit = async () => {
     if (!editingPayment) return;
     if (!editAuditNote.trim()) { toast.error('Audit note required'); return; }
     const amount = parseFloat(editForm.amountExclTax) || 0;
-    const province = resolveProvince(editForm, editForm.jobId);
+    const normalizedJobId = resolveCanonicalJobId(editForm.jobId) || editForm.jobId.trim();
+    const province = resolveProvince(editForm, normalizedJobId);
     const { taxRate, taxAmount, totalInclTax } = computeTax(amount, province, editForm.taxOverride, editForm.taxOverrideRate);
-    updatePayment(editingPayment.id, {
-      date: editForm.date, jobId: editForm.jobId,
+    await updatePayment(editingPayment.id, {
+      date: editForm.date, jobId: normalizedJobId,
       clientVendorName: editForm.clientVendorName,
       clientId: isClientDirection(editForm.direction) ? (editForm.clientId && editForm.clientId !== '__manual' ? editForm.clientId : undefined) : undefined,
       vendorId: !isClientDirection(editForm.direction) ? (editForm.vendorId && editForm.vendorId !== '__manual' ? editForm.vendorId : undefined) : undefined,
@@ -306,8 +310,8 @@ export default function PaymentLedger() {
               <Input className="input-blue mt-1" type="date" value={form.date} onChange={e => set('date', e.target.value)} />
             </div>
             <div>
-              <Label className="text-xs">Job ID</Label>
-          <JobIdSelect value={form.jobId} onValueChange={v => set('jobId', v)} deals={visibleDeals} allowedStates={['deal']} />
+                <Label className="text-xs">Job ID</Label>
+          <JobIdSelect value={form.jobId} onValueChange={v => set('jobId', v)} />
             </div>
             <div>
               <Label className="text-xs">Direction</Label>
@@ -594,7 +598,7 @@ export default function PaymentLedger() {
                   </div>
                   <div>
                     <Label className="text-xs">Job ID</Label>
-                    <JobIdSelect value={editForm.jobId} onValueChange={v => setEdit('jobId', v)} deals={visibleDeals} allowedStates={['deal']} />
+                    <JobIdSelect value={editForm.jobId} onValueChange={v => setEdit('jobId', v)} />
                   </div>
                   <div>
                     <Label className="text-xs">Direction</Label>

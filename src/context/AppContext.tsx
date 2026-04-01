@@ -50,6 +50,13 @@ import {
   buildProductionShadowRecord,
   deriveDealProductionStatusFromRecord,
 } from '@/lib/productionLifecycle';
+import { jobIdsMatch, resolveCanonicalJobId } from '@/lib/jobIds';
+import {
+  buildClientSeedForLedger,
+  buildVendorSeedForLedger,
+  findClientRecordForLedger,
+  findVendorRecordForLedger,
+} from '@/lib/paymentLedgerIntegrity';
 
 interface AppState {
   quotes: Quote[];
@@ -83,8 +90,8 @@ interface AppContextType extends AppState {
   upsertDealMilestone: (jobId: string, milestoneKey: DealMilestone['milestoneKey'], isComplete: boolean, notes?: string) => Promise<void>;
   addInternalCost: (ic: InternalCost) => void;
   updateInternalCost: (jobId: string, updates: Partial<InternalCost>) => void;
-  addPayment: (p: PaymentEntry) => void;
-  updatePayment: (id: string, updates: Partial<PaymentEntry>) => void;
+  addPayment: (p: PaymentEntry) => Promise<void>;
+  updatePayment: (id: string, updates: Partial<PaymentEntry>) => Promise<void>;
   deletePayment: (id: string) => void;
   upsertCommissionPayout: (payout: CommissionPayout) => Promise<void>;
   deleteCommissionPayout: (id: string) => Promise<void>;
@@ -105,7 +112,7 @@ interface AppContextType extends AppState {
   updateEstimate: (id: string, updates: Partial<Estimate>) => void;
   deleteEstimate: (id: string) => void;
   allocateJobId: () => Promise<string>;
-  quickAddClient: (clientId: string, clientName: string) => Promise<Client | null>;
+  quickAddClient: (clientId: string, clientName: string, jobId?: string) => Promise<Client | null>;
   quickAddVendor: (vendorName: string, province?: string) => Promise<Vendor | null>;
   refreshData: () => Promise<void>;
 }
@@ -650,11 +657,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [currentUser]);
 
   // --- Clients ---
-  const quickAddClient = useCallback(async (clientId: string, clientName: string): Promise<Client | null> => {
+  const quickAddClient = useCallback(async (clientId: string, clientName: string, jobId?: string): Promise<Client | null> => {
+    const existingClient = state.clients.find(client =>
+      client.id === clientId
+      || client.clientId === clientId
+      || (!!clientName && (
+        client.clientName.trim().toLowerCase() === clientName.trim().toLowerCase()
+        || (client.name || '').trim().toLowerCase() === clientName.trim().toLowerCase()
+      )),
+    );
+
+    if (existingClient) return existingClient;
+
     try {
       const { data, error } = await supabase
         .from('clients')
-        .insert({ client_id: clientId, client_name: clientName, job_ids: [] })
+        .insert({ client_id: clientId, client_name: clientName, job_ids: jobId ? [jobId] : [] })
         .select()
         .single();
       if (error || !data) return null;
@@ -664,9 +682,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } catch {
       return null;
     }
-  }, []);
+  }, [state.clients]);
 
   const quickAddVendor = useCallback(async (vendorName: string, province = 'ON'): Promise<Vendor | null> => {
+    const existingVendor = state.vendors.find(vendor =>
+      vendor.id === vendorName
+      || vendor.name.trim().toLowerCase() === vendorName.trim().toLowerCase(),
+    );
+    if (existingVendor) return existingVendor;
+
     try {
       const { data, error } = await supabase
         .from('vendors')
@@ -686,7 +710,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } catch {
       return null;
     }
-  }, []);
+  }, [state.vendors]);
 
   // Upsert client: create if missing, append jobId to job_ids
   const upsertClientJob = useCallback(async (clientId: string, clientName: string, jobId: string) => {
@@ -698,7 +722,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         .maybeSingle();
 
       if (existing) {
-        const newJobIds = [...(existing.job_ids || []), jobId];
+        const newJobIds = Array.from(new Set([...(existing.job_ids || []), jobId]));
         await supabase.from('clients').update({ job_ids: newJobIds }).eq('client_id', clientId);
         setState(prev => ({
           ...prev,
@@ -718,6 +742,90 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
     } catch {}
   }, []);
+
+  const ensurePaymentIntegrity = useCallback(async (payment: PaymentEntry) => {
+    const canonicalJobId = resolveCanonicalJobId(payment.jobId) || payment.jobId.trim();
+    const linkedDeal = state.deals.find(deal => jobIdsMatch(deal.jobId, canonicalJobId)) || null;
+    const isClientPaymentDirection = payment.direction === 'Client Payment IN' || payment.direction === 'Refund OUT';
+
+    let nextPayment: PaymentEntry = {
+      ...payment,
+      jobId: canonicalJobId,
+      clientVendorName: payment.clientVendorName.trim(),
+    };
+
+    if (isClientPaymentDirection) {
+      const matchingClient = findClientRecordForLedger(state.clients, {
+        clientId: payment.clientId,
+        clientVendorName: payment.clientVendorName,
+        linkedDeal,
+      });
+
+      const client = matchingClient || await quickAddClient(
+        buildClientSeedForLedger({
+          explicitClientId: payment.clientId,
+          clientVendorName: payment.clientVendorName,
+          linkedDeal,
+        }).clientId,
+        buildClientSeedForLedger({
+          explicitClientId: payment.clientId,
+          clientVendorName: payment.clientVendorName,
+          linkedDeal,
+        }).clientName,
+        canonicalJobId,
+      );
+
+      if (client) {
+        await upsertClientJob(client.clientId, client.clientName || client.name || nextPayment.clientVendorName, canonicalJobId);
+        nextPayment = {
+          ...nextPayment,
+          clientId: client.id,
+          vendorId: undefined,
+          clientVendorName: client.clientName || client.name || nextPayment.clientVendorName,
+        };
+      } else {
+        nextPayment = {
+          ...nextPayment,
+          clientId: undefined,
+          vendorId: undefined,
+        };
+      }
+    } else {
+      const matchingVendor = findVendorRecordForLedger(state.vendors, {
+        vendorId: payment.vendorId,
+        clientVendorName: payment.clientVendorName,
+      });
+
+      const vendor = matchingVendor || await quickAddVendor(
+        buildVendorSeedForLedger({
+          clientVendorName: payment.clientVendorName,
+          province: payment.vendorProvinceOverride || payment.province || linkedDeal?.province,
+        }).vendorName,
+        buildVendorSeedForLedger({
+          clientVendorName: payment.clientVendorName,
+          province: payment.vendorProvinceOverride || payment.province || linkedDeal?.province,
+        }).province,
+      );
+
+      if (vendor) {
+        nextPayment = {
+          ...nextPayment,
+          clientId: undefined,
+          vendorId: vendor.id,
+          clientVendorName: vendor.name,
+          vendorProvinceOverride: payment.vendorProvinceOverride || vendor.province || undefined,
+        };
+      } else {
+        nextPayment = {
+          ...nextPayment,
+          clientId: undefined,
+          vendorId: undefined,
+        };
+      }
+    }
+
+    return nextPayment;
+  }, [quickAddClient, quickAddVendor, state.clients, state.deals, state.vendors, upsertClientJob]);
 
   // --- Deals ---
   const addDeal = useCallback(async (d: Deal) => {
@@ -844,28 +952,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // --- Payments ---
   const addPayment = useCallback(async (p: PaymentEntry) => {
-    setState(prev => ({ ...prev, payments: [...prev.payments, p] }));
-    logAudit(currentUser?.name || 'System', 'CREATE', 'Payment', p.id, p);
+    const nextPayment = await ensurePaymentIntegrity(p);
+    setState(prev => ({ ...prev, payments: [...prev.payments, nextPayment] }));
+    logAudit(currentUser?.name || 'System', 'CREATE', 'Payment', nextPayment.id, nextPayment);
     try {
-      const row = paymentToRow(p);
+      const row = paymentToRow(nextPayment);
       await supabase.from('payments').insert(row as any).select().single();
     } catch {}
-  }, [currentUser]);
+  }, [currentUser, ensurePaymentIntegrity]);
 
   const updatePayment = useCallback(async (id: string, updates: Partial<PaymentEntry>) => {
+    const existingPayment = state.payments.find(payment => payment.id === id);
+    if (!existingPayment) return;
+
+    const nextPayment = await ensurePaymentIntegrity({ ...existingPayment, ...updates });
+
     setState(prev => {
-      const existing = prev.payments.find(p => p.id === id);
-      if (existing) logAudit(currentUser?.name || 'System', 'UPDATE', 'Payment', id, updates, existing);
+      if (existingPayment) logAudit(currentUser?.name || 'System', 'UPDATE', 'Payment', id, nextPayment, existingPayment);
       return {
         ...prev,
-        payments: prev.payments.map(p => p.id === id ? { ...p, ...updates } : p),
+        payments: prev.payments.map(payment => payment.id === id ? nextPayment : payment),
       };
     });
     try {
-      const row = paymentToRow(updates);
+      const row = paymentToRow(nextPayment);
       await supabase.from('payments').update(row as any).eq('id', id);
     } catch {}
-  }, [currentUser]);
+  }, [currentUser, ensurePaymentIntegrity, state.payments]);
 
   const deletePayment = useCallback(async (id: string) => {
     setState(prev => {
