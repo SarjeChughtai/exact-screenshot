@@ -81,5 +81,19 @@ This file records the summary of work done in each interactive AI session.
   - internal quote historical-file pulls now prefer normalized warehouse rows before raw AI output
   - added portal-native `opportunities` and `deal_milestones` groundwork in code plus migration `20260331233000_add_portal_opportunities_and_document_governance.sql`
   - added opportunity sync hooks in `AppContext`, milestone checklist UI in `MasterDeals`, and readiness visibility in `FreightBoard`
+  - extended dealer experience with a project tracker in `DealerLog`:
+    - derived stage labels for request submitted, estimating, quote ready, won, lost, in production, freight booked, and delivered
+    - direct PDF access from dealer-visible documents on the same job
+  - extended freight workflow with manual posting:
+    - separate pre-sale estimate section
+    - editable freight posting dialog for pre-sale and execution records
+    - assignee name lookup via `get_user_directory`
+  - extended the opportunity model into operator workflow:
+    - `DocumentLogTable` now shows opportunity summary in expanded rows
+    - operators can mark opportunities open, lost, or abandoned from the quote/RFQ log
+- Verification:
+  - `npm test` passed with 9 files / 26 tests
+  - `npm run build` passed
+  - pre-existing Vite warnings remain for large chunks and mixed static/dynamic `xlsx` / `pdfjs-dist` imports
 
 ---

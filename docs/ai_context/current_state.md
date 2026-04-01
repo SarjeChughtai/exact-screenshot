@@ -43,8 +43,13 @@ Users belong to specialized portals:
   - internal quote builder now prefers warehouse-normalized historical document data over raw AI output
   - portal-native opportunity and deal milestone groundwork has been added to the domain model, mapper layer, and app state
   - freight board now shows pickup, delivery, drop-off, execution mode, and milestone-derived freight readiness
+  - dealer portal now includes a project tracker view in `DealerLog` with derived lifecycle stages and direct PDF access
+  - freight now supports a manual pre-sale estimate flow and editable execution/pre-sale posting directly from `FreightBoard`
+  - quote and RFQ logs now expose basic portal-native opportunity status controls (`open`, `lost`, `abandoned`) from the document workflow
 
 ## 📍 Navigational Rules
 - Dealers default to the `dealer-log` page.
 - Onboarding prompts must be non-intrusive (skippable banners).
 - Redirects should be handled at the page level, not global middleware, to allow partial access to unprofiled users.
+- Dealer-facing project status should be derived from shared document, opportunity, and deal state rather than maintained as a separate parallel record.
+- Freight should remain a single job-linked record that can move from `pre_sale` to `execution`, rather than creating duplicate freight rows for one job.

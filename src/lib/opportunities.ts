@@ -54,6 +54,37 @@ export function deriveOpportunityStatusFromDeal(deal: Pick<Deal, 'dealStatus'>):
   return 'won';
 }
 
+export function getQuoteLifecycleForOpportunityStatus(
+  quote: Pick<Quote, 'documentType'>,
+  status: OpportunityStatus,
+): Pick<Quote, 'status' | 'workflowStatus'> {
+  if (status === 'won') {
+    return { status: 'Won', workflowStatus: 'converted_to_deal' };
+  }
+
+  if (status === 'lost') {
+    return { status: 'Lost', workflowStatus: 'lost' };
+  }
+
+  if (status === 'abandoned') {
+    return { status: 'Expired', workflowStatus: 'cancelled' };
+  }
+
+  if (quote.documentType === 'external_quote') {
+    return { status: 'Sent', workflowStatus: 'quote_sent' };
+  }
+
+  if (quote.documentType === 'internal_quote') {
+    return { status: 'Draft', workflowStatus: 'internal_quote_ready' };
+  }
+
+  if (quote.documentType === 'dealer_rfq') {
+    return { status: 'Sent', workflowStatus: 'submitted' };
+  }
+
+  return { status: 'Draft', workflowStatus: 'estimate_needed' };
+}
+
 export function buildOpportunityName(input: {
   jobId: string;
   jobName?: string | null;

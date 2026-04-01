@@ -4,6 +4,7 @@ import {
   buildDealMilestoneRecord,
   buildOpportunityFromDeal,
   buildOpportunityFromQuote,
+  getQuoteLifecycleForOpportunityStatus,
   isDealFreightReady,
 } from '@/lib/opportunities';
 import type { Deal, Quote } from '@/types';
@@ -126,5 +127,19 @@ describe('opportunity and milestone helpers', () => {
 
     expect(isDealFreightReady(incomplete)).toBe(false);
     expect(isDealFreightReady(complete)).toBe(true);
+  });
+
+  it('maps a lost opportunity back onto quote lifecycle state', () => {
+    expect(getQuoteLifecycleForOpportunityStatus(buildQuote(), 'lost')).toEqual({
+      status: 'Lost',
+      workflowStatus: 'lost',
+    });
+  });
+
+  it('reopens a dealer RFQ into submitted state when opportunity is reopened', () => {
+    expect(getQuoteLifecycleForOpportunityStatus(buildQuote({ documentType: 'dealer_rfq' }), 'open')).toEqual({
+      status: 'Sent',
+      workflowStatus: 'submitted',
+    });
   });
 });

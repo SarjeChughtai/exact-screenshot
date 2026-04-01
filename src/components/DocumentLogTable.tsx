@@ -4,12 +4,14 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { formatCurrency, formatNumber, getProvinceTax } from '@/lib/calculations';
 import { useAppContext } from '@/context/AppContext';
+import { useRoles } from '@/context/RoleContext';
+import { getQuoteLifecycleForOpportunityStatus } from '@/lib/opportunities';
 import { isEstimatorAssignedToQuote } from '@/lib/rfqWorkflow';
 import { useSharedJobs } from '@/lib/sharedJobs';
 import { supabase } from '@/integrations/supabase/client';
 import { quoteFileFromRow } from '@/lib/supabaseMappers';
 import { getVisibleOperatorQuoteFiles } from '@/lib/importReview';
-import type { Deal, DocumentType, Quote, QuoteFileRecord, QuoteStatus, SharedJobState } from '@/types';
+import type { Deal, DocumentType, OpportunityStatus, Quote, QuoteFileRecord, QuoteStatus, SharedJobState } from '@/types';
 import { toast } from 'sonner';
 import { Archive, ChevronDown, ChevronRight, Download, Pencil, RotateCcw, Trash2 } from 'lucide-react';
 import { getQuoteFileUrl } from '@/lib/quoteFileStorage';
@@ -44,11 +46,13 @@ export function DocumentLogTable({
   estimatorFilter,
 }: DocumentLogTableProps) {
   const navigate = useNavigate();
-  const { quotes, deals, updateQuote, deleteQuote, restoreQuote, addDeal, updateDeal, deleteDeal, updateOpportunityByJob } = useAppContext();
+  const { quotes, deals, opportunities, updateQuote, deleteQuote, restoreQuote, addDeal, updateDeal, deleteDeal, updateOpportunityByJob } = useAppContext();
+  const { hasAnyRole } = useRoles();
   const { visibleJobIds, stateByJobId } = useSharedJobs();
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showTrash, setShowTrash] = useState(false);
   const [filesByDocumentId, setFilesByDocumentId] = useState<Record<string, QuoteFileRecord[]>>({});
+  const canManageOpportunityStatus = hasAnyRole('admin', 'owner', 'operations', 'sales_rep');
 
   const expectedStateByType: Record<DocumentType, SharedJobState> = {
     rfq: 'rfq',
@@ -249,6 +253,25 @@ export function DocumentLogTable({
     toast.success(`Deal reverted back to quote for ${quote.jobId}`);
   };
 
+  const setOpportunityStatus = (quote: Quote, status: OpportunityStatus) => {
+    if (status === 'open' && deals.some(deal => deal.jobId === quote.jobId)) {
+      toast.error('Reopen the deal through "Revert to Quote" before setting this opportunity back to open.');
+      return;
+    }
+
+    const lifecycle = getQuoteLifecycleForOpportunityStatus(quote, status);
+    updateQuote(quote.id, {
+      ...lifecycle,
+      updatedAt: new Date().toISOString(),
+    });
+    void updateOpportunityByJob(quote.jobId, {
+      status,
+      source: status === 'won' ? 'deal' : quote.documentType,
+      potentialRevenue: quote.grandTotal,
+    });
+    toast.success(`Opportunity for ${quote.jobId} marked ${status}.`);
+  };
+
   const renderRows = (items: Quote[], isTrash = false) => {
     if (items.length === 0) {
       return (
@@ -262,6 +285,7 @@ export function DocumentLogTable({
       const isExpanded = expandedId === quote.id;
       const isFocused = focusDocumentId === quote.id;
       const existingDeal = deals.find(deal => deal.jobId === quote.jobId);
+      const opportunity = opportunities.find(item => item.jobId === quote.jobId);
       const attachedFiles = filesByDocumentId[quote.id] || [];
       const payload = (quote.payload || {}) as Record<string, unknown>;
       const openings = Array.isArray(payload.openings) ? payload.openings as Array<Record<string, unknown>> : [];
@@ -354,6 +378,45 @@ export function DocumentLogTable({
                     <p>Contingency: {formatCurrency(quote.contingency)}</p>
                     <p>Grand Total: {formatCurrency(quote.grandTotal)}</p>
                     <p>Source Document: {quote.sourceDocumentId || 'None'}</p>
+                  </div>
+                </div>
+                <div className="mt-4 rounded-md border bg-background p-4">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                    <div className="space-y-1 text-xs">
+                      <p className="font-semibold text-muted-foreground">Opportunity</p>
+                      <p>Status: <span className="font-medium capitalize">{opportunity?.status || 'open'}</span></p>
+                      <p>Potential Revenue: <span className="font-medium">{formatCurrency(opportunity?.potentialRevenue || quote.grandTotal)}</span></p>
+                      <p>Source: <span className="font-medium">{opportunity?.source || quote.documentType}</span></p>
+                      <p>Owner: <span className="font-medium">{opportunity?.salesRep || quote.salesRep || 'Unassigned'}</span></p>
+                    </div>
+                    {canManageOpportunityStatus && !isTrash && (
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          size="sm"
+                          variant={opportunity?.status === 'open' ? 'default' : 'outline'}
+                          className="h-8 px-3 text-xs"
+                          onClick={() => setOpportunityStatus(quote, 'open')}
+                        >
+                          Mark Open
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant={opportunity?.status === 'lost' ? 'default' : 'outline'}
+                          className="h-8 px-3 text-xs"
+                          onClick={() => setOpportunityStatus(quote, 'lost')}
+                        >
+                          Mark Lost
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant={opportunity?.status === 'abandoned' ? 'default' : 'outline'}
+                          className="h-8 px-3 text-xs"
+                          onClick={() => setOpportunityStatus(quote, 'abandoned')}
+                        >
+                          Mark Abandoned
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 </div>
                 {isRfqDocument && (
