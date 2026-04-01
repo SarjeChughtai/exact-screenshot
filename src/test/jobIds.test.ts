@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildJobIdSearchAlias,
   formatCanonicalJobId,
   jobIdsMatch,
   resolveCanonicalJobId,
@@ -25,5 +26,14 @@ describe('job id helpers', () => {
 
   it('matches equivalent job ids regardless of case or spacing', () => {
     expect(jobIdsMatch('job - 100', 'JOB-100')).toBe(true);
+  });
+
+  it('matches equivalent job ids across underscore and unicode dash variants', () => {
+    expect(jobIdsMatch('C26_1008', 'C26-1008')).toBe(true);
+    expect(jobIdsMatch('C26 – 1008', 'C26-1008')).toBe(true);
+  });
+
+  it('builds a separator-free alias for selector search', () => {
+    expect(buildJobIdSearchAlias('C26 - 1008')).toBe('C261008');
   });
 });

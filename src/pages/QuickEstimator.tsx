@@ -17,15 +17,20 @@ import {
   clearQuickEstimatorActiveState,
   createInitialQuickEstimatorState,
   getNextEstimateLabel,
+  getQuickEstimatorLegacyLinerOption,
   getQuickEstimatorDraftTitle,
   loadQuickEstimatorActiveState,
   loadQuickEstimatorDrafts,
+  normalizeQuickEstimatorGutterMode,
+  normalizeQuickEstimatorLinerMode,
   quickEstimatorStateFromEstimate,
   QUICK_ESTIMATOR_ACTIVE_STATE_KEY,
   QUICK_ESTIMATOR_DRAFTS_KEY,
   saveQuickEstimatorActiveState,
   saveQuickEstimatorDrafts,
   type QuickEstimatorDraft,
+  type QuickEstimatorGutterMode,
+  type QuickEstimatorLinerMode,
   type QuickEstimatorPersistedState,
   type QuickEstimatorResultSnapshot,
 } from '@/lib/estimateWorkflow';
@@ -37,18 +42,22 @@ import { toast } from 'sonner';
 import type { Estimate } from '@/types';
 import { PersonnelSelect } from '@/components/PersonnelSelect';
 import { ClientSelect } from '@/components/ClientSelect';
+import { JobIdSelect } from '@/components/JobIdSelect';
 import { SimilarJobs } from '@/components/SimilarJobs';
+import { mapQuoteToSharedRFQForm } from '@/lib/rfqForm';
+import { jobIdsMatch } from '@/lib/jobIds';
 
 const isBrowser = typeof window !== 'undefined';
 
 export default function QuickEstimator() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { addEstimate, estimates, updateEstimate } = useAppContext();
+  const { addEstimate, estimates, updateEstimate, quotes, deals, clients } = useAppContext();
   const { currentUser, hasAnyRole } = useRoles();
   const { user } = useAuth();
   const isAdminOwner = hasAnyRole('admin', 'owner');
 
+  const [jobId, setJobId] = useState('');
   const [width, setWidth] = useState('');
   const [length, setLength] = useState('');
   const [height, setHeight] = useState('');
@@ -60,10 +69,15 @@ export default function QuickEstimator() {
   const [remoteLevel, setRemoteLevel] = useState('none');
   const [locationInput, setLocationInput] = useState('');
   const [freightSource, setFreightSource] = useState('');
-  const [includeInsulation, setIncludeInsulation] = useState(false);
-  const [insulationGrade, setInsulationGrade] = useState('R20/R20');
-  const [includeGutters, setIncludeGutters] = useState(false);
-  const [linerOption, setLinerOption] = useState('none');
+  const [guttersMode, setGuttersMode] = useState<QuickEstimatorGutterMode>('none');
+  const [guttersPerSide, setGuttersPerSide] = useState('');
+  const [guttersSpacing, setGuttersSpacing] = useState('');
+  const [gutterNotes, setGutterNotes] = useState('');
+  const [linersMode, setLinersMode] = useState<QuickEstimatorLinerMode>('none');
+  const [linerNotes, setLinerNotes] = useState('');
+  const [insulationRequired, setInsulationRequired] = useState(false);
+  const [insulationRoofGrade, setInsulationRoofGrade] = useState('R20/R20');
+  const [insulationWallGrade, setInsulationWallGrade] = useState('R20/R20');
   const [foundationType, setFoundationType] = useState<'slab' | 'frost_wall'>('slab');
   const [selectedFactors, setSelectedFactors] = useState<string[]>(['Clear span up to 80ft']);
   const [contingencyPct, setContingencyPct] = useState('5');
@@ -126,6 +140,7 @@ export default function QuickEstimator() {
       : 'New estimate';
 
   const persistedState = useMemo<QuickEstimatorPersistedState>(() => createInitialQuickEstimatorState({
+    jobId,
     width,
     length,
     height,
@@ -137,10 +152,15 @@ export default function QuickEstimator() {
     remoteLevel,
     locationInput,
     freightSource,
-    includeInsulation,
-    insulationGrade,
-    includeGutters,
-    linerOption: linerOption as QuickEstimatorPersistedState['linerOption'],
+    guttersMode,
+    guttersPerSide,
+    guttersSpacing,
+    gutterNotes,
+    linersMode,
+    linerNotes,
+    insulationRequired,
+    insulationRoofGrade,
+    insulationWallGrade,
     foundationType,
     selectedFactors,
     contingencyPct,
@@ -162,13 +182,19 @@ export default function QuickEstimator() {
     flatMarkupPct,
     foundationType,
     freightSource,
+    gutterNotes,
+    guttersMode,
+    guttersPerSide,
+    guttersSpacing,
     height,
-    includeGutters,
-    includeInsulation,
-    insulationGrade,
+    insulationRequired,
+    insulationRoofGrade,
+    insulationWallGrade,
+    jobId,
     leftEaveHeight,
     length,
-    linerOption,
+    linerNotes,
+    linersMode,
     locationInput,
     pitch,
     postalCode,
@@ -184,6 +210,7 @@ export default function QuickEstimator() {
   ]);
 
   const applyPersistedState = useCallback((nextState: QuickEstimatorPersistedState) => {
+    setJobId(nextState.jobId);
     setWidth(nextState.width);
     setLength(nextState.length);
     setHeight(nextState.height);
@@ -195,10 +222,15 @@ export default function QuickEstimator() {
     setRemoteLevel(nextState.remoteLevel);
     setLocationInput(nextState.locationInput);
     setFreightSource(nextState.freightSource);
-    setIncludeInsulation(nextState.includeInsulation);
-    setInsulationGrade(nextState.insulationGrade);
-    setIncludeGutters(nextState.includeGutters);
-    setLinerOption(nextState.linerOption);
+    setGuttersMode(nextState.guttersMode);
+    setGuttersPerSide(nextState.guttersPerSide);
+    setGuttersSpacing(nextState.guttersSpacing);
+    setGutterNotes(nextState.gutterNotes);
+    setLinersMode(nextState.linersMode);
+    setLinerNotes(nextState.linerNotes);
+    setInsulationRequired(nextState.insulationRequired);
+    setInsulationRoofGrade(nextState.insulationRoofGrade);
+    setInsulationWallGrade(nextState.insulationWallGrade);
     setFoundationType(nextState.foundationType);
     setSelectedFactors(nextState.selectedFactors);
     setContingencyPct(nextState.contingencyPct);
@@ -235,6 +267,77 @@ export default function QuickEstimator() {
     setClientId(client.clientId);
     setClientName(client.clientName);
   };
+
+  const handleJobIdChange = useCallback((nextJobId: string) => {
+    setJobId(nextJobId);
+    if (!nextJobId) return;
+
+    const latestQuote = [...quotes]
+      .filter(quote => !quote.isDeleted && jobIdsMatch(quote.jobId, nextJobId))
+      .sort((left, right) =>
+        new Date(right.updatedAt || right.createdAt || right.date).getTime()
+        - new Date(left.updatedAt || left.createdAt || left.date).getTime(),
+      )[0];
+    const matchingDeal = deals.find(deal => jobIdsMatch(deal.jobId, nextJobId));
+    const matchingClient = clients.find(client => client.jobIds.some(existingJobId => jobIdsMatch(existingJobId, nextJobId)));
+
+    if (latestQuote) {
+      const imported = mapQuoteToSharedRFQForm(latestQuote);
+      const pitchValue = latestQuote.pitch != null
+        ? String(latestQuote.pitch)
+        : imported.roofPitch.endsWith(':12')
+        ? imported.roofPitch.replace(':12', '')
+        : imported.roofPitch;
+
+      setClientId(latestQuote.clientId || matchingClient?.clientId || '');
+      setClientName(latestQuote.clientName || matchingClient?.clientName || matchingClient?.name || '');
+      setSalesRep(latestQuote.salesRep || '');
+      setWidth(latestQuote.width ? String(latestQuote.width) : '');
+      setLength(latestQuote.length ? String(latestQuote.length) : '');
+      setHeight(latestQuote.height ? String(latestQuote.height) : '');
+      setPitch(pitchValue || '1');
+      setProvince(latestQuote.province || 'ON');
+      setCity(latestQuote.city || '');
+      setPostalCode(latestQuote.postalCode || '');
+      setSingleSlope(Boolean(latestQuote.isSingleSlope || imported.buildingStyle === 'Single Slope'));
+      setLeftEaveHeight(latestQuote.leftEaveHeight != null ? String(latestQuote.leftEaveHeight) : imported.lowSide);
+      setRightEaveHeight(latestQuote.rightEaveHeight != null ? String(latestQuote.rightEaveHeight) : imported.highSide);
+      setGuttersMode(imported.gutters);
+      setGuttersPerSide(imported.guttersPerSide);
+      setGuttersSpacing(imported.guttersSpacing);
+      setGutterNotes(imported.gutterNotes);
+      setLinersMode(imported.liners);
+      setLinerNotes(imported.linerNotes);
+      setInsulationRequired(imported.insulationRequired);
+      setInsulationRoofGrade(imported.insulationRoofGrade || 'R20/R20');
+      setInsulationWallGrade(imported.insulationWallGrade || imported.insulationRoofGrade || 'R20/R20');
+      if (latestQuote.foundationType === 'slab' || latestQuote.foundationType === 'frost_wall') {
+        setFoundationType(latestQuote.foundationType);
+      }
+      return;
+    }
+
+    if (matchingDeal) {
+      setClientId(matchingDeal.clientId || matchingClient?.clientId || '');
+      setClientName(matchingDeal.clientName || matchingClient?.clientName || matchingClient?.name || '');
+      setSalesRep(matchingDeal.salesRep || '');
+      setWidth(matchingDeal.width ? String(matchingDeal.width) : '');
+      setLength(matchingDeal.length ? String(matchingDeal.length) : '');
+      setHeight(matchingDeal.height ? String(matchingDeal.height) : '');
+      setProvince(matchingDeal.province || 'ON');
+      setCity(matchingDeal.city || '');
+      setPostalCode(matchingDeal.postalCode || '');
+      setSingleSlope(Boolean(matchingDeal.isSingleSlope));
+      setLeftEaveHeight(matchingDeal.leftEaveHeight != null ? String(matchingDeal.leftEaveHeight) : '');
+      setRightEaveHeight(matchingDeal.rightEaveHeight != null ? String(matchingDeal.rightEaveHeight) : '');
+      return;
+    }
+
+    if (matchingClient) {
+      setClientId(matchingClient.clientId);
+      setClientName(matchingClient.clientName || matchingClient.name || '');
+    }
+  }, [clients, deals, quotes]);
 
   const loadEstimateIntoForm = useCallback((estimateId: string, updateRoute = true) => {
     const estimate = estimates.find(item => item.id === estimateId);
@@ -338,12 +441,14 @@ export default function QuickEstimator() {
   }, [drafts]);
 
   const handleLocationLookup = async () => {
-    if (!locationInput.trim()) {
-      setFreightSource('Enter a postal code, city, or address');
+    const lookupInput = [postalCode.trim(), city.trim(), province.trim()].filter(Boolean).join(', ');
+    if (!lookupInput) {
+      setFreightSource('Enter a postal code, city, or province');
       return;
     }
     setFreightSource('Looking up distance...');
-    const estimate = await estimateFreightFromLocation(locationInput);
+    setLocationInput(lookupInput);
+    const estimate = await estimateFreightFromLocation(lookupInput);
     if (estimate) {
       setDistance(estimate.distanceKm.toString());
       setRemoteLevel(estimate.remote);
@@ -365,20 +470,29 @@ export default function QuickEstimator() {
     const steel = calcSteelCost(sqft);
     const eng = calcEngineering(selectedFactors);
     const found = lookupFoundation(sqft, foundationType);
+    const insulationArea = calcInsulationArea(w, l, h);
 
     let ins = 0;
-    if (includeInsulation) {
-      const insPerSqft = lookupInsulation(insulationGrade);
-      const area = calcInsulationArea(w, l, h);
-      ins = insPerSqft * area.total;
+    if (insulationRequired) {
+      const roofRate = lookupInsulation(insulationRoofGrade);
+      const wallRate = lookupInsulation(insulationWallGrade || insulationRoofGrade);
+      ins = (roofRate * insulationArea.roofArea) + (wallRate * insulationArea.wallArea);
     }
 
-    const gutters = includeGutters ? l * 2 * 10 : 0;
+    let gutters = 0;
+    if (guttersMode === 'per_side') {
+      const sides = Math.max(parseFloat(guttersPerSide) || 2, 1);
+      gutters = l * sides * 10;
+    } else if (guttersMode === 'spacing') {
+      const spacing = parseFloat(guttersSpacing) || 20;
+      const downspoutCount = Math.max(Math.ceil((2 * (w + l)) / spacing), 2);
+      gutters = (l * 2 * 10) + (downspoutCount * 65);
+    }
 
     let linerArea = 0;
-    if (linerOption === 'walls') linerArea = 2 * (w + l) * h;
-    else if (linerOption === 'ceiling') linerArea = sqft;
-    else if (linerOption === 'both') linerArea = 2 * (w + l) * h + sqft;
+    if (linersMode === 'walls') linerArea = insulationArea.wallArea;
+    else if (linersMode === 'roof') linerArea = sqft;
+    else if (linersMode === 'roof_walls') linerArea = insulationArea.wallArea + sqft;
     const liners = linerArea * 3.25;
 
     const frt = calcFreight(parseFloat(distance) || 0, steel.weight, remoteLevel);
@@ -430,7 +544,7 @@ export default function QuickEstimator() {
     if (remoteLevel === 'extreme') tips.push(`🚛 Extreme remote freight adds $3,000+. Consider a staging/pickup arrangement.`);
     if (remoteLevel === 'remote') tips.push(`🚛 Remote location adds $1,500 to freight. Check if a closer delivery point is available.`);
     if (sqft > 10000 && parseFloat(contingencyPct) >= 5) tips.push(`💰 For large buildings (${formatNumber(sqft)} sqft), contingency could be reduced to 3% — larger projects have more predictable costs.`);
-    if (includeInsulation && !insulationGrade) tips.push(`🧊 Specify insulation grade to ensure the estimate matches the correct R-value.`);
+    if (insulationRequired && (!insulationRoofGrade || !insulationWallGrade)) tips.push(`🧊 Specify roof and wall insulation grades to keep the RFQ import complete.`);
     setCostSavingTips(tips);
   };
 
@@ -459,6 +573,7 @@ export default function QuickEstimator() {
       id: editingEstimate?.id || crypto.randomUUID(),
       label,
       date: editingEstimate?.date || nowIso.split('T')[0],
+      jobId: jobId || null,
       clientName: clientName || 'TBD',
       clientId: clientId || '',
       salesRep: rep,
@@ -472,8 +587,22 @@ export default function QuickEstimator() {
       notes: editingEstimate?.notes || '',
       auditNotes,
       payload: {
+        jobId,
         distance, remoteLevel, foundationType, contingencyPct,
-        includeInsulation, insulationGrade, includeGutters, linerOption,
+        guttersMode,
+        guttersPerSide,
+        guttersSpacing,
+        gutterNotes,
+        linersMode,
+        linerLocation: linersMode === 'none' ? '' : linersMode,
+        linerNotes,
+        insulationRequired,
+        insulationRoofGrade,
+        insulationWallGrade,
+        includeInsulation: insulationRequired,
+        insulationGrade: insulationRoofGrade || insulationWallGrade,
+        includeGutters: guttersMode !== 'none',
+        linerOption: getQuickEstimatorLegacyLinerOption(linersMode),
         locationInput, freightSource, useFlat, flatMarkupPct,
         singleSlope, leftEaveHeight, rightEaveHeight, selectedFactors,
         result,
@@ -643,6 +772,18 @@ export default function QuickEstimator() {
           <div className="space-y-3">
             <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Client & Rep</h3>
             <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2">
+                <Label className="text-xs">Job ID</Label>
+                <JobIdSelect
+                  value={jobId}
+                  onValueChange={handleJobIdChange}
+                  placeholder="Select or create a job ID"
+                  triggerTestId="quick-estimator-job-id"
+                />
+                <p className="mt-1 text-[10px] text-muted-foreground">
+                  Selecting a shared job ID pulls the latest matching RFQ, quote, or deal defaults into this estimate when available.
+                </p>
+              </div>
               <div>
                 <Label className="text-xs">Client Name</Label>
                 <ClientSelect mode="name" valueId={clientId} valueName={clientName} onSelect={handleClientSelect} className="mt-1" />
@@ -692,12 +833,19 @@ export default function QuickEstimator() {
               <MapPin className="h-3.5 w-3.5 text-accent" />
               Auto Freight Estimate
             </Label>
-            <div className="flex gap-2">
+            <div className="grid grid-cols-4 gap-2">
               <Input
-                className="input-blue flex-1"
-                value={locationInput}
-                onChange={e => setLocationInput(e.target.value)}
-                placeholder="Postal code, city, or address..."
+                className="input-blue"
+                value={postalCode}
+                onChange={e => setPostalCode(e.target.value)}
+                placeholder="Postal code"
+                onKeyDown={e => e.key === 'Enter' && void handleLocationLookup()}
+              />
+              <Input
+                className="input-blue col-span-2"
+                value={city}
+                onChange={e => setCity(e.target.value)}
+                placeholder="City"
                 onKeyDown={e => e.key === 'Enter' && void handleLocationLookup()}
               />
               <Button size="sm" variant="outline" onClick={() => void handleLocationLookup()}>Lookup</Button>
@@ -712,14 +860,6 @@ export default function QuickEstimator() {
                 <SelectTrigger className="input-blue mt-1"><SelectValue /></SelectTrigger>
                 <SelectContent>{PROVINCES.map(p => <SelectItem key={p.code} value={p.code}>{p.code} — {p.name}</SelectItem>)}</SelectContent>
               </Select>
-            </div>
-            <div>
-              <Label className="text-xs">City</Label>
-              <Input className="input-blue mt-1" value={city} onChange={e => setCity(e.target.value)} placeholder="City" />
-            </div>
-            <div>
-              <Label className="text-xs">Postal Code</Label>
-              <Input className="input-blue mt-1" value={postalCode} onChange={e => setPostalCode(e.target.value)} placeholder="A1A 1A1" />
             </div>
             <div><Label className="text-xs">Distance from Bradford (km)</Label><Input className="input-blue mt-1" value={distance} onChange={e => setDistance(e.target.value)} /></div>
           </div>
@@ -753,35 +893,78 @@ export default function QuickEstimator() {
 
           <div className="space-y-2">
             <div className="flex items-center gap-2">
-              <Checkbox checked={includeInsulation} onCheckedChange={v => setIncludeInsulation(!!v)} />
+              <Checkbox checked={insulationRequired} onCheckedChange={v => setInsulationRequired(!!v)} />
               <Label className="text-xs">Include Insulation</Label>
             </div>
-            {includeInsulation && (
-              <Select value={insulationGrade} onValueChange={setInsulationGrade}>
-                <SelectTrigger className="input-blue"><SelectValue /></SelectTrigger>
-                <SelectContent>{INSULATION_GRADES.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent>
-              </Select>
+            {insulationRequired && (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs">Roof Insulation</Label>
+                  <Select value={insulationRoofGrade} onValueChange={setInsulationRoofGrade}>
+                    <SelectTrigger className="input-blue"><SelectValue /></SelectTrigger>
+                    <SelectContent>{INSULATION_GRADES.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-xs">Wall Insulation</Label>
+                  <Select value={insulationWallGrade} onValueChange={setInsulationWallGrade}>
+                    <SelectTrigger className="input-blue"><SelectValue /></SelectTrigger>
+                    <SelectContent>{INSULATION_GRADES.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+              </div>
             )}
           </div>
 
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <Checkbox checked={includeGutters} onCheckedChange={v => setIncludeGutters(!!v)} />
-              <Label className="text-xs">Include Gutters</Label>
+          <div className="space-y-3">
+            <div>
+              <Label className="text-xs">Gutters</Label>
+              <Select value={guttersMode} onValueChange={value => setGuttersMode(value as QuickEstimatorGutterMode)}>
+                <SelectTrigger className="input-blue mt-1"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  <SelectItem value="per_side">Per Side</SelectItem>
+                  <SelectItem value="spacing">Spacing / Downspouts</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
+            {guttersMode === 'per_side' && (
+              <div>
+                <Label className="text-xs">Gutter Sides</Label>
+                <Input className="input-blue mt-1" value={guttersPerSide} onChange={e => setGuttersPerSide(e.target.value)} placeholder="2" />
+              </div>
+            )}
+            {guttersMode === 'spacing' && (
+              <div>
+                <Label className="text-xs">Downspout Spacing (ft)</Label>
+                <Input className="input-blue mt-1" value={guttersSpacing} onChange={e => setGuttersSpacing(e.target.value)} placeholder="20" />
+              </div>
+            )}
+            {guttersMode !== 'none' && (
+              <div>
+                <Label className="text-xs">Gutter Notes</Label>
+                <Input className="input-blue mt-1" value={gutterNotes} onChange={e => setGutterNotes(e.target.value)} placeholder="Optional gutter details" />
+              </div>
+            )}
           </div>
 
-          <div>
+          <div className="space-y-3">
             <Label className="text-xs">Liners</Label>
-            <Select value={linerOption} onValueChange={setLinerOption}>
+            <Select value={linersMode} onValueChange={value => setLinersMode(value as QuickEstimatorLinerMode)}>
               <SelectTrigger className="input-blue mt-1"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">No Liners</SelectItem>
+                <SelectItem value="roof">Roof Only</SelectItem>
                 <SelectItem value="walls">Walls Only</SelectItem>
-                <SelectItem value="ceiling">Ceiling Only</SelectItem>
-                <SelectItem value="both">Walls + Ceiling</SelectItem>
+                <SelectItem value="roof_walls">Roof + Walls</SelectItem>
               </SelectContent>
             </Select>
+            {linersMode !== 'none' && (
+              <div>
+                <Label className="text-xs">Liner Notes</Label>
+                <Input className="input-blue mt-1" value={linerNotes} onChange={e => setLinerNotes(e.target.value)} placeholder="Optional liner details" />
+              </div>
+            )}
           </div>
 
           <div>
@@ -826,12 +1009,17 @@ export default function QuickEstimator() {
             <div className="text-xs text-muted-foreground">
               Client: {clientName || 'TBD'} | Location: {[city, province, postalCode].filter(Boolean).join(', ') || province}
             </div>
+            {jobId && (
+              <div className="text-xs text-muted-foreground">
+                Job ID: {jobId}
+              </div>
+            )}
 
             <div className="space-y-2 text-sm">
               <Row label="Steel" value={result.steelWithMargin} bold />
               <Row label="Engineering Fee" value={result.engineering} />
               <Row label="Foundation Drawing" value={result.foundation} />
-              {result.insulation > 0 && <Row label={`Insulation (${insulationGrade})`} value={result.insulation} />}
+              {result.insulation > 0 && <Row label={`Insulation (Roof ${insulationRoofGrade || 'N/A'} / Walls ${insulationWallGrade || 'N/A'})`} value={result.insulation} />}
               {result.gutters > 0 && <Row label="Gutters & Downspouts" value={result.gutters} />}
               {result.liners > 0 && <Row label="Liners" value={result.liners} />}
               <Row label="Freight Estimate" value={result.freight} />

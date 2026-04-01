@@ -549,6 +549,7 @@ export function estimateFromRow(r: any): Estimate {
     id: r.id ?? '',
     label: r.label ?? '',
     date: r.date ?? '',
+    jobId: r.job_id ?? null,
     clientName: r.client_name ?? '',
     clientId: r.client_id ?? '',
     salesRep: r.sales_rep ?? '',
@@ -573,7 +574,7 @@ export function estimateFromRow(r: any): Estimate {
 
 export function estimateToRow(e: Partial<Estimate>): Record<string, any> {
   const map: Record<string, string> = {
-    id: 'id', label: 'label', date: 'date', clientName: 'client_name', clientId: 'client_id',
+    id: 'id', label: 'label', date: 'date', jobId: 'job_id', clientName: 'client_name', clientId: 'client_id',
     salesRep: 'sales_rep', width: 'width', length: 'length', height: 'height', pitch: 'pitch',
     province: 'province', city: 'city', postalCode: 'postal_code',
     grandTotal: 'grand_total', sqft: 'sqft', estimatedTotal: 'estimated_total',

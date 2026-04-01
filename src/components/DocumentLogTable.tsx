@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -47,10 +47,12 @@ export function DocumentLogTable({
   const { hasAnyRole } = useRoles();
   const { visibleJobIds, stateByJobId } = useSharedJobs();
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const handledFocusDocumentIdRef = useRef<string | null>(null);
   const [showTrash, setShowTrash] = useState(false);
   const [filesByDocumentId, setFilesByDocumentId] = useState<Record<string, QuoteFileRecord[]>>({});
   const canManageOpportunityStatus = hasAnyRole('admin', 'owner', 'operations', 'sales_rep');
   const canManageFreightWorkflow = hasAnyRole('admin', 'owner', 'operations', 'freight');
+  const canViewPayloadSnapshot = hasAnyRole('admin', 'owner');
 
   const expectedStateByType: Record<DocumentType, SharedJobState> = {
     rfq: 'rfq',
@@ -108,9 +110,14 @@ export function DocumentLogTable({
   }, [visibleDocumentIdsKey]);
 
   useEffect(() => {
-    if (!focusDocumentId) return;
+    if (!focusDocumentId) {
+      handledFocusDocumentIdRef.current = null;
+      return;
+    }
+    if (handledFocusDocumentIdRef.current === focusDocumentId) return;
     if (!visibleQuotes.some(quote => quote.id === focusDocumentId)) return;
     setExpandedId(focusDocumentId);
+    handledFocusDocumentIdRef.current = focusDocumentId;
   }, [focusDocumentId, visibleQuotes]);
 
   const changeStatus = (id: string, status: QuoteStatus) => {
@@ -469,7 +476,7 @@ export function DocumentLogTable({
                     </div>
                   </div>
                 )}
-                {quote.payload && Object.keys(quote.payload).length > 0 && (
+                {canViewPayloadSnapshot && quote.payload && Object.keys(quote.payload).length > 0 && (
                   <div className="mt-4">
                     <p className="text-xs font-semibold text-muted-foreground mb-2">Payload Snapshot</p>
                     <pre className="text-[11px] bg-background border rounded p-3 overflow-x-auto whitespace-pre-wrap">{JSON.stringify(quote.payload, null, 2)}</pre>

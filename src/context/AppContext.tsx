@@ -134,6 +134,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
     loading: true,
   });
 
+  const buildAuthoritativeProductionState = useCallback((deals: Deal[], productionRows: ProductionRecord[]) => {
+    const productionByJobId = new Map<string, ProductionRecord>();
+
+    for (const row of productionRows) {
+      productionByJobId.set(row.jobId, row);
+    }
+
+    for (const deal of deals) {
+      productionByJobId.set(deal.jobId, buildProductionShadowRecord({
+        jobId: deal.jobId,
+        productionStatus: deal.productionStatus,
+        insulationStatus: deal.insulationStatus,
+      }));
+    }
+
+    return Array.from(productionByJobId.values());
+  }, []);
+
   const fetchAll = useCallback(async () => {
     try {
       const [
@@ -207,7 +225,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const commissionPayouts = commissionPayoutsRes.error
         ? []
         : ((commissionPayoutsRes.data || []).map(commissionPayoutFromRow));
-      const production = (prodRes.data || []).map(productionFromRow);
+      const production = buildAuthoritativeProductionState(
+        deals,
+        (prodRes.data || []).map(productionFromRow),
+      );
       const freight = (freightRes.data || []).map(freightFromRow);
       const clients = (clientsRes.data || []).map(clientFromRow);
       const vendors = (vendorsRes.data || []).map(vendorFromRow);
@@ -354,7 +375,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         internalCosts: (cR.data || []).map(internalCostFromRow),
         payments: (pR.data || []).map(paymentFromRow),
         commissionPayouts: (cpR.data || []).map(commissionPayoutFromRow),
-        production: (prR.data || []).map(productionFromRow),
+        production: buildAuthoritativeProductionState(
+          (dR.data || []).map(dealFromRow),
+          (prR.data || []).map(productionFromRow),
+        ),
         freight: (fR.data || []).map(freightFromRow),
         clients: (clR.data || []).map(clientFromRow),
         vendors: (vR.data || []).map(vendorFromRow),
@@ -393,7 +417,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const currentState = { quotes: [], deals: SEED_DEALS, opportunities: [], dealMilestones: [], internalCosts: [], payments: [], commissionPayouts: [], production: [], freight: [], rfqs: [], clients: [], vendors: [], estimates: [], steelCostData: [], insulationCostData: [], storedDocuments: [] };
       localStorage.setItem('canada_steel_state', JSON.stringify(currentState));
     }
-  }, []);
+  }, [buildAuthoritativeProductionState]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
@@ -557,7 +581,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } catch {}
 
     return shadowRecord;
-  }, []);
+  }, [buildAuthoritativeProductionState]);
 
   // --- Quotes ---
   const addQuote = useCallback(async (q: Quote) => {
@@ -730,11 +754,36 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
     try {
       const row = dealToRow(updates);
-      await supabase.from('deals').update(row as any).eq('job_id', jobId);
-    } catch {}
+      const { data, error } = await supabase.from('deals').update(row as any).eq('job_id', jobId).select().single();
+      if (error) throw error;
+
+      if (data) {
+        const mapped = dealFromRow(data);
+        setState(prev => ({
+          ...prev,
+          deals: prev.deals.map(deal => deal.jobId === jobId ? mapped : deal),
+        }));
+      }
+    } catch (error) {
+      console.error('Failed to persist deal update', error);
+      if (existingDeal) {
+        setState(prev => ({
+          ...prev,
+          deals: prev.deals.map(deal => deal.jobId === jobId ? existingDeal : deal),
+        }));
+      }
+      toast.error('Unable to save the deal update. The previous value was restored.');
+    }
   }, [currentUser, state.deals, syncProductionShadow, upsertOpportunityRecord]);
 
   const deleteDeal = useCallback(async (jobId: string) => {
+    const revertedQuote = state.quotes.find(quote =>
+      quote.jobId === jobId
+      && quote.documentType === 'external_quote'
+      && quote.workflowStatus === 'converted_to_deal'
+      && !quote.isDeleted,
+    ) || null;
+
     setState(prev => {
       const existing = prev.deals.find(d => d.jobId === jobId);
       if (existing) logAudit(currentUser?.name || 'System', 'DELETE', 'Deal', jobId, { jobId }, existing);
@@ -743,13 +792,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
         deals: prev.deals.filter(d => d.jobId !== jobId),
         dealMilestones: prev.dealMilestones.filter(milestone => milestone.jobId !== jobId),
         production: prev.production.filter(record => record.jobId !== jobId),
+        quotes: revertedQuote
+          ? prev.quotes.map(quote => quote.id === revertedQuote.id ? {
+            ...quote,
+            workflowStatus: 'quote_sent',
+            status: 'Sent',
+          } : quote)
+          : prev.quotes,
       };
     });
     try {
       await supabase.from('deals').delete().eq('job_id', jobId);
       await supabase.from('production').delete().eq('job_id', jobId);
-    } catch {}
-  }, [currentUser]);
+      if (revertedQuote) {
+        await supabase.from('quotes').update({
+          workflow_status: 'quote_sent',
+          status: 'Sent',
+          updated_at: new Date().toISOString(),
+        } as any).eq('id', revertedQuote.id);
+      }
+    } catch (error) {
+      console.error('Failed to delete deal', error);
+      toast.error('Unable to remove the deal from the database.');
+    }
+  }, [currentUser, state.quotes]);
 
   // --- Internal Costs ---
   const addInternalCost = useCallback(async (ic: InternalCost) => {

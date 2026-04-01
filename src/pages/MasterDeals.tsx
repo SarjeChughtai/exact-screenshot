@@ -70,7 +70,7 @@ export default function MasterDeals() {
   const [showAddDeal, setShowAddDeal] = useState(false);
   const [newDeal, setNewDeal] = useState<Partial<Deal>>(EMPTY_DEAL);
   const [draggedDealId, setDraggedDealId] = useState<string | null>(null);
-  const [pipelineView, setPipelineView] = useState(true);
+  const [pipelineView, setPipelineView] = useState(false);
   const [filesByJobId, setFilesByJobId] = useState<Record<string, QuoteFileRecord[]>>({});
   const { visibleJobIds, stateByJobId } = useSharedJobs({ allowedStates: ['deal'] });
 
@@ -348,12 +348,12 @@ export default function MasterDeals() {
               {['Job ID', 'Job Name', 'Client', 'Sales Rep', 'Province', 'Deal Status', 'Client Pmt', 'Factory Pmt', 'Production', 'Insulation', 'Freight'].map(h => (
                 <th key={h} className="px-2 py-2 text-left font-medium whitespace-nowrap">{h}</th>
               ))}
-              {isAdminOwner && <th className="px-2 py-2 text-left font-medium">Actions</th>}
+              {canEdit && <th className="px-2 py-2 text-left font-medium">Actions</th>}
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
-              <tr><td colSpan={isAdminOwner ? 13 : 12} className="px-3 py-8 text-center text-muted-foreground">No deals found</td></tr>
+              <tr><td colSpan={canEdit ? 13 : 12} className="px-3 py-8 text-center text-muted-foreground">No deals found</td></tr>
             ) : filtered.map(d => {
               const isExpanded = expandedJob === d.jobId;
               const ic = internalCosts.find(c => c.jobId === d.jobId);
@@ -394,7 +394,7 @@ export default function MasterDeals() {
                     <td className="px-2 py-2 text-xs">{d.productionStatus}</td>
                     <td className="px-2 py-2 text-xs">{d.insulationStatus || '—'}</td>
                     <td className="px-2 py-2 text-xs">{d.freightStatus}</td>
-                    {isAdminOwner && (
+                    {canEdit && (
                       <td className="px-2 py-2" onClick={e => e.stopPropagation()}>
                         <div className="flex gap-1">
                           <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setEditingDeal({ ...d })}>
@@ -423,7 +423,7 @@ export default function MasterDeals() {
                   </tr>
                   {isExpanded && (
                     <tr key={`${d.jobId}-detail`} className="bg-muted/30">
-                      <td colSpan={isAdminOwner ? 13 : 12} className="p-4">
+                      <td colSpan={canEdit ? 13 : 12} className="p-4">
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
                           <div>
                             <p className="font-semibold text-muted-foreground mb-1">Project Info</p>

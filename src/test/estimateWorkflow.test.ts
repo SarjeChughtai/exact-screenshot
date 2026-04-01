@@ -34,6 +34,7 @@ function buildEstimate(overrides: Partial<Estimate> = {}): Estimate {
     id: 'estimate-1',
     label: 'EST-001',
     date: '2026-03-31',
+    jobId: 'JOB-100',
     clientName: 'North Yard',
     clientId: 'CL-001',
     salesRep: 'Rep One',
@@ -54,9 +55,17 @@ function buildEstimate(overrides: Partial<Estimate> = {}): Estimate {
       remoteLevel: 'moderate',
       locationInput: 'Barrie, ON',
       freightSource: 'Auto',
+      insulationRequired: true,
+      insulationRoofGrade: 'R20/R20',
+      insulationWallGrade: 'R12/R20',
       includeInsulation: true,
       insulationGrade: 'R20/R20',
+      guttersMode: 'spacing',
+      guttersSpacing: '20',
+      gutterNotes: 'Front elevation',
       includeGutters: true,
+      linersMode: 'walls',
+      linerNotes: 'Wall liner package',
       linerOption: 'walls',
       foundationType: 'slab',
       selectedFactors: ['Clear span up to 80ft'],
@@ -108,9 +117,13 @@ describe('estimate workflow helpers', () => {
     expect(state.city).toBe('Barrie');
     expect(state.postalCode).toBe('L4N 0A1');
     expect(state.distance).toBe('250');
-    expect(state.includeInsulation).toBe(true);
-    expect(state.includeGutters).toBe(true);
-    expect(state.linerOption).toBe('walls');
+    expect(state.jobId).toBe('JOB-100');
+    expect(state.insulationRequired).toBe(true);
+    expect(state.insulationRoofGrade).toBe('R20/R20');
+    expect(state.insulationWallGrade).toBe('R12/R20');
+    expect(state.guttersMode).toBe('spacing');
+    expect(state.guttersSpacing).toBe('20');
+    expect(state.linersMode).toBe('walls');
   });
 
   it('persists active state and drafts to storage', () => {
@@ -135,8 +148,15 @@ describe('estimate workflow helpers', () => {
   it('transfers estimate location fields into the shared RFQ form', () => {
     const form = mapEstimateToSharedRFQForm(buildEstimate());
 
+    expect(form.jobId).toBe('JOB-100');
     expect(form.city).toBe('Barrie');
     expect(form.province).toBe('ON');
     expect(form.postalCode).toBe('L4N 0A1');
+    expect(form.gutters).toBe('spacing');
+    expect(form.guttersSpacing).toBe('20');
+    expect(form.liners).toBe('walls');
+    expect(form.insulationRequired).toBe(true);
+    expect(form.insulationRoofGrade).toBe('R20/R20');
+    expect(form.insulationWallGrade).toBe('R12/R20');
   });
 });

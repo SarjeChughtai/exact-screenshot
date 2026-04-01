@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { CreateJobDialog } from '@/components/CreateJobDialog';
+import { buildJobIdSearchAlias, normalizeJobIdKey } from '@/lib/jobIds';
 import { cn } from '@/lib/utils';
 import { useSharedJobs } from '@/lib/sharedJobs';
 import type { Deal, SharedJobState } from '@/types';
@@ -112,7 +113,14 @@ export function JobIdSelect({
                 {visibleJobs.map(job => (
                   <CommandItem
                     key={job.jobId}
-                    value={`${job.jobId} ${job.clientName} ${job.jobName} ${job.state}`}
+                    value={[
+                      job.jobId,
+                      job.clientName,
+                      job.jobName,
+                      job.state,
+                      normalizeJobIdKey(job.jobId),
+                      buildJobIdSearchAlias(job.jobId),
+                    ].join(' ')}
                     onSelect={() => handleSelect(job.jobId)}
                     className="items-start gap-2 py-2"
                   >

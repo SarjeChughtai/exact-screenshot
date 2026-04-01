@@ -1,5 +1,9 @@
 import type { Estimate, Quote } from '@/types';
 import type { RFQOpening } from '@/lib/rfqShared';
+import {
+  normalizeQuickEstimatorGutterMode,
+  normalizeQuickEstimatorLinerMode,
+} from '@/lib/estimateWorkflow';
 
 export type SharedRFQBuildingStyle = 'Symmetrical' | 'Single Slope';
 export type SharedRFQGutterMode = 'none' | 'per_side' | 'spacing';
@@ -102,18 +106,37 @@ function normalizeLinerMode(payload: Record<string, unknown>): SharedRFQLinerMod
 }
 
 export function mapEstimateToSharedRFQForm(estimate: Estimate): Partial<SharedRFQFormValues> {
+  const payload = (estimate.payload || {}) as Record<string, unknown>;
+  const gutters = normalizeQuickEstimatorGutterMode(payload);
+  const liners = normalizeQuickEstimatorLinerMode(payload);
+
   return {
     clientId: estimate.clientId,
     clientName: estimate.clientName,
+    jobId: estimate.jobId || '',
     jobName: `${estimate.width}x${estimate.length} steel building`,
     province: estimate.province,
     city: estimate.city,
     postalCode: estimate.postalCode,
+    buildingStyle: payload.singleSlope === true ? 'Single Slope' : 'Symmetrical',
     width: String(estimate.width),
     length: String(estimate.length),
     height: String(estimate.height),
+    lowSide: String(payload.leftEaveHeight ?? ''),
+    highSide: String(payload.rightEaveHeight ?? ''),
     roofPitch: `${estimate.pitch}:12`,
     salesRep: estimate.salesRep,
+    gutters,
+    guttersPerSide: String(payload.guttersPerSide ?? ''),
+    guttersSpacing: String(payload.guttersSpacing ?? ''),
+    gutterNotes: String(payload.gutterNotes ?? ''),
+    liners,
+    linerLocation: liners === 'none' ? '' : liners,
+    linerNotes: String(payload.linerNotes ?? ''),
+    insulationRequired: payload.insulationRequired === true || payload.includeInsulation === true,
+    insulationRoofGrade: String(payload.insulationRoofGrade ?? payload.insulationGrade ?? ''),
+    insulationWallGrade: String(payload.insulationWallGrade ?? payload.insulationGrade ?? ''),
+    notes: estimate.notes || '',
   };
 }
 

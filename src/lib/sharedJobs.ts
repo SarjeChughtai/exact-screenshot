@@ -4,6 +4,7 @@ import { useAppContext } from '@/context/AppContext';
 import { useRoles, type UserProfile, type UserRole } from '@/context/RoleContext';
 import { supabase } from '@/integrations/supabase/client';
 import type {
+  Client,
   Deal,
   DocumentType,
   FreightRecord,
@@ -60,7 +61,7 @@ const ensureRecord = (records: Map<string, SharedJobRecord>, rawJobId: string): 
     jobId,
     clientName: '',
     jobName: '',
-    state: 'rfq',
+    state: 'estimate',
     vendorUserIds: [],
   };
   records.set(key, next);
@@ -87,6 +88,7 @@ export function buildSharedJobRecords({
   steelCostData,
   insulationCostData,
   storedDocuments,
+  clients = [],
 }: {
   quotes: Quote[];
   deals: Deal[];
@@ -94,6 +96,7 @@ export function buildSharedJobRecords({
   steelCostData: SteelCostDataRecord[];
   insulationCostData: InsulationCostDataRecord[];
   storedDocuments: StoredDocument[];
+  clients?: Client[];
 }): SharedJobRecord[] {
   const records = new Map<string, SharedJobRecord>();
 
@@ -240,6 +243,17 @@ export function buildSharedJobRecords({
     });
   }
 
+  for (const client of clients) {
+    for (const rawJobId of client.jobIds || []) {
+      const jobId = resolveCanonicalJobId(rawJobId);
+      if (!jobId) continue;
+
+      const record = ensureRecord(records, jobId);
+      record.clientName = record.clientName || client.clientName || client.name || '';
+      setStateIfHigher(record, 'estimate');
+    }
+  }
+
   return Array.from(records.values()).sort((left, right) =>
     left.jobId.localeCompare(right.jobId, undefined, { numeric: true }),
   );
@@ -289,10 +303,12 @@ export function filterSharedJobsForUser(
   } = {},
 ) {
   const allowedStateSet = allowedStates?.length ? new Set(allowedStates) : null;
-  const allowedJobIds = limitToJobIds?.length ? new Set(limitToJobIds) : null;
+  const allowedJobIds = limitToJobIds?.length
+    ? new Set(limitToJobIds.map(jobId => normalizeJobIdKey(jobId)).filter(Boolean))
+    : null;
 
   return records.filter(record => {
-    if (allowedJobIds && !allowedJobIds.has(record.jobId)) return false;
+    if (allowedJobIds && !allowedJobIds.has(normalizeJobIdKey(record.jobId))) return false;
     if (allowedStateSet && !allowedStateSet.has(record.state)) return false;
     return canUserAccessSharedJob(record, currentUser);
   });
@@ -354,12 +370,12 @@ function mergeSharedJobRecordCollections(...collections: SharedJobRecord[][]): S
 }
 
 export function useSharedJobs(options?: { allowedStates?: SharedJobState[]; limitToJobIds?: string[] }) {
-  const { quotes, deals, freight, steelCostData, insulationCostData, storedDocuments } = useAppContext();
+  const { quotes, deals, freight, steelCostData, insulationCostData, storedDocuments, clients } = useAppContext();
   const { currentUser } = useRoles();
 
   const localAllJobs = useMemo(
-    () => buildSharedJobRecords({ quotes, deals, freight, steelCostData, insulationCostData, storedDocuments }),
-    [deals, freight, insulationCostData, quotes, steelCostData, storedDocuments],
+    () => buildSharedJobRecords({ quotes, deals, freight, steelCostData, insulationCostData, storedDocuments, clients }),
+    [clients, deals, freight, insulationCostData, quotes, steelCostData, storedDocuments],
   );
 
   const visibleJobsQuery = useQuery({
@@ -380,8 +396,12 @@ export function useSharedJobs(options?: { allowedStates?: SharedJobState[]; limi
     () => {
       const localVisibleJobs = filterSharedJobsForUser(localAllJobs, currentUser, options);
       const baseJobs = mergeSharedJobRecordCollections(visibleJobsQuery.data || [], localVisibleJobs);
-      const allowedJobIds = options?.limitToJobIds?.length ? new Set(options.limitToJobIds) : null;
-      return allowedJobIds ? baseJobs.filter(job => allowedJobIds.has(job.jobId)) : baseJobs;
+      const allowedJobIds = options?.limitToJobIds?.length
+        ? new Set(options.limitToJobIds.map(jobId => normalizeJobIdKey(jobId)).filter(Boolean))
+        : null;
+      return allowedJobIds
+        ? baseJobs.filter(job => allowedJobIds.has(normalizeJobIdKey(job.jobId)))
+        : baseJobs;
     },
     [visibleJobsQuery.data, localAllJobs, currentUser, options],
   );

@@ -51,7 +51,6 @@ const menuGroups: MenuGroup[] = [
       { path: '/quote-rfq', label: 'sidebar.quoteRfq', icon: Send, module: 'quote-log' },
       { path: '/quote-log', label: 'sidebar.quoteLog', icon: ClipboardList, module: 'quote-log' },
       { path: '/opportunities', label: 'sidebar.opportunities', icon: Briefcase, module: 'opportunities' },
-      { path: '/quote-builder', label: 'sidebar.salesQuoteBuilder', icon: FileText, module: 'quote-builder' },
     ],
   },
   {
@@ -59,6 +58,7 @@ const menuGroups: MenuGroup[] = [
     items: [
       { path: '/internal-quote-log', label: 'sidebar.internalQuoteLog', icon: List, module: 'internal-quote-log' },
       { path: '/internal-quote-builder', label: 'sidebar.internalQuoteBuilder', icon: FileInput, module: 'internal-quote-builder' },
+      { path: '/quote-builder', label: 'sidebar.salesQuoteBuilder', icon: FileText, module: 'quote-builder' },
       { path: '/import-review', label: 'sidebar.importReview', icon: Eye, module: 'internal-quote-builder' },
       { path: '/draft-log', label: 'sidebar.draftLog', icon: FileText, module: 'draft-log' },
     ],

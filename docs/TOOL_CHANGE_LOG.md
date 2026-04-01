@@ -2,6 +2,67 @@
 
 This log is the practical history of workflow and tool changes in the portal. It is intended for operators, admins, and anyone verifying what changed without reading code.
 
+## 2026-04-01
+### Internal Quote Builder and job ID normalization
+- Internal Quote Builder upload flow now supports selecting or creating the job ID before upload.
+- The selected job ID is now used as the document association for uploaded internal-quote files instead of letting extracted file job IDs override it.
+- Internal Quote Builder job selection now uses a broader shared job registry so it can surface job IDs from:
+  - quotes
+  - deals
+  - freight
+  - steel cost warehouse rows
+  - insulation cost warehouse rows
+  - stored imported documents
+- Canonical job ID handling was added across app logic:
+  - frontend canonical field: `jobId`
+  - DB canonical field: `job_id`
+  - legacy aliases still resolve from `projectId` and `project_id`
+
+### Internal Quote Builder pricing and structure controls
+- Internal Quote Builder now allows a manual internal markup percentage override.
+- Leaving internal markup blank still uses the existing tiered internal markup schedule.
+- Foundation type now supports `None` for cases like container covers.
+- Internal structure type tagging was added for dataset quality:
+  - `steel_building`
+  - `container_cover`
+  - `canopy`
+  - `other`
+- Structure type is now carried through warehouse/storage persistence for internal historical data.
+
+### Gutter and liner normalization
+- Internal Quote Builder now supports:
+  - `Gutters & Downspouts`
+  - `Roof Liner Panels`
+  - `Wall Liner Panels`
+- Data tracking now keeps roof and wall liners separate internally.
+- The internal quote face and PDF still show a combined `Liners` figure for compatibility.
+- PDF output label was updated from `Gutters` to `Gutters & Downspouts`.
+
+### Data hydration and historical pull behavior
+- Historical cost-file hydration now carries:
+  - canonical job ID
+  - structure type
+  - gutter/downspout totals
+  - roof liner totals
+  - wall liner totals
+- Historical retrieval still prefers corrected and warehouse-backed data.
+- Manual job ID override behavior is limited to new upload association, not historical replay.
+
+### Schema and verification
+- Added migration:
+  - `20260401123000_add_internal_quote_builder_normalization.sql`
+- This migration adds:
+  - `foundation_type = 'none'`
+  - `structure_type` on `stored_documents`
+  - `structure_type` on `steel_cost_data`
+  - `structure_type` on `insulation_cost_data`
+  - backfill of missing `job_id` from `project_id`
+- Verification completed:
+  - `npm test` passed
+  - `npm run build` passed
+- Known follow-up:
+  - direct-drop MBS hydration still needs manual browser verification against a real file
+
 ## 2026-03-31
 ### Workflow continuity and RFQ visibility
 - Quick Estimator now supports:

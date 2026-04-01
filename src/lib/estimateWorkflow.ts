@@ -1,7 +1,8 @@
 import type { Estimate } from '@/types';
 
 export type QuickEstimatorFoundationType = 'slab' | 'frost_wall';
-export type QuickEstimatorLinerOption = 'none' | 'walls' | 'ceiling' | 'both';
+export type QuickEstimatorGutterMode = 'none' | 'per_side' | 'spacing';
+export type QuickEstimatorLinerMode = 'none' | 'roof' | 'walls' | 'roof_walls';
 
 export interface QuickEstimatorResultSnapshot {
   sqft: number;
@@ -28,6 +29,7 @@ export interface QuickEstimatorResultSnapshot {
 }
 
 export interface QuickEstimatorPersistedState {
+  jobId: string;
   width: string;
   length: string;
   height: string;
@@ -39,10 +41,15 @@ export interface QuickEstimatorPersistedState {
   remoteLevel: string;
   locationInput: string;
   freightSource: string;
-  includeInsulation: boolean;
-  insulationGrade: string;
-  includeGutters: boolean;
-  linerOption: QuickEstimatorLinerOption;
+  guttersMode: QuickEstimatorGutterMode;
+  guttersPerSide: string;
+  guttersSpacing: string;
+  gutterNotes: string;
+  linersMode: QuickEstimatorLinerMode;
+  linerNotes: string;
+  insulationRequired: boolean;
+  insulationRoofGrade: string;
+  insulationWallGrade: string;
   foundationType: QuickEstimatorFoundationType;
   selectedFactors: string[];
   contingencyPct: string;
@@ -70,6 +77,7 @@ export const QUICK_ESTIMATOR_ACTIVE_STATE_KEY = 'csb_quick_estimator_active_stat
 export const QUICK_ESTIMATOR_DRAFTS_KEY = 'csb_quick_estimator_drafts';
 
 const DEFAULT_QUICK_ESTIMATOR_STATE: QuickEstimatorPersistedState = {
+  jobId: '',
   width: '',
   length: '',
   height: '',
@@ -81,10 +89,15 @@ const DEFAULT_QUICK_ESTIMATOR_STATE: QuickEstimatorPersistedState = {
   remoteLevel: 'none',
   locationInput: '',
   freightSource: '',
-  includeInsulation: false,
-  insulationGrade: 'R20/R20',
-  includeGutters: false,
-  linerOption: 'none',
+  guttersMode: 'none',
+  guttersPerSide: '',
+  guttersSpacing: '',
+  gutterNotes: '',
+  linersMode: 'none',
+  linerNotes: '',
+  insulationRequired: false,
+  insulationRoofGrade: 'R20/R20',
+  insulationWallGrade: 'R20/R20',
   foundationType: 'slab',
   selectedFactors: ['Clear span up to 80ft'],
   contingencyPct: '5',
@@ -112,14 +125,78 @@ function asStringArray(value: unknown, fallback: string[]) {
     .map(item => item.trim());
 }
 
+function asString(value: unknown, fallback = '') {
+  return value != null ? String(value) : fallback;
+}
+
+function asBoolean(value: unknown) {
+  return value === true || value === 'true';
+}
+
+export function normalizeQuickEstimatorGutterMode(
+  value: Pick<QuickEstimatorPersistedState, 'guttersMode'> | Record<string, unknown>,
+): QuickEstimatorGutterMode {
+  const explicit = (value as Record<string, unknown>).guttersMode ?? (value as Record<string, unknown>).gutters;
+  if (explicit === 'per_side' || explicit === 'spacing' || explicit === 'none') {
+    return explicit;
+  }
+  return asBoolean((value as Record<string, unknown>).includeGutters) ? 'per_side' : 'none';
+}
+
+export function normalizeQuickEstimatorLinerMode(
+  value: Pick<QuickEstimatorPersistedState, 'linersMode'> | Record<string, unknown>,
+): QuickEstimatorLinerMode {
+  const explicit = (value as Record<string, unknown>).linersMode ?? (value as Record<string, unknown>).linerLocation;
+  if (explicit === 'roof' || explicit === 'walls' || explicit === 'roof_walls' || explicit === 'none') {
+    return explicit;
+  }
+
+  const legacy = (value as Record<string, unknown>).linerOption;
+  if (legacy === 'walls') return 'walls';
+  if (legacy === 'ceiling') return 'roof';
+  if (legacy === 'both') return 'roof_walls';
+  return 'none';
+}
+
+export function getQuickEstimatorLegacyLinerOption(mode: QuickEstimatorLinerMode): 'none' | 'walls' | 'ceiling' | 'both' {
+  if (mode === 'walls') return 'walls';
+  if (mode === 'roof') return 'ceiling';
+  if (mode === 'roof_walls') return 'both';
+  return 'none';
+}
+
+function normalizeQuickEstimatorOverrides(
+  overrides?: Partial<QuickEstimatorPersistedState> | Record<string, unknown>,
+) {
+  const next = (overrides || {}) as Record<string, unknown>;
+  const insulationGrade = asString(next.insulationGrade, DEFAULT_QUICK_ESTIMATOR_STATE.insulationRoofGrade);
+
+  return {
+    ...next,
+    jobId: asString(next.jobId),
+    guttersMode: normalizeQuickEstimatorGutterMode(next),
+    guttersPerSide: asString(next.guttersPerSide),
+    guttersSpacing: asString(next.guttersSpacing),
+    gutterNotes: asString(next.gutterNotes),
+    linersMode: normalizeQuickEstimatorLinerMode(next),
+    linerNotes: asString(next.linerNotes),
+    insulationRequired: next.insulationRequired != null
+      ? asBoolean(next.insulationRequired)
+      : asBoolean(next.includeInsulation),
+    insulationRoofGrade: asString(next.insulationRoofGrade, insulationGrade),
+    insulationWallGrade: asString(next.insulationWallGrade, insulationGrade),
+  } satisfies Partial<QuickEstimatorPersistedState>;
+}
+
 export function createInitialQuickEstimatorState(
   overrides?: Partial<QuickEstimatorPersistedState>,
 ): QuickEstimatorPersistedState {
+  const normalizedOverrides = normalizeQuickEstimatorOverrides(overrides);
   return {
     ...DEFAULT_QUICK_ESTIMATOR_STATE,
-    ...overrides,
-    selectedFactors: overrides?.selectedFactors
-      ? [...overrides.selectedFactors]
+    ...normalizedOverrides,
+    selectedFactors: normalizedOverrides.selectedFactors
+      ? [...(normalizedOverrides.selectedFactors as string[])]
       : [...DEFAULT_QUICK_ESTIMATOR_STATE.selectedFactors],
   };
 }
@@ -148,8 +225,14 @@ export function getQuickEstimatorDraftTitle(
 export function quickEstimatorStateFromEstimate(estimate: Estimate): QuickEstimatorPersistedState {
   const payload = asRecord(estimate.payload);
   const result = asRecord(payload.result);
+  const insulationGrade = payload.insulationGrade != null
+    ? String(payload.insulationGrade)
+    : DEFAULT_QUICK_ESTIMATOR_STATE.insulationRoofGrade;
+  const guttersMode = normalizeQuickEstimatorGutterMode(payload);
+  const linersMode = normalizeQuickEstimatorLinerMode(payload);
 
   return createInitialQuickEstimatorState({
+    jobId: estimate.jobId || '',
     width: estimate.width ? String(estimate.width) : '',
     length: estimate.length ? String(estimate.length) : '',
     height: estimate.height ? String(estimate.height) : '',
@@ -161,12 +244,21 @@ export function quickEstimatorStateFromEstimate(estimate: Estimate): QuickEstima
     remoteLevel: payload.remoteLevel != null ? String(payload.remoteLevel) : DEFAULT_QUICK_ESTIMATOR_STATE.remoteLevel,
     locationInput: payload.locationInput != null ? String(payload.locationInput) : '',
     freightSource: payload.freightSource != null ? String(payload.freightSource) : '',
-    includeInsulation: payload.includeInsulation === true,
-    insulationGrade: payload.insulationGrade != null
-      ? String(payload.insulationGrade)
-      : DEFAULT_QUICK_ESTIMATOR_STATE.insulationGrade,
-    includeGutters: payload.includeGutters === true,
-    linerOption: (payload.linerOption as QuickEstimatorLinerOption) || DEFAULT_QUICK_ESTIMATOR_STATE.linerOption,
+    guttersMode,
+    guttersPerSide: payload.guttersPerSide != null ? String(payload.guttersPerSide) : '',
+    guttersSpacing: payload.guttersSpacing != null ? String(payload.guttersSpacing) : '',
+    gutterNotes: payload.gutterNotes != null ? String(payload.gutterNotes) : '',
+    linersMode,
+    linerNotes: payload.linerNotes != null ? String(payload.linerNotes) : '',
+    insulationRequired: payload.insulationRequired != null
+      ? asBoolean(payload.insulationRequired)
+      : asBoolean(payload.includeInsulation),
+    insulationRoofGrade: payload.insulationRoofGrade != null
+      ? String(payload.insulationRoofGrade)
+      : insulationGrade,
+    insulationWallGrade: payload.insulationWallGrade != null
+      ? String(payload.insulationWallGrade)
+      : insulationGrade,
     foundationType: (payload.foundationType as QuickEstimatorFoundationType) || DEFAULT_QUICK_ESTIMATOR_STATE.foundationType,
     selectedFactors: asStringArray(payload.selectedFactors, DEFAULT_QUICK_ESTIMATOR_STATE.selectedFactors),
     contingencyPct: payload.contingencyPct != null

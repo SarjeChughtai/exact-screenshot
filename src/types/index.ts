@@ -247,6 +247,7 @@ export interface Estimate {
   id: string;
   label: string;
   date: string;
+  jobId?: string | null;
   clientName: string;
   clientId: string;
   salesRep: string;

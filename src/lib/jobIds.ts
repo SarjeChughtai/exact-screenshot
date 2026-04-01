@@ -1,16 +1,32 @@
+const UNICODE_DASH_REGEX = /[\u2010-\u2015\u2212]/g;
+
 export function formatCanonicalJobId(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
   if (!trimmed) return null;
 
   return trimmed
+    .replace(UNICODE_DASH_REGEX, '-')
     .replace(/\s*-\s*/g, '-')
     .replace(/\s+/g, ' ');
 }
 
 export function normalizeJobIdKey(value: unknown): string {
   const canonical = formatCanonicalJobId(value);
-  return canonical ? canonical.toUpperCase() : '';
+  if (!canonical) return '';
+
+  return canonical
+    .toUpperCase()
+    .replace(/\s*[_-]\s*/g, '-')
+    .replace(/[\s_]+/g, '-')
+    .replace(/-+/g, '-');
+}
+
+export function buildJobIdSearchAlias(value: unknown): string {
+  const normalized = normalizeJobIdKey(value);
+  if (!normalized) return '';
+
+  return normalized.replace(/[^A-Z0-9]+/g, '');
 }
 
 export function resolveCanonicalJobId(...candidates: unknown[]): string | null {

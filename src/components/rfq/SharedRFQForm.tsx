@@ -135,7 +135,6 @@ export function SharedRFQForm({
                 <JobIdSelect
                   value={value.jobId}
                   onValueChange={jobId => onChange('jobId', jobId)}
-                  allowedStates={['rfq']}
                   placeholder={text(labels, 'jobIdPlaceholder', 'Auto-generated')}
                 />
               </div>
