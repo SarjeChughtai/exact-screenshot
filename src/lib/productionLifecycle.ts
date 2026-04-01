@@ -35,6 +35,31 @@ export function normalizeProductionStage(stage?: string | null): ProductionStage
   return STAGE_ALIASES[normalized] || 'Submitted';
 }
 
+export function buildProductionStageOptions(configuredStages: string[] = []) {
+  const seen = new Set<ProductionStage>();
+  const options: Array<{ value: ProductionStage; label: string }> = [];
+
+  for (const configuredStage of configuredStages) {
+    const value = normalizeProductionStage(configuredStage);
+    if (seen.has(value)) continue;
+    seen.add(value);
+    options.push({ value, label: configuredStage });
+  }
+
+  for (const canonicalStage of CANONICAL_PRODUCTION_STAGES) {
+    if (seen.has(canonicalStage)) continue;
+    seen.add(canonicalStage);
+    options.push({ value: canonicalStage, label: canonicalStage });
+  }
+
+  return options;
+}
+
+export function getProductionStageLabel(stage?: string | null, configuredStages: string[] = []) {
+  const normalizedStage = normalizeProductionStage(stage);
+  return buildProductionStageOptions(configuredStages).find(option => option.value === normalizedStage)?.label || stage || normalizedStage;
+}
+
 export function deriveDealProductionStatusFromRecord(record: ProductionRecord): ProductionStage {
   if (record.delivered) return 'Delivered';
   if (record.shipped) return 'Shipped';

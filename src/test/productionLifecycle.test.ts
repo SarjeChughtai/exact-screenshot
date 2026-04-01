@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildProductionStageOptions,
   buildProductionShadowRecord,
   deriveDealProductionStatusFromRecord,
+  getProductionStageLabel,
   getProductionProgressPct,
   normalizeProductionStage,
 } from '@/lib/productionLifecycle';
@@ -51,5 +53,32 @@ describe('production lifecycle helpers', () => {
       'Sent to Engineering',
       'Drawings Stamped',
     ])).toBe(75);
+  });
+
+  it('builds unique production options with canonical values and configured labels', () => {
+    expect(buildProductionStageOptions([
+      'Drawings to be Signed',
+      'MBS File Requested',
+      'Sent to Engineering',
+      'Drawings Stamped',
+      'Ready for Pickup',
+      'Delivered',
+    ])).toEqual([
+      { value: 'Submitted', label: 'Drawings to be Signed' },
+      { value: 'Acknowledged', label: 'MBS File Requested' },
+      { value: 'In Production', label: 'Sent to Engineering' },
+      { value: 'QC Complete', label: 'Drawings Stamped' },
+      { value: 'Ship Ready', label: 'Ready for Pickup' },
+      { value: 'Delivered', label: 'Delivered' },
+      { value: 'Shipped', label: 'Shipped' },
+    ]);
+  });
+
+  it('resolves a display label for canonical stored production stages', () => {
+    expect(getProductionStageLabel('Acknowledged', [
+      'Drawings to be Signed',
+      'MBS File Requested',
+      'Sent to Engineering',
+    ])).toBe('MBS File Requested');
   });
 });

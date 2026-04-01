@@ -7,7 +7,12 @@ import { useRoles } from '@/context/RoleContext';
 import { useSharedJobs } from '@/lib/sharedJobs';
 import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { getProductionProgressPct, normalizeProductionStage } from '@/lib/productionLifecycle';
+import {
+  buildProductionStageOptions,
+  getProductionProgressPct,
+  getProductionStageLabel,
+  normalizeProductionStage,
+} from '@/lib/productionLifecycle';
 import {
   getDealFreightBlockedReason,
   getDealPostSaleNextStep,
@@ -26,6 +31,10 @@ export default function ProductionStatus() {
   const { hasAnyRole } = useRoles();
   const { visibleJobIds } = useSharedJobs({ allowedStates: ['deal'] });
   const canEdit = hasAnyRole('admin', 'owner', 'operations');
+  const productionStageOptions = useMemo(
+    () => buildProductionStageOptions(settings.productionStatuses),
+    [settings.productionStatuses],
+  );
 
   const activeDeals = useMemo(() => {
     return deals.filter(deal =>
@@ -96,7 +105,8 @@ export default function ProductionStatus() {
             {activeDeals.length === 0 ? (
               <tr><td colSpan={13} className="px-3 py-8 text-center text-muted-foreground">No active production</td></tr>
             ) : activeDeals.map(deal => {
-              const progress = getProductionProgressPct(deal.productionStatus, settings.productionStatuses);
+              const displayProductionStatus = getProductionStageLabel(deal.productionStatus, settings.productionStatuses);
+              const progress = getProductionProgressPct(displayProductionStatus, settings.productionStatuses);
               const milestonesForJob = dealMilestones.filter(item => item.jobId === deal.jobId);
               const freightReady = isDealFreightReady(milestonesForJob);
               const milestoneProgress = summarizeDealMilestoneProgress(milestonesForJob);
@@ -114,11 +124,18 @@ export default function ProductionStatus() {
                   <td className="px-3 py-2 text-xs">{deal.width}x{deal.length}x{deal.height} ({formatNumber(deal.sqft)} sqft)</td>
                   <td className="px-3 py-2">
                     {canEdit ? (
-                      <Select value={deal.productionStatus} onValueChange={value => updateDeal(deal.jobId, { productionStatus: value as any })}>
+                      <Select
+                        value={normalizeProductionStage(deal.productionStatus)}
+                        onValueChange={value => updateDeal(deal.jobId, { productionStatus: normalizeProductionStage(value) })}
+                      >
                         <SelectTrigger className="h-7 text-xs w-44"><SelectValue /></SelectTrigger>
-                        <SelectContent>{settings.productionStatuses.map(status => <SelectItem key={status} value={status}>{status}</SelectItem>)}</SelectContent>
+                        <SelectContent>
+                          {productionStageOptions.map(option => (
+                            <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                          ))}
+                        </SelectContent>
                       </Select>
-                    ) : <span className="text-xs">{deal.productionStatus}</span>}
+                    ) : <span className="text-xs">{displayProductionStatus}</span>}
                   </td>
                   <td className="px-3 py-2">
                     {canEdit ? (
