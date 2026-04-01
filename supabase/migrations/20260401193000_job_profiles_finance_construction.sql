@@ -163,19 +163,19 @@ alter table public.freight
   add column if not exists actual_delivery_date text not null default '';
 
 update public.freight
-set actual_pickup_date = coalesce(nullif(actual_pickup_date, ''), pickup_date, '')
+set actual_pickup_date = coalesce(nullif(actual_pickup_date, ''), pickup_date::text, '')
 where coalesce(nullif(actual_pickup_date, ''), '') = '';
 
 update public.freight
-set actual_delivery_date = coalesce(nullif(actual_delivery_date, ''), delivery_date, '')
+set actual_delivery_date = coalesce(nullif(actual_delivery_date, ''), delivery_date::text, '')
 where coalesce(nullif(actual_delivery_date, ''), '') = '';
 
 update public.freight
-set estimated_pickup_date = coalesce(nullif(estimated_pickup_date, ''), pickup_date, actual_pickup_date, '')
+set estimated_pickup_date = coalesce(nullif(estimated_pickup_date, ''), pickup_date::text, actual_pickup_date, '')
 where coalesce(nullif(estimated_pickup_date, ''), '') = '';
 
 update public.freight
-set estimated_delivery_date = coalesce(nullif(estimated_delivery_date, ''), delivery_date, actual_delivery_date, '')
+set estimated_delivery_date = coalesce(nullif(estimated_delivery_date, ''), delivery_date::text, actual_delivery_date, '')
 where coalesce(nullif(estimated_delivery_date, ''), '') = '';
 
 do $$
