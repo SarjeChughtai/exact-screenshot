@@ -431,10 +431,10 @@ with quote_seed as (
     max(width) as width,
     max(length) as length,
     max(height) as height,
-    max(nullif(coalesce(payload ->> 'leftEaveHeight', payload ->> 'left_eave_height'), '')::numeric) as left_eave_height,
-    max(nullif(coalesce(payload ->> 'rightEaveHeight', payload ->> 'right_eave_height'), '')::numeric) as right_eave_height,
+    max(nullif(substring(coalesce(payload ->> 'leftEaveHeight', payload ->> 'left_eave_height') from '[-]?[0-9]+(?:\.[0-9]+)?'), '')::numeric) as left_eave_height,
+    max(nullif(substring(coalesce(payload ->> 'rightEaveHeight', payload ->> 'right_eave_height') from '[-]?[0-9]+(?:\.[0-9]+)?'), '')::numeric) as right_eave_height,
     bool_or(coalesce(nullif(coalesce(payload ->> 'singleSlope', payload ->> 'isSingleSlope', payload ->> 'is_single_slope'), '')::boolean, false)) as is_single_slope,
-    max(nullif(coalesce(payload ->> 'pitch', payload ->> 'roofPitch', payload ->> 'roof_pitch'), '')::numeric) as pitch,
+    max(nullif(substring(coalesce(payload ->> 'pitch', payload ->> 'roofPitch', payload ->> 'roof_pitch') from '[-]?[0-9]+(?:\.[0-9]+)?'), '')::numeric) as pitch,
     max(coalesce((payload ->> 'structureType'), '')) as structure_type
   from public.quotes
   where nullif(trim(job_id), '') is not null
