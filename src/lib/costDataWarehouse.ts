@@ -1,5 +1,5 @@
 import JSZip from 'jszip';
-import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx-js-style';
 import { supabase } from '@/integrations/supabase/client';
 import {
   insulationCostDataFromRow,
