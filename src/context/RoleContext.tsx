@@ -58,30 +58,26 @@ const RoleContext = createContext<RoleContextType | null>(null);
 export function RoleProvider({ children }: { children: ReactNode }) {
   const { user, userRoles } = useAuth();
   const [viewAsRole, setViewAsRole] = useState<UserRole | null>(null);
+  const [currentUserOverride, setCurrentUserOverride] = useState<UserProfile | null>(null);
 
   const actualRoles = (userRoles as UserRole[]) || [];
   const isOwnerOrAdmin = actualRoles.includes('admin') || actualRoles.includes('owner');
 
   const effectiveRoles = viewAsRole && isOwnerOrAdmin ? [viewAsRole] : actualRoles;
-
-  const [currentUser, setCurrentUserState] = useState<UserProfile>({
+  const derivedCurrentUser: UserProfile = {
     id: user?.id || '',
     name: user?.user_metadata?.name || user?.email || '',
     email: user?.email || '',
     roles: effectiveRoles,
-  });
+  };
+  const currentUser = currentUserOverride || derivedCurrentUser;
 
   useEffect(() => {
-    setCurrentUserState({
-      id: user?.id || '',
-      name: user?.user_metadata?.name || user?.email || '',
-      email: user?.email || '',
-      roles: effectiveRoles,
-    });
-  }, [user, userRoles, viewAsRole]);
+    setCurrentUserOverride(null);
+  }, [user?.id, userRoles, viewAsRole]);
 
   const setCurrentUser = useCallback((u: UserProfile) => {
-    setCurrentUserState(u);
+    setCurrentUserOverride(u);
   }, []);
 
   const hasRole = useCallback((role: UserRole) => currentUser.roles.includes(role), [currentUser]);

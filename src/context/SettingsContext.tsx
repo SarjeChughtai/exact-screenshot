@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useRoles } from '@/context/RoleContext';
-import type { UserProfileSettings } from '@/types';
+import type { TeamLeadOverrideTeam, UserProfileSettings } from '@/types';
 
 export type PersonnelRole = 'sales_rep' | 'estimator' | 'team_lead';
 
@@ -40,12 +40,14 @@ export interface AppSettings {
   freightBaseRate: number;
   freightMinimum: number;
   showMarkupOnEstimator: boolean;
+  useFlatInternalMarkup: boolean;
   dealStatuses: string[];
   clientPaymentStatuses: string[];
   factoryPaymentStatuses: string[];
   productionStatuses: string[];
   insulationStatuses: string[];
   freightStatuses: string[];
+  teamLeadOverrideTeams: TeamLeadOverrideTeam[];
   personnel: PersonnelEntry[];
   externalPersonnel: PersonnelEntry[];
   clients: ClientEntry[];
@@ -72,12 +74,14 @@ const DEFAULT_SETTINGS: AppSettings = {
   freightBaseRate: 4,
   freightMinimum: 4000,
   showMarkupOnEstimator: true,
+  useFlatInternalMarkup: false,
   dealStatuses: ['Lead', 'Quoted', 'Pending Payment', 'In Progress', 'In Production', 'Shipped', 'Delivered', 'Complete', 'Cancelled', 'On Hold'],
   clientPaymentStatuses: ['1st Deposit', '2nd Production', '3rd Delivery'],
   factoryPaymentStatuses: ['1st Deposit', '2nd Production', '3rd Delivery'],
   productionStatuses: ['Drawings to be Signed', 'MBS File Requested', 'Sent to Engineering', 'Drawings Stamped', 'Sent to Production', 'Ready for Pickup', 'Delivered'],
   insulationStatuses: ['Requested', 'Ordered', 'Delivered', 'N/A'],
   freightStatuses: ['RFQ', 'Quoted', 'Booked', 'Delivered'],
+  teamLeadOverrideTeams: [],
   personnel: [],
   externalPersonnel: [],
   clients: [],
@@ -121,12 +125,14 @@ const SETTINGS_KEY_MAP: Record<keyof AppSettings, string | null> = {
   freightBaseRate: 'pricing',
   freightMinimum: 'pricing',
   showMarkupOnEstimator: 'pricing',
+  useFlatInternalMarkup: 'pricing',
   dealStatuses: 'deal_statuses',
   clientPaymentStatuses: 'client_payment_statuses',
   factoryPaymentStatuses: 'factory_payment_statuses',
   productionStatuses: 'production_statuses',
   insulationStatuses: 'insulation_statuses',
   freightStatuses: 'freight_statuses',
+  teamLeadOverrideTeams: 'team_lead_override_teams',
   personnel: null,
   externalPersonnel: 'manual_personnel',
   clients: 'clients',
@@ -195,6 +201,21 @@ function normalizeManualPersonnelEntry(entry: any, index: number): PersonnelEntr
   };
 }
 
+function normalizeTeamLeadOverrideTeam(entry: any, index: number): TeamLeadOverrideTeam {
+  const memberNames = Array.isArray(entry?.memberNames)
+    ? entry.memberNames
+      .filter((value: unknown): value is string => typeof value === 'string')
+      .map(value => value.trim())
+      .filter(Boolean)
+    : [];
+
+  return {
+    id: String(entry?.id || `team:${index}`),
+    leadName: String(entry?.leadName || '').trim(),
+    memberNames,
+  };
+}
+
 function mergePersonnelLists(platformPersonnel: PersonnelEntry[], externalPersonnel: PersonnelEntry[]) {
   return [...platformPersonnel, ...externalPersonnel]
     .filter(entry => entry.name || entry.email)
@@ -218,6 +239,7 @@ function mergeSettingsRows(rows: { key: string; value: any }[], personnel: Perso
     freightBaseRate: Number(pricing.freightBaseRate ?? next.freightBaseRate),
     freightMinimum: Number(pricing.freightMinimum ?? next.freightMinimum),
     showMarkupOnEstimator: Boolean(pricing.showMarkupOnEstimator ?? next.showMarkupOnEstimator),
+    useFlatInternalMarkup: Boolean(pricing.useFlatInternalMarkup ?? next.useFlatInternalMarkup),
   });
 
   const tiers = byKey.get('internal_markup_tiers');
@@ -252,6 +274,13 @@ function mergeSettingsRows(rows: { key: string; value: any }[], personnel: Perso
       .filter(entry => entry.name || entry.email);
   }
 
+  const teamLeadOverrideTeams = byKey.get('team_lead_override_teams');
+  if (Array.isArray(teamLeadOverrideTeams)) {
+    next.teamLeadOverrideTeams = teamLeadOverrideTeams
+      .map(normalizeTeamLeadOverrideTeam)
+      .filter(entry => entry.leadName);
+  }
+
   next.personnel = mergePersonnelLists(personnel, next.externalPersonnel);
 
   return next;
@@ -261,7 +290,7 @@ async function fetchPersonnel(): Promise<PersonnelEntry[]> {
   const { data: rolesData } = await supabase.from('user_roles').select('user_id, role');
   if (!rolesData?.length) return [];
 
-  const relevantRoles = rolesData.filter(role => ['sales_rep', 'estimator'].includes(role.role));
+  const relevantRoles = rolesData.filter(role => ['sales_rep', 'estimator', 'team_lead'].includes(role.role));
   const grouped = new Map<string, string[]>();
   for (const row of relevantRoles) {
     grouped.set(row.user_id, [...(grouped.get(row.user_id) || []), row.role]);
@@ -365,7 +394,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     const pricingKeys: (keyof AppSettings)[] = [
       'supplierIncreasePct', 'minimumMargin', 'minimumMarginThreshold', 'drawingsMarkup',
       'internalMarginOnEstimator', 'frostWallMultiplier', 'gutterPerLF', 'linerPerSqft',
-      'freightBaseRate', 'freightMinimum', 'showMarkupOnEstimator',
+      'freightBaseRate', 'freightMinimum', 'showMarkupOnEstimator', 'useFlatInternalMarkup',
     ];
 
     if (pricingKeys.some(key => key in updates)) {
@@ -381,6 +410,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         freightBaseRate: next.freightBaseRate,
         freightMinimum: next.freightMinimum,
         showMarkupOnEstimator: next.showMarkupOnEstimator,
+        useFlatInternalMarkup: next.useFlatInternalMarkup,
       });
     }
 

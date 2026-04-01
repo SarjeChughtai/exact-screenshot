@@ -3,6 +3,10 @@ import type { FoundationType } from '@/types';
 
 const { steel_pricing, insulation_pricing, foundation_schedule, engineering_fees, tax_rates, freight_logic, markup_rules } = data;
 
+interface MarkupOptions {
+  useFlatMarkup?: boolean;
+}
+
 export function lookupSteelTier(sqft: number) {
   const tiers = steel_pricing.tiers;
   let tier = tiers[0];
@@ -89,17 +93,20 @@ export function calcTax(amount: number, provinceCode: string): { gstHst: number;
   return { gstHst: amount * rate, qst: 0, total: amount * rate };
 }
 
-export function getMarkupRate(steelAfter12: number): number {
+export function getMarkupRate(steelAfter12: number, options?: MarkupOptions): number {
+  if (options?.useFlatMarkup) {
+    return 0.05;
+  }
   for (const tier of markup_rules.internal_markup_tiers) {
     if (steelAfter12 <= tier.max_value) return tier.rate;
   }
   return 0.05;
 }
 
-export function calcMarkup(steelAfter12: number): number {
-  const rate = getMarkupRate(steelAfter12);
+export function calcMarkup(steelAfter12: number, options?: MarkupOptions): number {
+  const rate = getMarkupRate(steelAfter12, options);
   let markup = steelAfter12 * rate;
-  if (steelAfter12 < markup_rules.minimum_margin.threshold && markup < markup_rules.minimum_margin.minimum_margin_dollars) {
+  if (!options?.useFlatMarkup && steelAfter12 < markup_rules.minimum_margin.threshold && markup < markup_rules.minimum_margin.minimum_margin_dollars) {
     markup = markup_rules.minimum_margin.minimum_margin_dollars;
   }
   return markup;

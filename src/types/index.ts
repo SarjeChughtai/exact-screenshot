@@ -509,6 +509,12 @@ export interface CommissionRecipientSetting {
   updatedAt?: string;
 }
 
+export interface TeamLeadOverrideTeam {
+  id: string;
+  leadName: string;
+  memberNames: string[];
+}
+
 export type MessagingConversationKind = 'direct' | 'group' | 'team' | 'deal';
 export type MessagingMembershipSource = 'manual' | 'direct' | 'auto_team' | 'auto_deal';
 export type TeamConversationKey = 'leadership' | 'sales' | 'operations' | 'estimating' | 'accounting' | 'freight';

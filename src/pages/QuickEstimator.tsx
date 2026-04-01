@@ -12,7 +12,7 @@ import {
   calcInsulationArea, calcFreight, calcTax, formatCurrency, formatNumber,
   PROVINCES, INSULATION_GRADES, ENGINEERING_FACTORS, calcMarkup, getMarkupRate,
 } from '@/lib/calculations';
-import { estimateFreightFromLocation } from '@/lib/freightEstimate';
+import { estimateFreightFromLocation, hasGoogleMapsKeyConfigured } from '@/lib/freightEstimate';
 import {
   clearQuickEstimatorActiveState,
   createInitialQuickEstimatorState,
@@ -441,14 +441,17 @@ export default function QuickEstimator() {
   }, [drafts]);
 
   const handleLocationLookup = async () => {
-    const lookupInput = [postalCode.trim(), city.trim(), province.trim()].filter(Boolean).join(', ');
-    if (!lookupInput) {
+    if (![postalCode.trim(), city.trim(), province.trim()].some(Boolean)) {
       setFreightSource('Enter a postal code, city, or province');
       return;
     }
+    setLocationInput([postalCode.trim(), city.trim(), province.trim()].filter(Boolean).join(', '));
+    if (!hasGoogleMapsKeyConfigured()) {
+      setFreightSource('Google Maps key is not configured. Enter distance manually.');
+      return;
+    }
     setFreightSource('Looking up distance...');
-    setLocationInput(lookupInput);
-    const estimate = await estimateFreightFromLocation(lookupInput);
+    const estimate = await estimateFreightFromLocation({ postalCode, city, province });
     if (estimate) {
       setDistance(estimate.distanceKm.toString());
       setRemoteLevel(estimate.remote);
