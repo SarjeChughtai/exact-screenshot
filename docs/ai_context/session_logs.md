@@ -95,5 +95,29 @@ This file records the summary of work done in each interactive AI session.
   - `npm test` passed with 9 files / 26 tests
   - `npm run build` passed
   - pre-existing Vite warnings remain for large chunks and mixed static/dynamic `xlsx` / `pdfjs-dist` imports
+- Implemented the next workflow-normalization slice:
+  - added `src/lib/productionLifecycle.ts` and normalized production around `deals.productionStatus`
+  - `AppContext` now mirrors deal production state into the legacy `production` table instead of allowing the two records to drift
+  - `ProductionStatus` now uses normalized progress calculation and shows freight-ready state on the same board
+  - added `src/lib/opportunityWorkspace.ts` and a new `src/pages/Opportunities.tsx` board for internal CRM lifecycle management
+  - added route/module/sidebar/layout wiring for `/opportunities`
+  - added deep links from quote log, deals, and freight launch points into the opportunity/freight workflows
+- Verification:
+  - `npm test` passed with 11 files / 33 tests
+  - `npm run build` passed
+  - pre-existing Vite warnings remain for large chunks and mixed static/dynamic `xlsx` / `pdfjs-dist` imports
+- Implemented document-vault visibility improvements:
+  - added `src/lib/documentVault.ts` with primary/duplicate-aware file summaries for job and document views
+  - `DocumentLogTable` now shows visible-set counts, PDF/support/cost breakdowns, hidden duplicate counts, and clearer primary-set labels in attached files
+  - `DealerLog` now loads job-linked quote files and shows dealer-safe support files alongside project PDFs, with hidden duplicate counts surfaced in the tracker
+  - `Opportunities` now loads job-linked quote files, shows document-set counts per opportunity, and can open the latest saved PDF directly from the workspace
+- Extended the opportunities workspace UI:
+  - added a board-mode CRM view grouped by `open`, `won`, `lost`, and `abandoned`
+  - preserved the existing table-mode editing and launch actions
+  - board cards now surface next step, document-set counts, and freight-ready state
+- Verification:
+  - `npm test` passed with 12 files / 35 tests
+  - `npm run build` passed
+  - pre-existing Vite warnings remain for large chunks and mixed static/dynamic `xlsx` / `pdfjs-dist` imports
 
 ---

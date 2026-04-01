@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAppContext } from '@/context/AppContext';
 import { useRoles } from '@/context/RoleContext';
 import { useSettings } from '@/context/SettingsContext';
@@ -30,6 +30,7 @@ const EMPTY_DEAL: Partial<Deal> = {
 
 export default function MasterDeals() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const {
     deals,
     updateDeal,
@@ -92,6 +93,16 @@ export default function MasterDeals() {
   ), [pipelineDeals, pipelineStatuses]);
 
   const toggle = (jobId: string) => setExpandedJob(prev => prev === jobId ? null : jobId);
+
+  const focusedJobId = searchParams.get('jobId') || '';
+
+  useEffect(() => {
+    if (!focusedJobId) return;
+    if (searchClient === focusedJobId && expandedJob === focusedJobId) return;
+    setSearchClient(focusedJobId);
+    setExpandedJob(focusedJobId);
+    setPipelineView(false);
+  }, [expandedJob, focusedJobId, searchClient]);
 
   const handlePipelineDrop = (status: string) => {
     if (!draggedDealId) return;
@@ -430,6 +441,14 @@ export default function MasterDeals() {
                                 Open Freight Posting
                               </Button>
                             )}
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="mr-2"
+                              onClick={() => navigate(`/opportunities?jobId=${encodeURIComponent(d.jobId)}`)}
+                            >
+                              Open Opportunity
+                            </Button>
                             <Button
                               size="sm"
                               variant="outline"

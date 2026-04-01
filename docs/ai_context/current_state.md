@@ -46,6 +46,11 @@ Users belong to specialized portals:
   - dealer portal now includes a project tracker view in `DealerLog` with derived lifecycle stages and direct PDF access
   - freight now supports a manual pre-sale estimate flow and editable execution/pre-sale posting directly from `FreightBoard`
   - quote and RFQ logs now expose basic portal-native opportunity status controls (`open`, `lost`, `abandoned`) from the document workflow
+  - a dedicated `Opportunities` workspace now exists for internal CRM lifecycle management across RFQs, quotes, deals, and freight readiness
+  - production state is now explicitly normalized around `deals.productionStatus`, with the legacy `production` table treated as a synchronized shadow record
+  - quote, deal, and freight screens now deep-link into opportunities and freight workflows using query-param launch points
+  - internal and dealer-facing document views now surface primary visible file sets, hidden duplicate counts, and direct file/PDF access without forcing a jump back into import review
+  - the opportunities workspace now supports both table and CRM-style board views while preserving the same lifecycle controls and launch actions
 
 ## 📍 Navigational Rules
 - Dealers default to the `dealer-log` page.
@@ -53,3 +58,5 @@ Users belong to specialized portals:
 - Redirects should be handled at the page level, not global middleware, to allow partial access to unprofiled users.
 - Dealer-facing project status should be derived from shared document, opportunity, and deal state rather than maintained as a separate parallel record.
 - Freight should remain a single job-linked record that can move from `pre_sale` to `execution`, rather than creating duplicate freight rows for one job.
+- Opportunity management should happen from one portal-native workspace, with quote/deal pages acting as launch points rather than competing sources of lifecycle truth.
+- Production progress should be calculated from normalized deal stages, even when the UI uses custom configured display labels.

@@ -50,6 +50,7 @@ const menuGroups: MenuGroup[] = [
       { path: '/estimates-log', label: 'sidebar.estimatesLog', icon: List, module: 'estimator' },
       { path: '/quote-rfq', label: 'sidebar.quoteRfq', icon: Send, module: 'quote-log' },
       { path: '/quote-log', label: 'sidebar.quoteLog', icon: ClipboardList, module: 'quote-log' },
+      { path: '/opportunities', label: 'sidebar.opportunities', icon: Briefcase, module: 'opportunities' },
       { path: '/quote-builder', label: 'sidebar.salesQuoteBuilder', icon: FileText, module: 'quote-builder' },
     ],
   },

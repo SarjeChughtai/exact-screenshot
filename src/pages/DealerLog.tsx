@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight, FileText, Store, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
@@ -7,13 +7,17 @@ import { useAuth } from '@/context/AuthContext';
 import { useRoles } from '@/context/RoleContext';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
 import {
   buildDealerProjectDocuments,
   DEALER_PROJECT_STAGE_META,
   deriveDealerProjectStage,
   type DealerProjectStage,
 } from '@/lib/dealerProjectTracker';
+import { buildJobDocumentVaultSummary } from '@/lib/documentVault';
 import { getQuoteFileUrl } from '@/lib/quoteFileStorage';
+import { quoteFileFromRow } from '@/lib/supabaseMappers';
+import type { QuoteFileRecord } from '@/types';
 
 const STAGE_BADGE_CLASS: Record<DealerProjectStage, string> = {
   request_submitted: 'bg-slate-100 text-slate-700',
@@ -34,6 +38,7 @@ export default function DealerLog() {
   const { hasAnyRole } = useRoles();
   const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
   const [openingDocumentId, setOpeningDocumentId] = useState<string | null>(null);
+  const [filesByJobId, setFilesByJobId] = useState<Record<string, QuoteFileRecord[]>>({});
 
   const isAdminView = hasAnyRole('admin', 'owner');
 
@@ -80,6 +85,38 @@ export default function DealerLog() {
       delivered: 0,
     });
   }, [requests]);
+
+  const requestJobIds = useMemo(
+    () => [...new Set(requests.map(entry => entry.request.jobId).filter(Boolean))].sort(),
+    [requests],
+  );
+
+  useEffect(() => {
+    if (requestJobIds.length === 0) {
+      setFilesByJobId({});
+      return;
+    }
+
+    void (async () => {
+      const { data, error } = await (supabase.from as any)('quote_files')
+        .select('*')
+        .in('job_id', requestJobIds)
+        .order('created_at', { ascending: false });
+
+      if (error) return;
+
+      const grouped = (data || [])
+        .map((row: any) => quoteFileFromRow(row))
+        .reduce<Record<string, QuoteFileRecord[]>>((accumulator, file) => {
+          const key = file.jobId || '';
+          if (!key) return accumulator;
+          accumulator[key] = [...(accumulator[key] || []), file];
+          return accumulator;
+        }, {});
+
+      setFilesByJobId(grouped);
+    })();
+  }, [requestJobIds]);
 
   const handleOpenPdf = async (documentId: string, storagePath: string) => {
     setOpeningDocumentId(documentId);
@@ -150,6 +187,12 @@ export default function DealerLog() {
               </tr>
             ) : requests.map(entry => {
               const { request, relatedQuotes, deal, opportunity, stage, documents } = entry;
+              const documentSummary = buildJobDocumentVaultSummary({
+                jobId: request.jobId,
+                quotes: [request, ...relatedQuotes],
+                files: filesByJobId[request.jobId] || [],
+              });
+              const dealerSupportFiles = documentSummary.supportFiles;
               const payload = (request.payload || {}) as Record<string, any>;
               const isExpanded = expandedJobId === request.jobId;
               const latestQuote = relatedQuotes
@@ -197,42 +240,101 @@ export default function DealerLog() {
                               <p>Deal Status: <span className="font-medium">{deal?.dealStatus || 'Not converted'}</span></p>
                               <p>Production: <span className="font-medium">{deal?.productionStatus || 'Not started'}</span></p>
                               <p>Freight: <span className="font-medium">{deal?.freightStatus || 'Not booked'}</span></p>
+                              <p>Primary File Sets: <span className="font-medium">{documentSummary.visibleFiles.length}</span></p>
+                              <p>Hidden Duplicates: <span className="font-medium">{documentSummary.hiddenDuplicateCount}</span></p>
                               <p>Roof Pitch: <span className="font-medium">{String(payload.roofPitch || payload.roof_pitch || '-')}</span></p>
                             </div>
                           </div>
                           <div className="rounded-md border bg-background p-4">
                             <p className="text-sm font-semibold">Available Documents</p>
                             <p className="mt-1 text-xs text-muted-foreground">
-                              Current PDFs attached to this project.
+                              Current PDFs and dealer-visible support files attached to this project.
                             </p>
-                            {documents.length === 0 ? (
+                            <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
+                              <span className="rounded-full bg-blue-100 px-2 py-1 text-blue-700">
+                                PDFs: {documents.length}
+                              </span>
+                              <span className="rounded-full bg-emerald-100 px-2 py-1 text-emerald-700">
+                                Support files: {dealerSupportFiles.length}
+                              </span>
+                              {documentSummary.hiddenDuplicateCount > 0 && (
+                                <span className="rounded-full bg-amber-100 px-2 py-1 text-amber-700">
+                                  Hidden duplicates: {documentSummary.hiddenDuplicateCount}
+                                </span>
+                              )}
+                            </div>
+                            {documents.length === 0 && dealerSupportFiles.length === 0 ? (
                               <div className="mt-3 rounded-md border border-dashed px-4 py-6 text-xs text-muted-foreground">
-                                No PDFs are attached yet.
+                                No visible project files are attached yet.
                               </div>
                             ) : (
-                              <div className="mt-3 space-y-2">
-                                {documents.map(document => (
-                                  <div key={document.id} className="flex items-center justify-between rounded-md border px-3 py-2 text-xs">
-                                    <div className="min-w-0">
-                                      <p className="font-medium">{document.label}</p>
-                                      <p className="text-muted-foreground truncate">{document.pdfFileName}</p>
-                                    </div>
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      size="sm"
-                                      className="gap-1"
-                                      disabled={openingDocumentId === document.id}
-                                      onClick={(event) => {
-                                        event.stopPropagation();
-                                        void handleOpenPdf(document.id, document.pdfStoragePath);
-                                      }}
-                                    >
-                                      <FileText className="h-3.5 w-3.5" />
-                                      {openingDocumentId === document.id ? 'Opening...' : 'Open PDF'}
-                                    </Button>
+                              <div className="mt-3 space-y-3">
+                                {documents.length > 0 && (
+                                  <div className="space-y-2">
+                                    {documents.map(document => (
+                                      <div key={document.id} className="flex items-center justify-between rounded-md border px-3 py-2 text-xs">
+                                        <div className="min-w-0">
+                                          <div className="flex flex-wrap items-center gap-2">
+                                            <p className="font-medium">{document.label}</p>
+                                            <span className="rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] font-medium text-blue-700">
+                                              PDF
+                                            </span>
+                                          </div>
+                                          <p className="text-muted-foreground truncate">{document.pdfFileName}</p>
+                                        </div>
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          size="sm"
+                                          className="gap-1"
+                                          disabled={openingDocumentId === document.id}
+                                          onClick={(event) => {
+                                            event.stopPropagation();
+                                            void handleOpenPdf(document.id, document.pdfStoragePath);
+                                          }}
+                                        >
+                                          <FileText className="h-3.5 w-3.5" />
+                                          {openingDocumentId === document.id ? 'Opening...' : 'Open PDF'}
+                                        </Button>
+                                      </div>
+                                    ))}
                                   </div>
-                                ))}
+                                )}
+                                {dealerSupportFiles.length > 0 && (
+                                  <div className="space-y-2">
+                                    {dealerSupportFiles.map(file => (
+                                      <div key={file.id} className="flex items-center justify-between rounded-md border px-3 py-2 text-xs">
+                                        <div className="min-w-0">
+                                          <div className="flex flex-wrap items-center gap-2">
+                                            <p className="font-medium truncate">{file.fileName}</p>
+                                            <span className="rounded-full bg-green-100 px-1.5 py-0.5 text-[10px] font-medium text-green-700">
+                                              Primary visible set
+                                            </span>
+                                          </div>
+                                          <p className="text-muted-foreground truncate">
+                                            {file.fileType} | {new Date(file.createdAt).toLocaleString()}
+                                          </p>
+                                        </div>
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={async (event) => {
+                                            event.stopPropagation();
+                                            const signedUrl = await getQuoteFileUrl(file.storagePath);
+                                            if (!signedUrl) {
+                                              toast.error('Could not open this file.');
+                                              return;
+                                            }
+                                            window.open(signedUrl, '_blank', 'noopener,noreferrer');
+                                          }}
+                                        >
+                                          Open File
+                                        </Button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
                               </div>
                             )}
                           </div>

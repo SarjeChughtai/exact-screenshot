@@ -8,9 +8,9 @@ import { useRoles } from '@/context/RoleContext';
 import { getQuoteLifecycleForOpportunityStatus } from '@/lib/opportunities';
 import { isEstimatorAssignedToQuote } from '@/lib/rfqWorkflow';
 import { useSharedJobs } from '@/lib/sharedJobs';
+import { summarizeQuoteFiles } from '@/lib/documentVault';
 import { supabase } from '@/integrations/supabase/client';
 import { quoteFileFromRow } from '@/lib/supabaseMappers';
-import { getVisibleOperatorQuoteFiles } from '@/lib/importReview';
 import type { Deal, DocumentType, OpportunityStatus, Quote, QuoteFileRecord, QuoteStatus, SharedJobState } from '@/types';
 import { toast } from 'sonner';
 import { Archive, ChevronDown, ChevronRight, Download, Pencil, RotateCcw, Trash2 } from 'lucide-react';
@@ -106,13 +106,7 @@ export function DocumentLogTable({
           accumulator[key] = [...(accumulator[key] || []), file];
           return accumulator;
         }, {});
-
-      const visibleGrouped = Object.entries(grouped).reduce<Record<string, QuoteFileRecord[]>>((accumulator, [key, files]) => {
-        accumulator[key] = getVisibleOperatorQuoteFiles(files);
-        return accumulator;
-      }, {});
-
-      setFilesByDocumentId(visibleGrouped);
+      setFilesByDocumentId(grouped);
     })();
   }, [visibleDocumentIdsKey]);
 
@@ -288,6 +282,7 @@ export function DocumentLogTable({
       const existingDeal = deals.find(deal => deal.jobId === quote.jobId);
       const opportunity = opportunities.find(item => item.jobId === quote.jobId);
       const attachedFiles = filesByDocumentId[quote.id] || [];
+      const fileSummary = summarizeQuoteFiles(attachedFiles);
       const payload = (quote.payload || {}) as Record<string, unknown>;
       const openings = Array.isArray(payload.openings) ? payload.openings as Array<Record<string, unknown>> : [];
       const isRfqDocument = quote.documentType === 'rfq' || quote.documentType === 'dealer_rfq';
@@ -325,6 +320,14 @@ export function DocumentLogTable({
                     </Button>
                     <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => void openPdf(quote)}>
                       <Download className="h-3 w-3 mr-1" />PDF
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 px-2 text-xs"
+                      onClick={() => navigate(`/opportunities?jobId=${encodeURIComponent(quote.jobId)}`)}
+                    >
+                      Open Opportunity
                     </Button>
                     {quote.documentType === 'external_quote' && (
                       existingDeal ? (
@@ -404,6 +407,14 @@ export function DocumentLogTable({
                       <div className="flex flex-wrap gap-2">
                         <Button
                           size="sm"
+                          variant="outline"
+                          className="h-8 px-3 text-xs"
+                          onClick={() => navigate(`/opportunities?jobId=${encodeURIComponent(quote.jobId)}`)}
+                        >
+                          Open Opportunity
+                        </Button>
+                        <Button
+                          size="sm"
                           variant={opportunity?.status === 'open' ? 'default' : 'outline'}
                           className="h-8 px-3 text-xs"
                           onClick={() => setOpportunityStatus(quote, 'open')}
@@ -473,10 +484,34 @@ export function DocumentLogTable({
                     <p className="text-xs text-muted-foreground">No files attached to this document yet.</p>
                   ) : (
                     <div className="space-y-2">
-                      {attachedFiles.map(file => (
+                      <div className="flex flex-wrap gap-2 text-[11px]">
+                        <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-700">
+                          Visible sets: {fileSummary.visibleFiles.length}
+                        </span>
+                        <span className="rounded-full bg-blue-100 px-2 py-1 text-blue-700">
+                          PDFs: {fileSummary.generatedPdfFiles.length}
+                        </span>
+                        <span className="rounded-full bg-emerald-100 px-2 py-1 text-emerald-700">
+                          Support: {fileSummary.supportFiles.length}
+                        </span>
+                        <span className="rounded-full bg-violet-100 px-2 py-1 text-violet-700">
+                          Cost: {fileSummary.costFiles.length}
+                        </span>
+                        {fileSummary.hiddenDuplicateCount > 0 && (
+                          <span className="rounded-full bg-amber-100 px-2 py-1 text-amber-700">
+                            Hidden duplicates: {fileSummary.hiddenDuplicateCount}
+                          </span>
+                        )}
+                      </div>
+                      {fileSummary.visibleFiles.map(file => (
                         <div key={file.id} className="flex items-center justify-between gap-3 rounded border bg-background px-3 py-2 text-xs">
                           <div className="min-w-0">
-                            <p className="font-medium truncate">{file.fileName}</p>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="font-medium truncate">{file.fileName}</p>
+                              <span className="rounded-full bg-green-100 px-1.5 py-0.5 text-[10px] font-medium text-green-700">
+                                Primary visible set
+                              </span>
+                            </div>
                             <p className="text-muted-foreground">
                               {file.fileCategory || 'support_file'} · {file.fileType} · {new Date(file.createdAt).toLocaleString()}
                             </p>
