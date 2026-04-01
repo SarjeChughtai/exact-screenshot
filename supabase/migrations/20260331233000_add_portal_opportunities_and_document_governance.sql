@@ -72,9 +72,7 @@ set
   drop_off_location = case
     when coalesce(drop_off_location, '') <> '' then drop_off_location
     else coalesce(delivery_address, '')
-  end,
-  pickup_date = coalesce(pickup_date, nullif(pickup_date::text, '')::date),
-  delivery_date = coalesce(delivery_date, nullif(delivery_date::text, '')::date)
+  end
 where true;
 
 update public.quote_files
@@ -82,7 +80,7 @@ set duplicate_group_key = concat_ws(
   '|',
   coalesce(nullif(lower(regexp_replace(job_id, '[^a-zA-Z0-9]+', '-', 'g')), ''), 'no-job'),
   coalesce(nullif(lower(regexp_replace(file_type, '[^a-zA-Z0-9]+', '-', 'g')), ''), 'unknown'),
-  coalesce(nullif(lower(regexp_replace(coalesce(document_id, ''), '[^a-zA-Z0-9]+', '-', 'g')), ''), 'no-document'),
+  coalesce(nullif(lower(regexp_replace(coalesce(document_id::text, ''), '[^a-zA-Z0-9]+', '-', 'g')), ''), 'no-document'),
   coalesce(nullif(lower(regexp_replace(building_label, '[^a-zA-Z0-9]+', '-', 'g')), ''), 'no-building'),
   coalesce(nullif(lower(regexp_replace(client_id, '[^a-zA-Z0-9]+', '-', 'g')), ''), 'no-client')
 )
