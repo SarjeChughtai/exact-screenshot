@@ -1,6 +1,7 @@
 import { useAppContext } from '@/context/AppContext';
 import { useRoles } from '@/context/RoleContext';
 import { formatCurrency } from '@/lib/calculations';
+import { useSharedJobs } from '@/lib/sharedJobs';
 import { BarChart3, Briefcase, DollarSign, TrendingUp, Clock, CheckCircle2, AlertCircle, CreditCard } from 'lucide-react';
 import { Navigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -22,6 +23,7 @@ export default function Dashboard() {
   const { quotes, deals, payments, freight, internalCosts } = useAppContext();
   const { currentUser, hasAnyRole } = useRoles();
   const { t } = useTranslation();
+  const { visibleJobs, stateByJobId } = useSharedJobs();
 
   const PIPELINE_STAGE_LABELS: Record<string, string> = {
     Lead: t('dashboard.stages.lead'),
@@ -43,15 +45,19 @@ export default function Dashboard() {
   }
 
   const isSalesRep = !hasAnyRole('admin', 'owner', 'accounting', 'operations', 'freight');
+  const visibleJobIds = new Set(visibleJobs.map(job => job.jobId));
 
-  // Filter data by role
-  const visibleDeals = isSalesRep
-    ? deals.filter(d => d.salesRep === currentUser.name || d.salesRep.toLowerCase().includes(currentUser.name.toLowerCase()))
-    : deals;
+  const visibleDeals = deals.filter(deal =>
+    visibleJobIds.has(deal.jobId) && stateByJobId[deal.jobId] === 'deal',
+  );
 
-  const visibleQuotes = isSalesRep
-    ? quotes.filter(q => q.salesRep === currentUser.name || q.salesRep.toLowerCase().includes(currentUser.name.toLowerCase()))
-    : quotes;
+  const visibleQuotes = quotes.filter(quote => {
+    if (!visibleJobIds.has(quote.jobId)) return false;
+    const state = stateByJobId[quote.jobId];
+    if (quote.documentType === 'external_quote') return state === 'external_quote';
+    if (quote.documentType === 'internal_quote') return state === 'internal_quote';
+    return state === 'rfq';
+  });
 
   const activeDeals = visibleDeals.filter(d => d.dealStatus !== 'Cancelled' && d.dealStatus !== 'Complete');
   const activeQuotes = visibleQuotes.filter(q =>
@@ -60,8 +66,6 @@ export default function Dashboard() {
   );
   const wonQuotes = visibleQuotes.filter(q => q.status === 'Won').length;
   const totalQuotes = visibleQuotes.length;
-
-  const visibleJobIds = new Set(visibleDeals.map(d => d.jobId));
 
   const visiblePayments = payments.filter(p => visibleJobIds.has(p.jobId));
   const totalRevenue = visiblePayments

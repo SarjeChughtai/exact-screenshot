@@ -1,13 +1,15 @@
 import { Fragment, useState } from 'react';
 import { useAppContext } from '@/context/AppContext';
 import { formatCurrency } from '@/lib/calculations';
+import { useSharedJobs } from '@/lib/sharedJobs';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 
 export default function ClientPayments() {
   const { deals, payments } = useAppContext();
+  const { visibleJobIds } = useSharedJobs({ allowedStates: ['deal'] });
   const [expandedJob, setExpandedJob] = useState<string | null>(null);
 
-  const rows = deals.map(deal => {
+  const rows = deals.filter(deal => visibleJobIds.has(deal.jobId)).map(deal => {
     const clientPayments = payments.filter(payment => payment.jobId === deal.jobId && payment.direction === 'Client Payment IN');
     const totalAmount = clientPayments.reduce((sum, payment) => sum + payment.amountExclTax, 0);
     const totalTax = clientPayments.reduce((sum, payment) => sum + payment.taxAmount, 0);

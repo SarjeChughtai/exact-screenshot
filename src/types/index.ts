@@ -356,6 +356,24 @@ export interface UserProfileSettings {
   updatedAt?: string;
 }
 
+export type SharedJobState = 'estimate' | 'rfq' | 'internal_quote' | 'external_quote' | 'deal';
+
+export interface SharedJobRecord {
+  jobId: string;
+  clientName: string;
+  jobName: string;
+  state: SharedJobState;
+  salesRep?: string;
+  salesRepUserId?: string | null;
+  estimator?: string;
+  assignedEstimatorUserId?: string | null;
+  assignedFreightUserId?: string | null;
+  dealerUserId?: string | null;
+  vendorUserIds: string[];
+  sourceDocumentType?: DocumentType | 'deal';
+  sourceDocumentId?: string | null;
+}
+
 export type MessagingConversationKind = 'direct' | 'group' | 'team' | 'deal';
 export type MessagingMembershipSource = 'manual' | 'direct' | 'auto_team' | 'auto_deal';
 export type TeamConversationKey = 'leadership' | 'sales' | 'operations' | 'estimating' | 'accounting' | 'freight';

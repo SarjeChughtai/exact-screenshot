@@ -4,6 +4,7 @@ import { useAppContext } from '@/context/AppContext';
 import { useRoles } from '@/context/RoleContext';
 import { useSettings } from '@/context/SettingsContext';
 import { formatNumber, formatCurrency } from '@/lib/calculations';
+import { useSharedJobs } from '@/lib/sharedJobs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -40,14 +41,15 @@ export default function MasterDeals() {
   const [newDeal, setNewDeal] = useState<Partial<Deal>>(EMPTY_DEAL);
   const [draggedDealId, setDraggedDealId] = useState<string | null>(null);
   const [pipelineView, setPipelineView] = useState(true);
+  const { visibleJobIds, stateByJobId } = useSharedJobs({ allowedStates: ['deal'] });
 
   const canEdit = hasAnyRole('admin', 'owner', 'operations');
   const isAdminOwner = hasAnyRole('admin', 'owner');
   const isSalesRep = !hasAnyRole('admin', 'owner', 'accounting', 'operations', 'freight');
 
-  const visibleDeals = isSalesRep
-    ? deals.filter(d => d.salesRep === currentUser.name || d.salesRep.toLowerCase().includes(currentUser.name.toLowerCase()))
-    : deals;
+  const visibleDeals = deals.filter(deal =>
+    visibleJobIds.has(deal.jobId) && stateByJobId[deal.jobId] === 'deal',
+  );
 
   const reps = [...new Set(visibleDeals.map(d => d.salesRep).filter(Boolean))];
   const cancelledCount = visibleDeals.filter(d => d.dealStatus === 'Cancelled').length;

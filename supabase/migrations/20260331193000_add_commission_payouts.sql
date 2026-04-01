@@ -25,22 +25,26 @@ CREATE INDEX IF NOT EXISTS idx_commission_payouts_recipient
 
 ALTER TABLE public.commission_payouts ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Commission payouts read" ON public.commission_payouts;
 CREATE POLICY "Commission payouts read"
 ON public.commission_payouts
 FOR SELECT TO authenticated
 USING (public.has_any_role(auth.uid(), ARRAY['admin'::app_role, 'owner'::app_role, 'accounting'::app_role]));
 
+DROP POLICY IF EXISTS "Commission payouts insert" ON public.commission_payouts;
 CREATE POLICY "Commission payouts insert"
 ON public.commission_payouts
 FOR INSERT TO authenticated
 WITH CHECK (public.has_any_role(auth.uid(), ARRAY['admin'::app_role, 'owner'::app_role, 'accounting'::app_role]));
 
+DROP POLICY IF EXISTS "Commission payouts update" ON public.commission_payouts;
 CREATE POLICY "Commission payouts update"
 ON public.commission_payouts
 FOR UPDATE TO authenticated
-USING (public.has_any_role(auth.uid(), ARRAY['admin'::app_role, 'owner'::app_role, 'accounting'::app_role))
+USING (public.has_any_role(auth.uid(), ARRAY['admin'::app_role, 'owner'::app_role, 'accounting'::app_role]))
 WITH CHECK (public.has_any_role(auth.uid(), ARRAY['admin'::app_role, 'owner'::app_role, 'accounting'::app_role]));
 
+DROP POLICY IF EXISTS "Commission payouts delete" ON public.commission_payouts;
 CREATE POLICY "Commission payouts delete"
 ON public.commission_payouts
 FOR DELETE TO authenticated

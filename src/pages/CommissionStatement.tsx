@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useAppContext } from '@/context/AppContext';
 import { formatCurrency } from '@/lib/calculations';
 import { JobIdSelect } from '@/components/JobIdSelect';
+import { useSharedJobs } from '@/lib/sharedJobs';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Download } from 'lucide-react';
@@ -9,9 +10,15 @@ import { buildCommissionStageEntries } from '@/lib/commission';
 
 export default function CommissionStatement() {
   const { deals, internalCosts, payments, commissionPayouts } = useAppContext();
+  const { visibleJobIds } = useSharedJobs({ allowedStates: ['deal'] });
   const [selectedJob, setSelectedJob] = useState('');
 
-  const deal = deals.find(entry => entry.jobId === selectedJob);
+  const visibleDeals = useMemo(
+    () => deals.filter(deal => visibleJobIds.has(deal.jobId)),
+    [deals, visibleJobIds],
+  );
+
+  const deal = visibleDeals.find(entry => entry.jobId === selectedJob);
   const cost = internalCosts.find(entry => entry.jobId === selectedJob);
 
   const stageEntries = useMemo(
@@ -92,7 +99,8 @@ export default function CommissionStatement() {
           <JobIdSelect
             value={selectedJob}
             onValueChange={setSelectedJob}
-            deals={deals}
+            deals={visibleDeals}
+            allowedStates={['deal']}
             placeholder="Choose deal..."
             triggerClassName="mt-1"
           />

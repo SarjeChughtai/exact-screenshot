@@ -4,6 +4,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import type { FreightStatus } from '@/types';
 import { useRoles } from '@/context/RoleContext';
 import { useSettings } from '@/context/SettingsContext';
+import { useSharedJobs } from '@/lib/sharedJobs';
 
 const FREIGHT_STATUSES: FreightStatus[] = ['Pending', 'Booked', 'In Transit', 'Delivered'];
 
@@ -11,10 +12,11 @@ export default function FreightBoard() {
   const { deals, freight, updateFreight, internalCosts, payments } = useAppContext();
   const { currentUser, hasAnyRole } = useRoles();
   const { profile } = useSettings();
+  const { visibleJobIds } = useSharedJobs({ allowedStates: ['deal'] });
   const isRestrictedFreightUser = hasAnyRole('freight') && !hasAnyRole('admin', 'owner', 'operations') && !profile.canViewAllFreightBoard;
 
   // Build freight data from deals + freight records
-  const rows = deals.map(d => {
+  const rows = deals.filter(deal => visibleJobIds.has(deal.jobId)).map(d => {
     const fr = freight.find(f => f.jobId === d.jobId);
     const ic = internalCosts.find(c => c.jobId === d.jobId);
     const freightPaid = payments.filter(p => p.jobId === d.jobId && p.direction === 'Vendor Payment OUT' && p.type === 'Freight').reduce((s, p) => s + p.amountExclTax, 0);

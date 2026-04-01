@@ -1,14 +1,16 @@
 import { useState } from 'react';
 import { useAppContext } from '@/context/AppContext';
 import { formatCurrency, calcTax } from '@/lib/calculations';
+import { useSharedJobs } from '@/lib/sharedJobs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 
 export default function ProjectedFinancials() {
   const { deals, internalCosts } = useAppContext();
+  const { visibleJobIds } = useSharedJobs({ allowedStates: ['deal'] });
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
 
-  const rows = deals.map(deal => {
+  const rows = deals.filter(deal => visibleJobIds.has(deal.jobId)).map(deal => {
     const internalCost = internalCosts.find(cost => cost.jobId === deal.jobId);
     const trueTotal = internalCost ? internalCost.trueMaterial + internalCost.trueStructuralDrawing + internalCost.trueFoundationDrawing + internalCost.trueFreight + internalCost.trueInsulation : 0;
     const repTotal = internalCost ? internalCost.repMaterial + internalCost.repStructuralDrawing + internalCost.repFoundationDrawing + internalCost.repFreight + internalCost.repInsulation : 0;

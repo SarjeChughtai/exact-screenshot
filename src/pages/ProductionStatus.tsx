@@ -3,6 +3,7 @@ import { useSettings } from '@/context/SettingsContext';
 import { formatNumber } from '@/lib/calculations';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useRoles } from '@/context/RoleContext';
+import { useSharedJobs } from '@/lib/sharedJobs';
 import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -15,9 +16,12 @@ export default function ProductionStatus() {
   const { deals, updateDeal, payments } = useAppContext();
   const { settings } = useSettings();
   const { hasAnyRole } = useRoles();
+  const { visibleJobIds } = useSharedJobs({ allowedStates: ['deal'] });
   const canEdit = hasAnyRole('admin', 'owner', 'operations');
 
-  const activeDeals = deals.filter(deal => !['Cancelled', 'Lead', 'Quoted'].includes(deal.dealStatus));
+  const activeDeals = deals.filter(deal =>
+    visibleJobIds.has(deal.jobId) && !['Cancelled', 'Lead', 'Quoted'].includes(deal.dealStatus),
+  );
 
   const getProgressPct = (status: string) => {
     const idx = settings.productionStatuses.indexOf(status);
