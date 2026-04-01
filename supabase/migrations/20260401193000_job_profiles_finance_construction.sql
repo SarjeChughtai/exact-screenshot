@@ -434,7 +434,7 @@ with quote_seed as (
     max(nullif(coalesce(payload ->> 'leftEaveHeight', payload ->> 'left_eave_height'), '')::numeric) as left_eave_height,
     max(nullif(coalesce(payload ->> 'rightEaveHeight', payload ->> 'right_eave_height'), '')::numeric) as right_eave_height,
     bool_or(coalesce(nullif(coalesce(payload ->> 'singleSlope', payload ->> 'isSingleSlope', payload ->> 'is_single_slope'), '')::boolean, false)) as is_single_slope,
-    max(pitch) as pitch,
+    max(nullif(coalesce(payload ->> 'pitch', payload ->> 'roofPitch', payload ->> 'roof_pitch'), '')::numeric) as pitch,
     max(coalesce((payload ->> 'structureType'), '')) as structure_type
   from public.quotes
   where nullif(trim(job_id), '') is not null
