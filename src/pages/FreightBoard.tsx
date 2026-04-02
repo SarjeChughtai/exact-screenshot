@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Edit, Plus, Truck } from 'lucide-react';
 import { toast } from 'sonner';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -62,6 +62,7 @@ const EMPTY_FORM: FreightFormState = {
 const FREIGHT_STATUS_OPTIONS: FreightStatus[] = ['Pending', 'RFQ', 'Quoted', 'Booked', 'In Transit', 'Delivered'];
 
 export default function FreightBoard() {
+  const navigate = useNavigate();
   const {
     deals,
     quotes,
@@ -500,12 +501,17 @@ export default function FreightBoard() {
                   </td>
                   <td className="px-3 py-2 text-xs">{row.status}</td>
                   <td className="px-3 py-2">
-                    {(canEditRecord(row.assignedFreightUserId) || canClaimPreSaleRecord(row.assignedFreightUserId)) && (
-                      <Button variant="ghost" size="sm" className="h-7 gap-1" onClick={() => openEditDialog(freightByJobId[row.jobId])}>
-                        <Edit className="h-3.5 w-3.5" />
-                        Edit
+                    <div className="flex flex-wrap gap-1">
+                      <Button variant="ghost" size="sm" className="h-7 gap-1" onClick={() => navigate(`/messages?jobStream=${encodeURIComponent(row.jobId)}`)}>
+                        Open Stream
                       </Button>
-                    )}
+                      {(canEditRecord(row.assignedFreightUserId) || canClaimPreSaleRecord(row.assignedFreightUserId)) && (
+                        <Button variant="ghost" size="sm" className="h-7 gap-1" onClick={() => openEditDialog(freightByJobId[row.jobId])}>
+                          <Edit className="h-3.5 w-3.5" />
+                          Edit
+                        </Button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               )})}
@@ -572,36 +578,41 @@ export default function FreightBoard() {
                   </td>
                   <td className="px-3 py-2 text-xs">{row.status}</td>
                   <td className="px-3 py-2">
-                    {canEditRecord(row.assignedFreightUserId) && (
-                      <Button variant="ghost" size="sm" className="h-7 gap-1" onClick={() => openEditDialog(freightByJobId[row.jobId] || {
-                        jobId: row.jobId,
-                        clientName: row.clientName,
-                        buildingSize: row.buildingSize,
-                        province: row.province,
-                        weight: row.weight,
-                        pickupAddress: '',
-                        deliveryAddress: row.dropOffLocation,
-                        dropOffLocation: row.dropOffLocation,
-                        pickupDate: row.actualPickupDate || row.pickupDate,
-                        deliveryDate: row.actualDeliveryDate || row.deliveryDate,
-                        estimatedPickupDate: row.estimatedPickupDate || '',
-                        estimatedDeliveryDate: row.estimatedDeliveryDate || '',
-                        actualPickupDate: row.actualPickupDate || row.pickupDate,
-                        actualDeliveryDate: row.actualDeliveryDate || row.deliveryDate,
-                        mode: 'execution',
-                        estDistance: 0,
-                        estFreight: row.estFreight,
-                        actualFreight: row.actualFreight,
-                        paid: row.paid,
-                        carrier: row.carrier,
-                        moffettIncluded: row.moffettIncluded,
-                        assignedFreightUserId: row.assignedFreightUserId,
-                        status: row.status,
-                      })}>
-                        <Edit className="h-3.5 w-3.5" />
-                        Edit
+                    <div className="flex flex-wrap gap-1">
+                      <Button variant="ghost" size="sm" className="h-7 gap-1" onClick={() => navigate(`/messages?jobStream=${encodeURIComponent(row.jobId)}`)}>
+                        Open Stream
                       </Button>
-                    )}
+                      {canEditRecord(row.assignedFreightUserId) && (
+                        <Button variant="ghost" size="sm" className="h-7 gap-1" onClick={() => openEditDialog(freightByJobId[row.jobId] || {
+                          jobId: row.jobId,
+                          clientName: row.clientName,
+                          buildingSize: row.buildingSize,
+                          province: row.province,
+                          weight: row.weight,
+                          pickupAddress: '',
+                          deliveryAddress: row.dropOffLocation,
+                          dropOffLocation: row.dropOffLocation,
+                          pickupDate: row.actualPickupDate || row.pickupDate,
+                          deliveryDate: row.actualDeliveryDate || row.deliveryDate,
+                          estimatedPickupDate: row.estimatedPickupDate || '',
+                          estimatedDeliveryDate: row.estimatedDeliveryDate || '',
+                          actualPickupDate: row.actualPickupDate || row.pickupDate,
+                          actualDeliveryDate: row.actualDeliveryDate || row.deliveryDate,
+                          mode: 'execution',
+                          estDistance: 0,
+                          estFreight: row.estFreight,
+                          actualFreight: row.actualFreight,
+                          paid: row.paid,
+                          carrier: row.carrier,
+                          moffettIncluded: row.moffettIncluded,
+                          assignedFreightUserId: row.assignedFreightUserId,
+                          status: row.status,
+                        })}>
+                          <Edit className="h-3.5 w-3.5" />
+                          Edit
+                        </Button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               )})}

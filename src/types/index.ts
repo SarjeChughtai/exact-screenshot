@@ -499,6 +499,68 @@ export interface JobProfile {
   updatedAt?: string;
 }
 
+export type JobStreamEntryType = 'event' | 'post' | 'comment';
+export type JobStreamEventKey =
+  | 'rfq_submitted'
+  | 'estimating_started'
+  | 'rfq_returned'
+  | 'internal_quote_in_progress'
+  | 'internal_quote_ready'
+  | 'sent_to_freight'
+  | 'freight_quoted'
+  | 'external_quote_ready'
+  | 'converted_to_deal'
+  | 'production_status_changed'
+  | 'construction_rfq_posted'
+  | 'construction_rfq_awarded';
+
+export interface JobStreamEntry {
+  id: string;
+  jobId: string;
+  entryType: JobStreamEntryType;
+  eventKey?: JobStreamEventKey | null;
+  parentEntryId?: string | null;
+  body: string;
+  metadata?: Record<string, unknown> | null;
+  createdByUserId?: string | null;
+  createdByName: string;
+  createdAt: string;
+  updatedAt?: string;
+  deletedAt?: string | null;
+}
+
+export interface JobStreamAttachment {
+  id: string;
+  entryId: string;
+  jobId: string;
+  fileName: string;
+  fileType: string;
+  fileSize: number;
+  storagePath: string;
+  createdByUserId?: string | null;
+  createdAt: string;
+}
+
+export interface JobStreamUserState {
+  jobId: string;
+  userId: string;
+  lastReadAt: string;
+  updatedAt?: string;
+}
+
+export interface VisibleJobStreamSummary {
+  jobId: string;
+  clientName: string;
+  jobName: string;
+  state: SharedJobState;
+  latestEntryId?: string | null;
+  latestEntryType?: JobStreamEntryType | null;
+  latestEventKey?: JobStreamEventKey | null;
+  latestBody?: string | null;
+  latestCreatedAt?: string | null;
+  unreadCount: number;
+}
+
 export interface CommissionRecipientSetting {
   id: string;
   recipientType: CommissionRecipientType;

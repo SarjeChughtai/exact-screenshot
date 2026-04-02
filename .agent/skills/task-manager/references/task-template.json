@@ -1,0 +1,72 @@
+[
+  {
+    "_comment": "EXAMPLE TASK — copy and remove this _comment field when creating real tasks",
+    "id": "AREA-001",
+    "title": "Short imperative verb phrase describing the work",
+    "status": "ready",
+    "priority": "high",
+    "owner": "Codex",
+    "last_updated_by": "task-manager",
+    "next_action": "Exact first action the owner must take — specific file, function, or command",
+    "notes": "Context, dependencies, related decisions, links. May reference decision records by filename.",
+    "area": "api",
+    "files": [
+      "path/to/primary/file.ts",
+      "path/to/secondary/file.ts"
+    ],
+    "updated_at": "2026-04-02T00:00:00Z"
+  },
+  {
+    "_comment": "BLOCKED TASK EXAMPLE",
+    "id": "AUTH-005",
+    "title": "Implement MFA enrollment flow",
+    "status": "blocked",
+    "priority": "critical",
+    "owner": "Codex",
+    "last_updated_by": "Claude",
+    "next_action": "Wait for security audit completion. Once report received, implement TOTP enrollment in lib/auth/mfa/enroll.ts following report recommendations.",
+    "notes": "Blocked: security audit in progress (started 2026-03-28, expected completion 2026-04-05). Design spec in decisions/mfa-enrollment-design.md. Do not begin implementation until audit report confirms the proposed TOTP flow is acceptable.",
+    "area": "auth",
+    "files": [
+      "lib/auth/mfa/enroll.ts",
+      "app/api/auth/mfa/enroll/route.ts",
+      "components/auth/MFASetup.tsx"
+    ],
+    "updated_at": "2026-04-02T09:00:00Z"
+  },
+  {
+    "_comment": "IN-PROGRESS TASK EXAMPLE",
+    "id": "CRM-012",
+    "title": "Build contact deduplication algorithm",
+    "status": "in_progress",
+    "priority": "high",
+    "owner": "Claude",
+    "last_updated_by": "agent-orchestrator",
+    "next_action": "Confirm GIN index on contacts.email exists, then implement findDuplicates() in lib/crm/dedup/finder.ts",
+    "notes": "Algorithm: multi-pass (exact email → fuzzy name → phone), confidence threshold 0.85. Architecture decision logged in decisions/contact-dedup-algorithm.md. Stub files created in lib/crm/dedup/.",
+    "area": "crm",
+    "files": [
+      "lib/crm/dedup/finder.ts",
+      "lib/crm/dedup/merger.ts",
+      "lib/crm/dedup/__tests__/finder.test.ts"
+    ],
+    "updated_at": "2026-04-02T23:00:00Z"
+  },
+  {
+    "_comment": "DONE TASK EXAMPLE",
+    "id": "AUTH-003",
+    "title": "Set up Zod form validation schemas",
+    "status": "done",
+    "priority": "medium",
+    "owner": "Codex",
+    "last_updated_by": "Codex",
+    "next_action": "No further action required",
+    "notes": "Completed 2026-03-30. Schemas in lib/validations/. Pattern established for all future form validation — reference this task when adding new forms.",
+    "area": "auth",
+    "files": [
+      "lib/validations/auth.ts",
+      "lib/validations/common.ts"
+    ],
+    "updated_at": "2026-03-30T18:00:00Z"
+  }
+]

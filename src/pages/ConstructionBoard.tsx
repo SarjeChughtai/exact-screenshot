@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { useAppContext } from '@/context/AppContext';
 import { useRoles } from '@/context/RoleContext';
+import { useSettings } from '@/context/SettingsContext';
 import { JobIdSelect } from '@/components/JobIdSelect';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -12,9 +14,11 @@ import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '@/integrations/supabase/client';
 import { findJobProfile } from '@/lib/jobProfiles';
 import { constructionBidFromRow, constructionBidToRow, constructionRFQFromRow, constructionRFQToRow } from '@/lib/supabaseMappers';
+import { buildConstructionEvent, recordJobStreamEvent } from '@/lib/jobStreams';
 import { formatCurrency } from '@/lib/calculations';
 import type { ConstructionBid, ConstructionBidScope, ConstructionRFQ, ConstructionRFQScope } from '@/types';
 import { toast } from 'sonner';
+import { useSharedJobs } from '@/lib/sharedJobs';
 
 const EMPTY_RFQ_DRAFT = {
   jobId: '',
@@ -33,9 +37,12 @@ const EMPTY_BID_DRAFT = {
 };
 
 export default function ConstructionBoard() {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { deals, quotes, jobProfiles } = useAppContext();
   const { currentUser, hasAnyRole } = useRoles();
+  const { settings } = useSettings();
+  const { allJobs } = useSharedJobs();
   const canManage = hasAnyRole('admin', 'owner', 'operations');
   const [rfqDialogOpen, setRfqDialogOpen] = useState(false);
   const [rfqDraft, setRfqDraft] = useState(EMPTY_RFQ_DRAFT);
@@ -125,9 +132,19 @@ export default function ConstructionBoard() {
 
       const { error } = await (supabase.from as any)('construction_rfqs').insert(constructionRFQToRow(payload));
       if (error) throw error;
+      return payload;
     },
-    onSuccess: async () => {
+    onSuccess: async (payload) => {
+      const record = allJobs.find(job => job.jobId === payload.jobId) || null;
       await queryClient.invalidateQueries({ queryKey: ['construction-rfqs'] });
+      await queryClient.invalidateQueries({ queryKey: ['job-stream-summaries'] });
+      await recordJobStreamEvent({
+        jobId: payload.jobId,
+        actor: { id: currentUser.id, name: currentUser.name },
+        record,
+        personnel: settings.personnel,
+        draft: buildConstructionEvent('construction_rfq_posted', payload),
+      });
       setRfqDialogOpen(false);
       setRfqDraft(EMPTY_RFQ_DRAFT);
       toast.success('Construction RFQ posted.');
@@ -174,6 +191,18 @@ export default function ConstructionBoard() {
     }
     await queryClient.invalidateQueries({ queryKey: ['construction-rfqs'] });
     await queryClient.invalidateQueries({ queryKey: ['construction-bids'] });
+    await queryClient.invalidateQueries({ queryKey: ['job-stream-summaries'] });
+    if (status === 'Awarded') {
+      const awardedBid = (bidsByRFQ[rfq.id] || []).find(bid => bid.id === awardedBidId) || null;
+      const record = allJobs.find(job => job.jobId === rfq.jobId) || null;
+      await recordJobStreamEvent({
+        jobId: rfq.jobId,
+        actor: { id: currentUser.id, name: currentUser.name },
+        record,
+        personnel: settings.personnel,
+        draft: buildConstructionEvent('construction_rfq_awarded', { ...rfq, status, awardedBidId: awardedBidId || null }, awardedBid),
+      });
+    }
   };
 
   const rfqs = rfqsQuery.data || [];
@@ -235,6 +264,9 @@ export default function ConstructionBoard() {
                       {!canManage && rfq.status === 'Open' && (
                         <Button size="sm" variant="outline" onClick={() => setSelectedRFQ(rfq)}>Submit Bid</Button>
                       )}
+                      <Button size="sm" variant="outline" onClick={() => navigate(`/messages?jobStream=${encodeURIComponent(rfq.jobId)}`)}>
+                        Open Stream
+                      </Button>
                       {canManage && rfq.status === 'Open' && (
                         <Button size="sm" variant="outline" onClick={() => void updateRFQStatus(rfq, 'Closed')}>Close</Button>
                       )}

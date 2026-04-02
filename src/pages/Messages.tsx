@@ -23,6 +23,9 @@ import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/context/AuthContext';
 import { useMessages } from '@/context/MessagesContext';
+import { JobConnectPanel } from '@/components/JobConnectPanel';
+import { useJobStreamSummaries } from '@/lib/jobStreams';
+import { useSharedJobs } from '@/lib/sharedJobs';
 import type {
   MessagingConversation,
   MessagingConversationMember,
@@ -77,6 +80,11 @@ export default function Messages() {
     removeConversationMember,
     isUserOnline,
   } = useMessages();
+  const selectedJobStreamId = searchParams.get('jobStream') || '';
+  const streamSummariesQuery = useJobStreamSummaries(Boolean(user?.id));
+  const { visibleJobs: selectedStreamJobs } = useSharedJobs({
+    limitToJobIds: selectedJobStreamId ? [selectedJobStreamId] : undefined,
+  });
 
   const [composerValue, setComposerValue] = useState('');
   const [directDialogOpen, setDirectDialogOpen] = useState(false);
@@ -115,6 +123,16 @@ export default function Messages() {
     team: conversations.filter(conversation => conversation.kind === 'team'),
     deal: conversations.filter(conversation => conversation.kind === 'deal'),
   }), [conversations]);
+
+  const streamSummaries = streamSummariesQuery.data || [];
+  const selectedStreamSummary = useMemo(
+    () => streamSummaries.find(summary => summary.jobId === selectedJobStreamId) || null,
+    [selectedJobStreamId, streamSummaries],
+  );
+  const selectedStreamJob = useMemo(
+    () => selectedStreamJobs.find(job => job.jobId === selectedJobStreamId) || null,
+    [selectedJobStreamId, selectedStreamJobs],
+  );
 
   const filteredDirectory = useMemo(() => {
     const normalizedFilter = directoryFilter.trim().toLowerCase();
@@ -196,24 +214,41 @@ export default function Messages() {
     setMemberDialogOpen(false);
   };
 
-  useEffect(() => {
-    if (!isMessagingEnabled) return;
+  const openJobStream = (jobId: string) => {
+    void selectConversation(null);
+    const next = new URLSearchParams(searchParams);
+    next.set('jobStream', jobId);
+    next.delete('conversation');
+    next.delete('directUserId');
+    next.delete('dealJobId');
+    setSearchParams(next, { replace: true });
+  };
 
+  const clearJobStreamSelection = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete('jobStream');
+    setSearchParams(next, { replace: true });
+  };
+
+  useEffect(() => {
     const queryKey = searchParams.toString();
     if (!queryKey || handledQueryRef.current === queryKey) return;
 
     handledQueryRef.current = queryKey;
 
+    const jobStreamId = searchParams.get('jobStream');
     const conversationId = searchParams.get('conversation');
     const directUserId = searchParams.get('directUserId');
     const dealJobId = searchParams.get('dealJobId');
 
     const run = async () => {
-      if (conversationId) {
+      if (jobStreamId) {
+        await selectConversation(null);
+      } else if (isMessagingEnabled && conversationId) {
         await selectConversation(conversationId);
-      } else if (directUserId) {
+      } else if (isMessagingEnabled && directUserId) {
         await openDirectConversation(directUserId);
-      } else if (dealJobId) {
+      } else if (isMessagingEnabled && dealJobId) {
         await openDealConversation(dealJobId);
       }
 
@@ -226,30 +261,15 @@ export default function Messages() {
     void run();
   }, [isMessagingEnabled, openDealConversation, openDirectConversation, searchParams, selectConversation, setSearchParams]);
 
-  if (!isMessagingEnabled) {
-    return (
-      <div className="max-w-2xl space-y-4">
-        <h2 className="text-2xl font-bold text-foreground">Messages</h2>
-        <Card>
-          <CardHeader>
-            <CardTitle>Messaging is disabled</CardTitle>
-          </CardHeader>
-          <CardContent className="text-sm text-muted-foreground">
-            Your account does not currently have messaging access. An admin or owner can enable it in Users & Access.
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-foreground">Messages</h2>
-          <p className="text-sm text-muted-foreground mt-1">Direct, group, team, and deal conversations for enabled users.</p>
+          <p className="text-sm text-muted-foreground mt-1">Direct chat stays separate. Job Streams provide a job-centric activity feed across the workflows you can access.</p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        {isMessagingEnabled && (
+          <div className="flex flex-wrap gap-2">
           <Dialog open={directDialogOpen} onOpenChange={setDirectDialogOpen}>
             <DialogTrigger asChild>
               <Button variant="outline">
@@ -352,14 +372,26 @@ export default function Messages() {
               </div>
             </DialogContent>
           </Dialog>
-        </div>
+          </div>
+        )}
       </div>
+
+      {!isMessagingEnabled && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Chat disabled</CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm text-muted-foreground">
+            This account cannot use direct chat, but Job Streams are still available for the jobs you can access.
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid gap-4 xl:grid-cols-[300px_minmax(0,1fr)_280px]">
         <Card className="min-h-[70vh]">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Conversations</CardTitle>
-            {teamKeys.length > 0 && (
+            <CardTitle className="text-base">{isMessagingEnabled ? 'Messages & Streams' : 'Job Streams'}</CardTitle>
+            {isMessagingEnabled && teamKeys.length > 0 && (
               <div className="flex flex-wrap gap-2">
                 {teamKeys.map(teamKey => (
                   <Button key={teamKey} variant="outline" size="sm" onClick={() => void openTeamConversation(teamKey)}>
@@ -372,7 +404,54 @@ export default function Messages() {
           </CardHeader>
           <CardContent className="pt-0">
             <ScrollArea className="h-[calc(70vh-64px)] pr-2">
-              {([
+              <div className="mb-4">
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Job Streams</p>
+                  <Badge variant="secondary">{streamSummaries.length}</Badge>
+                </div>
+                <div className="space-y-2">
+                  {streamSummariesQuery.isLoading ? (
+                    <div className="rounded-md border border-dashed px-3 py-4 text-center text-xs text-muted-foreground">
+                      Loading job streams...
+                    </div>
+                  ) : streamSummaries.length === 0 ? (
+                    <div className="rounded-md border border-dashed px-3 py-4 text-center text-xs text-muted-foreground">
+                      No accessible job streams yet
+                    </div>
+                  ) : streamSummaries.map(summary => (
+                    <button
+                      key={summary.jobId}
+                      type="button"
+                      className={cn(
+                        'w-full rounded-md border px-3 py-2 text-left transition hover:border-primary hover:bg-muted/40',
+                        selectedJobStreamId === summary.jobId && 'border-primary bg-muted/50',
+                      )}
+                      onClick={() => openJobStream(summary.jobId)}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium">{summary.jobId}</p>
+                          <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                            {summary.jobName || summary.clientName || 'Job stream'}
+                          </p>
+                          <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                            {summary.latestBody || 'No activity yet'}
+                          </p>
+                        </div>
+                        {summary.unreadCount > 0 && (
+                          <Badge className="shrink-0">{summary.unreadCount}</Badge>
+                        )}
+                      </div>
+                      <div className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground">
+                        <span>{summary.state}</span>
+                        <span>{formatTimestamp(summary.latestCreatedAt)}</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {isMessagingEnabled && ([
                 ['Direct', groupedConversations.direct],
                 ['Groups', groupedConversations.group],
                 ['Teams', groupedConversations.team],
@@ -394,9 +473,12 @@ export default function Messages() {
                         type="button"
                         className={cn(
                           'w-full rounded-md border px-3 py-2 text-left transition hover:border-primary hover:bg-muted/40',
-                          selectedConversationId === conversation.id && 'border-primary bg-muted/50',
+                          selectedConversationId === conversation.id && !selectedJobStreamId && 'border-primary bg-muted/50',
                         )}
-                        onClick={() => void selectConversation(conversation.id)}
+                        onClick={async () => {
+                          clearJobStreamSelection();
+                          await selectConversation(conversation.id);
+                        }}
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0">
@@ -423,8 +505,14 @@ export default function Messages() {
         <Card className="min-h-[70vh]">
           <CardHeader className="border-b">
             <CardTitle className="flex items-center justify-between gap-3 text-base">
-              <span>{selectedConversation ? getConversationTitle(selectedConversation) : 'Select a conversation'}</span>
-              {selectedConversation?.kind === 'deal' && selectedConversation.jobId && (
+              <span>
+                {selectedJobStreamId
+                  ? `Job Stream • ${selectedJobStreamId}`
+                  : selectedConversation
+                    ? getConversationTitle(selectedConversation)
+                    : 'Select a stream or conversation'}
+              </span>
+              {!selectedJobStreamId && selectedConversation?.kind === 'deal' && selectedConversation.jobId && (
                 <Button variant="outline" size="sm" onClick={() => navigate(`/deals?jobId=${selectedConversation.jobId}`)}>
                   <Briefcase className="h-3.5 w-3.5 mr-1.5" />
                   {selectedConversation.jobId}
@@ -433,9 +521,18 @@ export default function Messages() {
             </CardTitle>
           </CardHeader>
           <CardContent className="flex h-[calc(70vh-84px)] flex-col p-0">
-            {!selectedConversation ? (
+            {selectedJobStreamId ? (
+              <div className="h-full overflow-hidden p-0">
+                <JobConnectPanel
+                  jobId={selectedJobStreamId}
+                  title={selectedStreamSummary?.jobName || selectedJobStreamId}
+                  showOpenInMessages={false}
+                  className="h-full rounded-none border-0 shadow-none"
+                />
+              </div>
+            ) : !selectedConversation ? (
               <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                Choose a direct chat, team room, group, or deal room.
+                Choose a job stream or conversation.
               </div>
             ) : (
               <>
@@ -499,8 +596,8 @@ export default function Messages() {
         <Card className="min-h-[70vh]">
           <CardHeader>
             <CardTitle className="flex items-center justify-between text-base">
-              <span>Participants</span>
-              {selectedConversation && selectedConversation.kind !== 'direct' && isConversationAdmin && (
+              <span>{selectedJobStreamId ? 'Stream Access' : 'Participants'}</span>
+              {!selectedJobStreamId && selectedConversation && selectedConversation.kind !== 'direct' && isConversationAdmin && (
                 <Dialog open={memberDialogOpen} onOpenChange={setMemberDialogOpen}>
                   <DialogTrigger asChild>
                     <Button variant="outline" size="sm">
@@ -549,7 +646,28 @@ export default function Messages() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {!selectedConversation ? (
+            {selectedJobStreamId ? (
+              <div className="space-y-3 text-sm">
+                <div className="rounded-md border bg-muted/20 p-3">
+                  <p className="font-medium">{selectedJobStreamId}</p>
+                  <p className="text-xs text-muted-foreground mt-1">{selectedStreamSummary?.jobName || selectedStreamSummary?.clientName || 'Job stream'}</p>
+                  <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                    {selectedStreamSummary?.state && <Badge variant="secondary">{selectedStreamSummary.state}</Badge>}
+                    {selectedStreamSummary && selectedStreamSummary.unreadCount > 0 && (
+                      <Badge>{selectedStreamSummary.unreadCount} unread</Badge>
+                    )}
+                  </div>
+                </div>
+                <div className="rounded-md border px-3 py-2 text-xs">
+                  <p className="font-semibold text-muted-foreground mb-1">Assignments</p>
+                  <p>Sales Rep: {selectedStreamJob?.salesRep || 'Unassigned'}</p>
+                  <p>Estimator: {selectedStreamJob?.estimator || 'Unassigned'}</p>
+                  <p>Freight: {selectedStreamJob?.assignedFreightUserId ? 'Assigned' : 'Unassigned'}</p>
+                  <p>Dealer: {selectedStreamJob?.dealerUserId ? 'Assigned' : 'None'}</p>
+                  <p>Construction / Vendor Access: {(selectedStreamJob?.vendorUserIds || []).length}</p>
+                </div>
+              </div>
+            ) : !selectedConversation ? (
               <div className="text-sm text-muted-foreground">Participants appear when you open a conversation.</div>
             ) : (
               <div className="space-y-3">

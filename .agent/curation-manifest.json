@@ -1,0 +1,103 @@
+{
+  "version": 1,
+  "updated_at": "2026-04-02T00:00:00Z",
+  "purpose": "Master curation manifest for the Antigravity master pack. Tracks imported agents, skills, workflows, optional modules, and deferred items to prevent duplicate imports across source archives.",
+  "sources": [
+    {
+      "id": "core-agent-os",
+      "type": "repo",
+      "label": "Current Antigravity Agent OS core"
+    },
+    {
+      "id": "antigravity-kit-main",
+      "type": "archive",
+      "label": "antigravity-kit-main.zip"
+    },
+    {
+      "id": "antigravity-awesome-skills-main",
+      "type": "archive",
+      "label": "antigravity-awesome-skills-main.zip"
+    },
+    {
+      "id": "csb-antigravity-god-mode",
+      "type": "repo",
+      "label": "CSB Portal antigravity-god-mode"
+    },
+    {
+      "id": "antigravity-agent-os-optional",
+      "type": "archive",
+      "label": "antigravity-agent-os (2).zip"
+    }
+  ],
+  "agents": [
+    { "id": "orchestrator", "source": "curated-local", "original_id": "orchestrator" },
+    { "id": "project-planner", "source": "curated-local", "original_id": "project-planner" },
+    { "id": "frontend-specialist", "source": "curated-local", "original_id": "frontend-specialist" },
+    { "id": "backend-specialist", "source": "curated-local", "original_id": "backend-specialist" },
+    { "id": "database-architect", "source": "curated-local", "original_id": "database-architect" },
+    { "id": "debugger", "source": "curated-local", "original_id": "debugger" },
+    { "id": "qa-automation-engineer", "source": "curated-local", "original_id": "qa-automation-engineer" },
+    { "id": "documentation-writer", "source": "curated-local", "original_id": "documentation-writer" },
+    { "id": "security-auditor", "source": "curated-local", "original_id": "security-auditor" },
+    { "id": "performance-optimizer", "source": "curated-local", "original_id": "performance-optimizer" }
+  ],
+  "skills": [
+    { "id": "agent-orchestrator", "source": "core-agent-os", "original_id": "agent-orchestrator" },
+    { "id": "conflict-resolver", "source": "core-agent-os", "original_id": "conflict-resolver" },
+    { "id": "context-sync", "source": "core-agent-os", "original_id": "context-sync" },
+    { "id": "decision-logger", "source": "core-agent-os", "original_id": "decision-logger" },
+    { "id": "handoff-protocol", "source": "core-agent-os", "original_id": "handoff-protocol" },
+    { "id": "multi-repo", "source": "core-agent-os", "original_id": "multi-repo" },
+    { "id": "notification-hooks", "source": "core-agent-os", "original_id": "notification-hooks" },
+    { "id": "safe-executor", "source": "core-agent-os", "original_id": "safe-executor" },
+    { "id": "session-bootstrap", "source": "core-agent-os", "original_id": "session-bootstrap" },
+    { "id": "steel-quote-parser", "source": "core-agent-os", "original_id": "steel-quote-parser" },
+    { "id": "task-manager", "source": "core-agent-os", "original_id": "task-manager" },
+    { "id": "token-budget", "source": "core-agent-os", "original_id": "token-budget" },
+    { "id": "architecture", "source": "antigravity-kit-main", "original_id": "architecture" },
+    { "id": "plan-writing", "source": "antigravity-kit-main", "original_id": "plan-writing" },
+    { "id": "api-patterns", "source": "antigravity-kit-main", "original_id": "api-patterns" },
+    { "id": "database-design", "source": "antigravity-kit-main", "original_id": "database-design" },
+    { "id": "systematic-debugging", "source": "antigravity-kit-main", "original_id": "systematic-debugging" },
+    { "id": "testing-patterns", "source": "antigravity-kit-main", "original_id": "testing-patterns" },
+    { "id": "code-review-checklist", "source": "antigravity-kit-main", "original_id": "code-review-checklist" },
+    { "id": "lint-and-validate", "source": "antigravity-kit-main", "original_id": "lint-and-validate" },
+    { "id": "deployment-procedures", "source": "antigravity-kit-main", "original_id": "deployment-procedures" },
+    { "id": "powershell-windows", "source": "antigravity-kit-main", "original_id": "powershell-windows" },
+    { "id": "frontend-design", "source": "antigravity-kit-main", "original_id": "frontend-design" },
+    { "id": "tailwind-patterns", "source": "antigravity-kit-main", "original_id": "tailwind-patterns" },
+    { "id": "web-design-guidelines", "source": "antigravity-kit-main", "original_id": "web-design-guidelines" },
+    { "id": "shadcn", "source": "antigravity-awesome-skills-main", "original_id": "shadcn" },
+    { "id": "react-patterns", "source": "antigravity-awesome-skills-main", "original_id": "react-patterns" },
+    { "id": "react-best-practices", "source": "antigravity-awesome-skills-main", "original_id": "react-best-practices" },
+    { "id": "auth-implementation-patterns", "source": "antigravity-awesome-skills-main", "original_id": "auth-implementation-patterns" },
+    { "id": "postgres-best-practices", "source": "antigravity-awesome-skills-main", "original_id": "postgres-best-practices" },
+    { "id": "obsidian-bases", "source": "antigravity-awesome-skills-main", "original_id": "obsidian-bases" },
+    { "id": "notion-automation", "source": "antigravity-awesome-skills-main", "original_id": "notion-automation", "optional": true },
+    { "id": "supabase-automation", "source": "antigravity-awesome-skills-main", "original_id": "supabase-automation", "optional": true }
+  ],
+  "workflows": [
+    { "id": "plan", "source": "curated-local", "original_id": "plan" },
+    { "id": "brainstorm", "source": "curated-local", "original_id": "brainstorm" },
+    { "id": "test", "source": "curated-local", "original_id": "test" },
+    { "id": "status", "source": "curated-local", "original_id": "status" },
+    { "id": "deploy", "source": "curated-local", "original_id": "deploy" }
+  ],
+  "optional_modules": [
+    { "id": "obsidian", "source": "antigravity-agent-os-optional", "original_id": "obsidian" },
+    { "id": "mcp-server", "source": "antigravity-agent-os-optional", "original_id": "mcp-server" },
+    { "id": "generate-kanban", "source": "antigravity-agent-os-optional", "original_id": "scripts/generate-kanban.mjs" }
+  ],
+  "deferred": [
+    {
+      "id": "agent-memory-mcp",
+      "source": "antigravity-awesome-skills-main",
+      "reason": "Deferred in v1 to avoid introducing a second persistent memory layer beside ai-context."
+    },
+    {
+      "id": "playwright-skill",
+      "source": "antigravity-awesome-skills-main",
+      "reason": "Deferred in v1 because CSB Portal already ships repo-native Playwright config and tests."
+    }
+  ]
+}

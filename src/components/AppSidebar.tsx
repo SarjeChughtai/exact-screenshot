@@ -21,7 +21,6 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { useSettings } from '@/context/SettingsContext';
 
 interface MenuItem {
   path: string;
@@ -124,14 +123,12 @@ export function AppSidebar() {
   const location = useLocation();
   const { canAccess, viewAsRole, setViewAsRole, isImpersonating, actualRoles, currentUser } = useRoles();
   const { user, userRoles, signOut } = useAuth();
-  const { profile } = useSettings();
   const { t } = useTranslation();
   const canImpersonate = actualRoles.includes('admin') || actualRoles.includes('owner');
   const filteredGroups = menuGroups
     .map(g => ({
       ...g,
-      items: g.items
-        .filter(item => canAccess(item.module) && (item.module !== 'messages' || profile.canUseMessaging)),
+      items: g.items.filter(item => canAccess(item.module)),
     }))
     .filter(g => g.items.length > 0);
 

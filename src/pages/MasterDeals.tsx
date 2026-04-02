@@ -31,6 +31,7 @@ import {
 } from '@/lib/opportunities';
 import { toast } from 'sonner';
 import { jobIdsMatch } from '@/lib/jobIds';
+import { JobConnectPanel } from '@/components/JobConnectPanel';
 
 const DEAL_STATUS_LABELS: Record<string, string> = {
   Lead: 'Request for Quote',
@@ -598,6 +599,9 @@ export default function MasterDeals() {
                           </div>
                           <p className="text-xs font-semibold text-muted-foreground mb-1">Notes</p>
                           <Textarea className="text-xs h-16" value={d.notes} onChange={e => updateDeal(d.jobId, { notes: e.target.value })} placeholder="Add notes..." />
+                        </div>
+                        <div className="mt-4">
+                          <JobConnectPanel jobId={d.jobId} showOpenInMessages />
                         </div>
                       </td>
                     </tr>

@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import { useAppContext } from '@/context/AppContext';
 import { useSettings } from '@/context/SettingsContext';
 import { notifyUsers } from '@/lib/workflowNotifications';
-import { saveDocumentPdf } from '@/lib/documentPdf';
+import { downloadDocumentPdf, saveDocumentPdf } from '@/lib/documentPdf';
 import { SharedRFQForm } from '@/components/rfq/SharedRFQForm';
 import {
   buildRFQPayloadFromForm,
@@ -84,67 +84,17 @@ export default function QuoteRFQ() {
     setOpenings(current => renumberOpenings(current.filter(opening => opening.id !== id)));
   };
 
-  const printRFQ = () => {
-    const jobId = form.jobId || 'DRAFT';
-    const win = window.open('', '_blank');
-    if (!win) return;
-
-    win.document.write(`<html><head><title>RFQ - ${jobId}</title><style>
-      body{font-family:monospace;font-size:12px;padding:20px;max-width:800px;margin:0 auto;}
-      .header{text-align:center;margin-bottom:16px;border-bottom:2px solid #000;padding-bottom:10px;}
-      .section{margin-top:16px;border-top:1px solid #ccc;padding-top:10px;}
-      .section h3{font-size:13px;margin:0 0 8px 0;text-transform:uppercase;}
-      .row{display:flex;justify-content:space-between;margin:4px 0;}
-      .opening{border:1px solid #ddd;padding:6px;margin:4px 0;border-radius:4px;}
-    </style></head><body>`);
-    win.document.write(`<div class="header"><h2>REQUEST FOR QUOTE</h2><p>Job ID: ${jobId} | Client: ${form.clientName} (${form.clientId})</p></div>`);
-    win.document.write(`<div class="section"><h3>Project Details</h3>
-      <div class="row"><span>Client:</span><span>${form.clientName}</span></div>
-      <div class="row"><span>Client ID:</span><span>${form.clientId}</span></div>
-      <div class="row"><span>Job Name:</span><span>${form.jobName}</span></div>
-      <div class="row"><span>Location:</span><span>${form.city}, ${form.province} ${form.postalCode}</span></div>
-      <div class="row"><span>Sales Rep:</span><span>${form.salesRep}</span></div>
-      <div class="row"><span>Estimator:</span><span>${form.estimator}</span></div>
-    </div>`);
-    win.document.write(`<div class="section"><h3>Building</h3>
-      <div class="row"><span>Dimensions:</span><span>${form.width} x ${form.length} x ${form.buildingStyle === 'Single Slope' ? form.highSide || form.height : form.height}</span></div>
-      <div class="row"><span>Roof Pitch:</span><span>${form.roofPitch || 'Not set'}</span></div>
-    </div>`);
-    win.document.write('<div class="section"><h3>Openings</h3>');
-    openings.forEach(opening => {
-      win.document.write(`<div class="opening">${opening.wall} #${opening.number} - ${opening.width} x ${opening.height}${opening.notes ? ` - ${opening.notes}` : ''}</div>`);
-    });
-    if (openings.length === 0) win.document.write('<p>No openings added</p>');
-    win.document.write('</div>');
-    win.document.write('</body></html>');
-    win.document.close();
-    win.print();
-  };
-
-  const handleSubmit = async () => {
-    if (!form.clientId.trim()) {
-      toast.error('Client ID is required');
-      return;
-    }
-
+  const buildDraftDocument = (): Quote => {
     const { width, length, height, sqft } = computeRFQDimensionsFromForm(form);
-    if (!width || !length || !height) {
-      toast.error('Building dimensions are required');
-      return;
-    }
-
-    const jobId = form.jobId || await allocateJobId();
-    if (!form.jobId) set('jobId', jobId);
-
     const payload = buildRFQPayloadFromForm(form, openings, {
       importedEstimateId: selectedEstimateId || null,
     });
 
-    const document: Quote = {
+    return {
       id: existingQuote?.id || crypto.randomUUID(),
       date: existingQuote?.date || new Date().toISOString().split('T')[0],
-      jobId,
-      jobName: form.jobName || `${width}x${length} steel building`,
+      jobId: form.jobId || 'DRAFT',
+      jobName: form.jobName || `${width || 0}x${length || 0} steel building`,
       clientName: form.clientName,
       clientId: form.clientId,
       salesRep: form.salesRep,
@@ -178,11 +128,48 @@ export default function QuoteRFQ() {
       gstHst: existingQuote?.gstHst || 0,
       qst: existingQuote?.qst || 0,
       grandTotal: existingQuote?.grandTotal || 0,
-      status: 'Sent',
+      status: existingQuote?.status || 'Draft',
       documentType: existingQuote?.documentType === 'dealer_rfq' ? 'dealer_rfq' : 'rfq',
-      workflowStatus: 'estimate_needed',
+      workflowStatus: existingQuote?.workflowStatus || 'draft',
       sourceDocumentId: existingQuote?.sourceDocumentId || null,
       payload,
+    };
+  };
+
+  const downloadRfqPdf = async () => {
+    try {
+      await downloadDocumentPdf(buildDraftDocument());
+    } catch (error) {
+      console.error('Failed to generate RFQ PDF', error);
+      toast.error('Unable to generate RFQ PDF');
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!form.clientId.trim()) {
+      toast.error('Client ID is required');
+      return;
+    }
+
+    const { width, length, height, sqft } = computeRFQDimensionsFromForm(form);
+    if (!width || !length || !height) {
+      toast.error('Building dimensions are required');
+      return;
+    }
+
+    const jobId = form.jobId || await allocateJobId();
+    if (!form.jobId) set('jobId', jobId);
+
+    const document: Quote = {
+      ...buildDraftDocument(),
+      jobId,
+      jobName: form.jobName || `${width}x${length} steel building`,
+      width,
+      length,
+      height,
+      sqft,
+      status: 'Sent',
+      workflowStatus: 'estimate_needed',
     };
 
     if (existingQuote) {
@@ -238,7 +225,8 @@ export default function QuoteRFQ() {
         onRemoveOpening={removeOpening}
         onSubmit={() => void handleSubmit()}
         submitLabel={existingQuote ? 'Update RFQ' : 'Submit RFQ'}
-        onPrint={printRFQ}
+        onPrint={() => void downloadRfqPdf()}
+        printLabel="Download RFQ PDF"
         deals={deals}
         estimateOptions={estimateOptions}
         selectedEstimateId={selectedEstimateId}

@@ -18,6 +18,7 @@ import { toast } from 'sonner';
 import { Archive, ChevronDown, ChevronRight, Download, Pencil, RotateCcw, Trash2 } from 'lucide-react';
 import { getQuoteFileUrl } from '@/lib/quoteFileStorage';
 import { getRFQWorkflowDisplayLabel } from '@/lib/workflowStatus';
+import { JobConnectPanel } from '@/components/JobConnectPanel';
 
 const STATUSES: QuoteStatus[] = ['Draft', 'Sent', 'Follow Up', 'Won', 'Lost', 'Expired'];
 
@@ -555,6 +556,11 @@ export function DocumentLogTable({
                     </div>
                   )}
                 </div>
+                {quote.jobId && (
+                  <div className="mt-4">
+                    <JobConnectPanel jobId={quote.jobId} showOpenInMessages />
+                  </div>
+                )}
               </td>
             </tr>
           )}

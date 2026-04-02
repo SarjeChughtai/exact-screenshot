@@ -73,6 +73,14 @@ import {
   findVendorRecordForLedger,
 } from '@/lib/paymentLedgerIntegrity';
 import { promoteFreightRecordToDealQuote } from '@/lib/freightHandoff';
+import { buildSharedJobRecords } from '@/lib/sharedJobs';
+import {
+  buildDealEvent,
+  buildFreightEvent,
+  buildProductionEvent,
+  buildQuoteWorkflowEvent,
+  recordJobStreamEvent,
+} from '@/lib/jobStreams';
 
 interface AppState {
   quotes: Quote[];
@@ -277,6 +285,60 @@ export function AppProvider({ children }: { children: ReactNode }) {
       await upsertJobProfile(seed);
     }
   }, [upsertJobProfile]);
+
+  const getSharedJobRecordFor = useCallback((jobId: string, overrides?: {
+    quotes?: Quote[];
+    deals?: Deal[];
+    freight?: FreightRecord[];
+  }) => {
+    const records = buildSharedJobRecords({
+      quotes: overrides?.quotes || state.quotes,
+      deals: overrides?.deals || state.deals,
+      freight: overrides?.freight || state.freight,
+      payments: state.payments,
+      steelCostData: state.steelCostData,
+      insulationCostData: state.insulationCostData,
+      storedDocuments: state.storedDocuments,
+      jobProfiles: state.jobProfiles,
+      clients: state.clients,
+    });
+
+    return records.find(record => jobIdsMatch(record.jobId, jobId)) || null;
+  }, [
+    state.clients,
+    state.deals,
+    state.freight,
+    state.insulationCostData,
+    state.jobProfiles,
+    state.payments,
+    state.quotes,
+    state.steelCostData,
+    state.storedDocuments,
+  ]);
+
+  const appendJobStreamEvent = useCallback(async (
+    jobId: string,
+    draft: ReturnType<typeof buildQuoteWorkflowEvent> | ReturnType<typeof buildDealEvent> | ReturnType<typeof buildFreightEvent> | ReturnType<typeof buildProductionEvent>,
+    overrides?: {
+      quotes?: Quote[];
+      deals?: Deal[];
+      freight?: FreightRecord[];
+    },
+  ) => {
+    if (!jobId || !draft || !currentUser?.id) return;
+
+    try {
+      await recordJobStreamEvent({
+        jobId,
+        actor: { id: currentUser.id, name: currentUser.name },
+        record: getSharedJobRecordFor(jobId, overrides),
+        personnel: settings.personnel,
+        draft,
+      });
+    } catch (error) {
+      console.error('Failed to append job stream event', error);
+    }
+  }, [currentUser?.id, currentUser?.name, getSharedJobRecordFor, settings.personnel]);
 
   const fetchAll = useCallback(async () => {
     try {
@@ -737,7 +799,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       await supabase.from('quotes').insert(row as any).select().single();
     } catch {}
     await syncJobProfileFromQuote(nextQuote);
-  }, [currentUser, upsertOpportunityRecord]);
+    void appendJobStreamEvent(
+      nextQuote.jobId,
+      buildQuoteWorkflowEvent(null, nextQuote),
+      { quotes: [...state.quotes, nextQuote] },
+    );
+  }, [appendJobStreamEvent, currentUser, state.quotes, syncJobProfileFromQuote, upsertOpportunityRecord]);
 
   const allocateJobId = useCallback(async (): Promise<string> => {
     const { data, error } = await (supabase.rpc as any)('allocate_job_id');
@@ -764,7 +831,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const row = quoteToRow(updates);
       await supabase.from('quotes').update(row as any).eq('id', id);
     } catch {}
-  }, [currentUser, state.quotes, syncJobProfileFromQuote, upsertOpportunityRecord]);
+    if (nextQuote) {
+      const nextQuotes = state.quotes.map(quote => quote.id === id ? nextQuote : quote);
+      void appendJobStreamEvent(
+        nextQuote.jobId,
+        buildQuoteWorkflowEvent(existingQuote, nextQuote),
+        { quotes: nextQuotes },
+      );
+    }
+  }, [appendJobStreamEvent, currentUser, state.quotes, syncJobProfileFromQuote, upsertOpportunityRecord]);
 
   const deleteQuote = useCallback(async (id: string) => {
     setState(prev => {
@@ -1032,7 +1107,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       await upsertClientJob(cId, nextDeal.clientName, nextDeal.jobId);
     }
     await promoteFreightEstimateToDealQuote(nextDeal.jobId);
-  }, [currentUser, ensureManualPersonnelEntry, promoteFreightEstimateToDealQuote, state.freight, syncJobProfileFromDeal, syncProductionShadow, upsertClientJob, upsertOpportunityRecord]);
+    void appendJobStreamEvent(
+      nextDeal.jobId,
+      buildDealEvent(null, nextDeal),
+      { deals: [...state.deals, nextDeal] },
+    );
+  }, [appendJobStreamEvent, currentUser, ensureManualPersonnelEntry, promoteFreightEstimateToDealQuote, state.deals, state.freight, syncJobProfileFromDeal, syncProductionShadow, upsertClientJob, upsertOpportunityRecord]);
 
   const updateDeal = useCallback(async (jobId: string, updates: Partial<Deal>) => {
     const existingDeal = state.deals.find(d => d.jobId === jobId);
@@ -1089,8 +1169,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
     if (persisted && nextDeal) {
       await promoteFreightEstimateToDealQuote(nextDeal.jobId);
+      void appendJobStreamEvent(
+        nextDeal.jobId,
+        buildDealEvent(existingDeal, nextDeal),
+        { deals: state.deals.map(deal => deal.jobId === jobId ? nextDeal : deal) },
+      );
     }
-  }, [currentUser, ensureManualPersonnelEntry, promoteFreightEstimateToDealQuote, state.deals, state.freight, syncJobProfileFromDeal, syncProductionShadow, upsertOpportunityRecord]);
+  }, [appendJobStreamEvent, currentUser, ensureManualPersonnelEntry, promoteFreightEstimateToDealQuote, state.deals, state.freight, syncJobProfileFromDeal, syncProductionShadow, upsertOpportunityRecord]);
 
   const deleteDeal = useCallback(async (jobId: string) => {
     const revertedQuote = state.quotes.find(quote =>
@@ -1278,9 +1363,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         foundation_drawings_status: pr.foundationDrawingsStatus || 'not_requested',
       } as any).eq('job_id', pr.jobId);
     } catch {}
-  }, [currentUser]);
+    void appendJobStreamEvent(pr.jobId, buildProductionEvent(null, pr));
+  }, [appendJobStreamEvent, currentUser]);
 
   const updateProduction = useCallback(async (jobId: string, updates: Partial<ProductionRecord>) => {
+    const existingRecord = state.production.find(record => record.jobId === jobId) || null;
     let nextRecord: ProductionRecord | null = null;
     let nextStatus: ReturnType<typeof deriveDealProductionStatusFromRecord> = 'Submitted';
     setState(prev => {
@@ -1314,7 +1401,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         } as any).eq('job_id', jobId);
       }
     } catch {}
-  }, [currentUser]);
+    if (nextRecord) {
+      void appendJobStreamEvent(jobId, buildProductionEvent(existingRecord, nextRecord));
+    }
+  }, [appendJobStreamEvent, currentUser, state.production]);
 
   // --- Freight ---
   const addFreight = useCallback(async (fr: FreightRecord) => {
@@ -1325,11 +1415,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
       await supabase.from('freight').insert(row as any).select().single();
     } catch {}
     await syncJobProfileFromFreight(fr);
-  }, [currentUser, syncJobProfileFromFreight]);
+    void appendJobStreamEvent(
+      fr.jobId,
+      buildFreightEvent(null, fr),
+      { freight: [...state.freight, fr] },
+    );
+  }, [appendJobStreamEvent, currentUser, state.freight, syncJobProfileFromFreight]);
 
   const updateFreight = useCallback(async (jobId: string, updates: Partial<FreightRecord>) => {
-    const nextFreight = state.freight.find(record => record.jobId === jobId)
-      ? { ...state.freight.find(record => record.jobId === jobId)!, ...updates }
+    const existingFreight = state.freight.find(record => record.jobId === jobId) || null;
+    const nextFreight = existingFreight
+      ? { ...existingFreight, ...updates }
       : null;
     setState(prev => {
       const existing = prev.freight.find(f => f.jobId === jobId);
@@ -1345,8 +1441,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } catch {}
     if (nextFreight) {
       void syncJobProfileFromFreight(nextFreight);
+      void appendJobStreamEvent(
+        jobId,
+        buildFreightEvent(existingFreight, nextFreight),
+        { freight: state.freight.map(record => record.jobId === jobId ? nextFreight : record) },
+      );
     }
-  }, [currentUser, state.freight, syncJobProfileFromFreight]);
+  }, [appendJobStreamEvent, currentUser, state.freight, syncJobProfileFromFreight]);
 
   // --- RFQs ---
   const addRFQ = useCallback((rfq: RFQ) => {

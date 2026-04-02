@@ -1,0 +1,109 @@
+{
+  "meta": {
+    "version": 2,
+    "last_updated": "2026-04-02T14:27:16.131Z",
+    "description": "CSB Portal bridge-mode task registry seeded from legacy docs/plans."
+  },
+  "tasks": [
+    {
+      "id": "EST-001",
+      "title": "Estimate Workflow Continuity",
+      "status": "in_progress",
+      "priority": "critical",
+      "owner": "unassigned",
+      "last_updated_by": "repo-bootstrap",
+      "next_action": "Validate and continue: Quick Estimator restores active local state.",
+      "notes": "Imported from docs/plans/01-estimate-workflow-continuity.md.\n\nBusiness problem:\n- Estimate work is not resumable.\n- Saved estimates cannot be reopened in Quick Estimator for editing.\n- Estimate drafts are not accessible in the estimator UI.\n- Estimate location data is incomplete and does not fully transfer into RFQ.\n\nTarget behavior:\n- Quick Estimator restores active local state.\n- Quick Estimator exposes saved drafts with load and delete actions.\n- Quick Estimator can load an existing estimate for editing.\n- Estimates Log supports edit routing back into Quick Estimator.\n- Estimates store city, province, and postalCode.\n- RFQ import from estimates carries all three location fields.\n\nTests needed:\n- Estimate row mapper round-trip with city and postalCode.\n- Estimate-to-RFQ location transfer.\n- Draft storage/load helper behavior.\n\nRisk:\n- Low to medium",
+      "area": "estimate",
+      "files": [
+        "docs/plans/01-estimate-workflow-continuity.md",
+        "src/pages/QuickEstimator.tsx",
+        "src/pages/EstimatesLog.tsx",
+        "src/lib/rfqForm.ts",
+        "src/lib/supabaseMappers.ts",
+        "src/types/index.ts",
+        "supabase/migrations/*add_estimate_location_fields.sql"
+      ],
+      "updated_at": "2026-04-02T14:27:16.131Z",
+      "created_at": "2026-04-02T14:27:16.131Z"
+    },
+    {
+      "id": "RFQ-001",
+      "title": "RFQ Continuity and Estimator Visibility",
+      "status": "ready",
+      "priority": "high",
+      "owner": "unassigned",
+      "last_updated_by": "repo-bootstrap",
+      "next_action": "Validate and continue: RFQ save routes to the created log entry and highlights it.",
+      "notes": "Imported from docs/plans/02-rfq-continuity-and-estimator-visibility.md.\n\nBusiness problem:\n- RFQ creation is not visibly continuous.\n- Estimator queues are not restricted tightly enough.\n- RFQ detail views are too generic for review work.\n\nTarget behavior:\n- RFQ save routes to the created log entry and highlights it.\n- Quote Log supports log and pipeline views with admin user filtering.\n- Estimator-only views show only assigned or explicitly submitted RFQs.\n- Expanded RFQ detail view shows normalized building/location/accessory data plus PDF actions.\n\nTests needed:\n- Estimator queue filtering\n- RFQ row focus/highlight on redirect\n- Expanded RFQ detail rendering\n\nRisk:\n- Medium",
+      "area": "rfq",
+      "files": [
+        "docs/plans/02-rfq-continuity-and-estimator-visibility.md",
+        "src/pages/QuoteRFQ.tsx",
+        "src/pages/QuoteLog.tsx",
+        "src/components/RFQWorkflowQueues.tsx",
+        "src/components/DocumentLogTable.tsx"
+      ],
+      "updated_at": "2026-04-02T14:27:16.131Z",
+      "created_at": "2026-04-02T14:27:16.131Z"
+    },
+    {
+      "id": "DEAL-001",
+      "title": "Production and Deal Lifecycle Integrity",
+      "status": "ready",
+      "priority": "high",
+      "owner": "unassigned",
+      "last_updated_by": "repo-bootstrap",
+      "next_action": "Validate and continue: Deals created from quotes can be reverted back to the source quote.",
+      "notes": "Imported from docs/plans/03-production-and-deal-lifecycle-integrity.md.\n\nBusiness problem:\n- Mistaken deal conversions are hard to unwind.\n- Production lifecycle ownership is split across two domain models.\n\nTarget behavior:\n- Deals created from quotes can be reverted back to the source quote.\n- Source quote regains quote_sent workflow and Sent status.\n- deals remains the temporary canonical production state until a larger redesign lands.\n\nTests needed:\n- Quote -> deal -> quote transition\n- Production status persistence on deals\n\nRisk:\n- Medium",
+      "area": "deal",
+      "files": [
+        "docs/plans/03-production-and-deal-lifecycle-integrity.md",
+        "src/components/DocumentLogTable.tsx",
+        "src/pages/MasterDeals.tsx",
+        "src/context/AppContext.tsx",
+        "src/pages/ProductionStatus.tsx"
+      ],
+      "updated_at": "2026-04-02T14:27:16.131Z",
+      "created_at": "2026-04-02T14:27:16.131Z"
+    },
+    {
+      "id": "OPS-001",
+      "title": "Operations Workspace and Import Reliability",
+      "status": "ready",
+      "priority": "high",
+      "owner": "unassigned",
+      "last_updated_by": "repo-bootstrap",
+      "next_action": "Validate and continue: Group operations tooling together in the sidebar.",
+      "notes": "Imported from docs/plans/04-operations-workspace-and-import-reliability.md.\n\nBusiness problem:\n- Operations tools are scattered.\n- Import and cost-calculation complaints are not protected by regression coverage.\n\nTarget behavior:\n- Group operations tooling together in the sidebar.\n- Audit and fix parser-to-builder mapping for weight, $ / lb, total cost, and job ID loading.\n- Add regression tests before making duplicate-document logic changes.\n\nTests needed:\n- Parser extraction regression tests\n- Internal quote import/mapping tests\n\nRisk:\n- Low to medium",
+      "area": "operations",
+      "files": [
+        "docs/plans/04-operations-workspace-and-import-reliability.md",
+        "src/components/AppSidebar.tsx",
+        "src/pages/InternalQuoteBuilder.tsx",
+        "src/pages/ImportReview.tsx",
+        "src/lib/pdfParsers.ts"
+      ],
+      "updated_at": "2026-04-02T14:27:16.131Z",
+      "created_at": "2026-04-02T14:27:16.131Z"
+    },
+    {
+      "id": "OPP-001",
+      "title": "Opportunity and Post-Sale Pipeline Foundation",
+      "status": "pending",
+      "priority": "medium",
+      "owner": "unassigned",
+      "last_updated_by": "repo-bootstrap",
+      "next_action": "Validate and continue: Define opportunities as the parent lifecycle object for RFQs, quotes, and deals.",
+      "notes": "Imported from docs/plans/05-opportunity-and-post-sale-pipeline-foundation.md.\n\nBusiness problem:\n- RFQs, quotes, dealer requests, and deals do not share a stable parent CRM object.\n- Post-sale milestones are implicit instead of modeled.\n\nTarget behavior:\n- Define opportunities as the parent lifecycle object for RFQs, quotes, and deals.\n- Track potential revenue and lifecycle state: open, won, lost, abandoned.\n- Define the post-sale milestone model before implementation.\n\nTests needed:\n- Lifecycle integrity\n- Deal conversion and reversion path coverage\n- Opportunity visibility and permission rules\n\nRisk:\n- High",
+      "area": "opportunity",
+      "files": [
+        "docs/plans/05-opportunity-and-post-sale-pipeline-foundation.md",
+        "Docs first",
+        "Later: migrations, types, context, deal pages, and workflow pages"
+      ],
+      "updated_at": "2026-04-02T14:27:16.131Z",
+      "created_at": "2026-04-02T14:27:16.131Z"
+    }
+  ]
+}

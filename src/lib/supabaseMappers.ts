@@ -20,6 +20,10 @@ import type {
   Opportunity,
   DealMilestone,
   JobProfile,
+  JobStreamAttachment,
+  JobStreamEntry,
+  JobStreamUserState,
+  VisibleJobStreamSummary,
   CommissionRecipientSetting,
   ConstructionRFQ,
   ConstructionBid,
@@ -752,6 +756,119 @@ export function jobProfileToRow(profile: Partial<JobProfile>): Record<string, an
     if (map[k]) row[map[k]] = v;
   }
   return row;
+}
+
+// --- JobStreamEntry ---
+export function jobStreamEntryFromRow(r: any): JobStreamEntry {
+  return {
+    id: r.id ?? '',
+    jobId: r.job_id ?? '',
+    entryType: r.entry_type ?? 'post',
+    eventKey: r.event_key ?? null,
+    parentEntryId: r.parent_entry_id ?? null,
+    body: r.body ?? '',
+    metadata: r.metadata ?? {},
+    createdByUserId: r.created_by_user_id ?? null,
+    createdByName: r.created_by_name ?? '',
+    createdAt: r.created_at ?? '',
+    updatedAt: r.updated_at ?? '',
+    deletedAt: r.deleted_at ?? null,
+  };
+}
+
+export function jobStreamEntryToRow(entry: Partial<JobStreamEntry>): Record<string, any> {
+  const map: Record<string, string> = {
+    id: 'id',
+    jobId: 'job_id',
+    entryType: 'entry_type',
+    eventKey: 'event_key',
+    parentEntryId: 'parent_entry_id',
+    body: 'body',
+    metadata: 'metadata',
+    createdByUserId: 'created_by_user_id',
+    createdByName: 'created_by_name',
+    createdAt: 'created_at',
+    updatedAt: 'updated_at',
+    deletedAt: 'deleted_at',
+  };
+  const row: Record<string, any> = {};
+  for (const [k, v] of Object.entries(entry)) {
+    if (map[k]) row[map[k]] = v;
+  }
+  return row;
+}
+
+// --- JobStreamAttachment ---
+export function jobStreamAttachmentFromRow(r: any): JobStreamAttachment {
+  return {
+    id: r.id ?? '',
+    entryId: r.entry_id ?? '',
+    jobId: r.job_id ?? '',
+    fileName: r.file_name ?? '',
+    fileType: r.file_type ?? 'application/octet-stream',
+    fileSize: r.file_size != null ? Number(r.file_size) : 0,
+    storagePath: r.storage_path ?? '',
+    createdByUserId: r.created_by_user_id ?? null,
+    createdAt: r.created_at ?? '',
+  };
+}
+
+export function jobStreamAttachmentToRow(attachment: Partial<JobStreamAttachment>): Record<string, any> {
+  const map: Record<string, string> = {
+    id: 'id',
+    entryId: 'entry_id',
+    jobId: 'job_id',
+    fileName: 'file_name',
+    fileType: 'file_type',
+    fileSize: 'file_size',
+    storagePath: 'storage_path',
+    createdByUserId: 'created_by_user_id',
+    createdAt: 'created_at',
+  };
+  const row: Record<string, any> = {};
+  for (const [k, v] of Object.entries(attachment)) {
+    if (map[k]) row[map[k]] = v;
+  }
+  return row;
+}
+
+// --- JobStreamUserState ---
+export function jobStreamUserStateFromRow(r: any): JobStreamUserState {
+  return {
+    jobId: r.job_id ?? '',
+    userId: r.user_id ?? '',
+    lastReadAt: r.last_read_at ?? '',
+    updatedAt: r.updated_at ?? '',
+  };
+}
+
+export function jobStreamUserStateToRow(state: Partial<JobStreamUserState>): Record<string, any> {
+  const map: Record<string, string> = {
+    jobId: 'job_id',
+    userId: 'user_id',
+    lastReadAt: 'last_read_at',
+    updatedAt: 'updated_at',
+  };
+  const row: Record<string, any> = {};
+  for (const [k, v] of Object.entries(state)) {
+    if (map[k]) row[map[k]] = v;
+  }
+  return row;
+}
+
+export function visibleJobStreamSummaryFromRow(r: any): VisibleJobStreamSummary {
+  return {
+    jobId: r.job_id ?? '',
+    clientName: r.client_name ?? '',
+    jobName: r.job_name ?? '',
+    state: r.state ?? 'estimate',
+    latestEntryId: r.latest_entry_id ?? null,
+    latestEntryType: r.latest_entry_type ?? null,
+    latestEventKey: r.latest_event_key ?? null,
+    latestBody: r.latest_body ?? null,
+    latestCreatedAt: r.latest_created_at ?? null,
+    unreadCount: Number(r.unread_count) || 0,
+  };
 }
 
 // --- CommissionRecipientSetting ---
