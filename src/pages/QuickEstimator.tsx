@@ -9,10 +9,11 @@ import { Switch } from '@/components/ui/switch';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
   calcSteelCost, calcEngineeringFromFactor, lookupFoundation, lookupInsulation,
-  calcInsulationArea, calcFreight, calcTax, formatCurrency, formatNumber,
+  calcInsulationArea, calcTax, formatCurrency, formatNumber,
   PROVINCES, INSULATION_GRADES, calcMarkup, getMarkupRate, autoComplexityFactor,
 } from '@/lib/calculations';
-import { estimateFreightFromLocation, hasGoogleMapsKeyConfigured } from '@/lib/freightEstimate';
+import { estimateQuoteFreight, type QuoteFreightResult } from '@/lib/quoteFreightEstimator';
+import { FreightInfoBadge } from '@/components/FreightInfoBadge';
 import {
   clearQuickEstimatorActiveState,
   createInitialQuickEstimatorState,
@@ -39,6 +40,7 @@ import { useAppContext } from '@/context/AppContext';
 import { useRoles } from '@/context/RoleContext';
 import { useAuth } from '@/context/AuthContext';
 import { useSettings } from '@/context/SettingsContext';
+import type { FreightRecord } from '@/types';
 import { toast } from 'sonner';
 import type { Estimate } from '@/types';
 import { PersonnelSelect } from '@/components/PersonnelSelect';
@@ -64,6 +66,7 @@ export default function QuickEstimator() {
     steelCostData,
     insulationCostData,
     storedDocuments,
+    freight: freightRecords,
   } = useAppContext();
   const { currentUser, hasAnyRole } = useRoles();
   const { user } = useAuth();
@@ -79,7 +82,8 @@ export default function QuickEstimator() {
   const [city, setCity] = useState('');
   const [postalCode, setPostalCode] = useState('');
   const [distance, setDistance] = useState('200');
-  const [remoteLevel, setRemoteLevel] = useState('none');
+  const [remoteLevel, setRemoteLevel] = useState('none'); // kept for backward compat
+  const [freightResult, setFreightResult] = useState<QuoteFreightResult | null>(null);
   const [locationInput, setLocationInput] = useState('');
   const [freightSource, setFreightSource] = useState('');
   const [guttersMode, setGuttersMode] = useState<QuickEstimatorGutterMode>('none');
@@ -504,23 +508,34 @@ export default function QuickEstimator() {
   }, [drafts]);
 
   const handleLocationLookup = async () => {
-    if (!postalCode.trim() || !city.trim() || !province.trim()) {
-      setFreightSource('Enter postal code, city, and province to look up distance.');
+    if (!postalCode.trim() && !city.trim() && !province.trim()) {
+      setFreightSource('Enter postal code, city, and province to look up freight.');
       return;
     }
     setLocationInput([postalCode.trim(), city.trim(), province.trim()].filter(Boolean).join(', '));
-    if (!hasGoogleMapsKeyConfigured()) {
-      setFreightSource('Google Maps lookup is unavailable. Enter distance manually.');
-      return;
+    setFreightSource('Estimating freight...');
+
+    const steel = calcSteelCost((parseFloat(width) || 0) * (parseFloat(length) || 0));
+    const result = await estimateQuoteFreight(
+      {
+        jobId: jobId || 'quick-estimator',
+        weight: steel.weight || 10000,
+        province,
+        city,
+        postalCode,
+        moffettIncluded: false,
+        factoryOrigin: settings.factoryOrigin,
+      },
+      freightRecords as FreightRecord[],
+    );
+    setFreightResult(result);
+    if (result.distanceKm > 0) {
+      setDistance(result.distanceKm.toString());
     }
-    setFreightSource('Looking up distance...');
-    const estimate = await estimateFreightFromLocation({ postalCode, city, province });
-    if (estimate) {
-      setDistance(estimate.distanceKm.toString());
-      setRemoteLevel(estimate.remote);
-      setFreightSource(`Auto distance from Maps: ~${estimate.distanceKm} km`);
+    if (result.status === 'resolved') {
+      setFreightSource(`${result.basisNote} — ${result.distanceKm} km`);
     } else {
-      setFreightSource('Distance lookup failed. Enter distance manually.');
+      setFreightSource(result.basisNote);
     }
   };
 
@@ -569,7 +584,7 @@ export default function QuickEstimator() {
     else if (linersMode === 'roof_walls') linerArea = insulationArea.wallArea + sqft;
     const liners = linerArea * settings.linerPerSqft;
 
-    const frt = calcFreight(parseFloat(distance) || 0, steel.weight, remoteLevel);
+    const frt = freightResult?.estimatedFreight ?? 0;
 
     // Pitch recorded for info only — no cost adjustment
     const p = parseFloat(pitch) || 1;
@@ -606,8 +621,9 @@ export default function QuickEstimator() {
     const tips: string[] = [];
     if (w > 80) tips.push(`🏗️ Buildings over 80ft wide require multi-span framing — significantly more costly. Consider ≤ 80ft width.`);
     if (foundationType === 'frost_wall') tips.push(`🧱 Frost wall foundations cost ~65% more than slab. Verify if slab-on-grade is feasible.`);
-    if (remoteLevel === 'extreme') tips.push(`🚛 Extreme remote freight adds $3,000+. Consider a staging/pickup arrangement.`);
-    if (remoteLevel === 'remote') tips.push(`🚛 Remote location adds $1,500 to freight. Check if a closer delivery point is available.`);
+    const frtDist = freightResult?.distanceKm ?? (parseFloat(distance) || 0);
+    if (frtDist >= 4200) tips.push(`🚛 Extreme distance (${frtDist} km) adds significant freight cost. Consider a staging/pickup arrangement.`);
+    else if (frtDist >= 2500) tips.push(`🚛 Remote distance (${frtDist} km) adds to freight. Check if a closer delivery point is available.`);
     if (sqft > 10000 && parseFloat(contingencyPct) >= 5) tips.push(`💰 For large buildings (${formatNumber(sqft)} sqft), contingency could be reduced to 3% — larger projects have more predictable costs.`);
     if (insulationRequired && (!insulationRoofGrade || !insulationWallGrade)) tips.push(`🧊 Specify roof and wall insulation grades to keep the RFQ import complete.`);
     if (complexity.factor > 1) tips.push(`Engineering auto-adjusted to ${complexity.factor.toFixed(2)} based on building size and height.`);
@@ -653,7 +669,11 @@ export default function QuickEstimator() {
       auditNotes,
       payload: {
         jobId,
-        distance, remoteLevel, foundationType, contingencyPct,
+        distance, foundationType, contingencyPct,
+        freightDistanceKm: freightResult?.distanceKm ?? (parseFloat(distance) || 0),
+        freightConfidence: freightResult?.confidence ?? 'low',
+        freightBasisNote: freightResult?.basisNote ?? '',
+        remoteLevel, // backward compat only
         guttersMode,
         guttersPerSide,
         guttersSpacing: guttersMode === 'none' ? '' : (guttersSpacing || '20'),
@@ -926,21 +946,10 @@ export default function QuickEstimator() {
                 <SelectContent>{PROVINCES.map(p => <SelectItem key={p.code} value={p.code}>{p.code} — {p.name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
-            <div><Label className="text-xs">Distance from Bradford (km)</Label><Input className="input-blue mt-1" value={distance} onChange={e => setDistance(e.target.value)} /></div>
+            <div><Label className="text-xs">Distance (km)</Label><Input className="input-blue mt-1" value={distance} onChange={e => setDistance(e.target.value)} /></div>
           </div>
 
-          <div>
-            <Label className="text-xs">Remote Level</Label>
-            <Select value={remoteLevel} onValueChange={setRemoteLevel}>
-              <SelectTrigger className="input-blue mt-1"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">None</SelectItem>
-                <SelectItem value="moderate">Moderate (+$500)</SelectItem>
-                <SelectItem value="remote">Remote (+$1,500)</SelectItem>
-                <SelectItem value="extreme">Extreme (+$3,000)</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          {freightResult && <FreightInfoBadge result={freightResult} />}
 
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -1057,6 +1066,7 @@ export default function QuickEstimator() {
               {result.gutters > 0 && <Row label="Gutters & Downspouts" value={result.gutters} />}
               {result.liners > 0 && <Row label="Liners" value={result.liners} />}
               <Row label="Freight Estimate" value={result.freight} />
+              {freightResult && <FreightInfoBadge result={freightResult} compact />}
               <div className="border-t pt-2" />
               <Row label="Estimated Total" value={result.estimatedTotal} bold />
               <Row label={`Contingency (${contingencyPct}%)`} value={result.contingency} />

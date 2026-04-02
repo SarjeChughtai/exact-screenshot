@@ -10,9 +10,10 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Switch } from '@/components/ui/switch';
 import { useAppContext } from '@/context/AppContext';
 import { useSettings } from '@/context/SettingsContext';
-import { formatCurrency, formatNumber, PROVINCES, getProvinceTax, calcFreight, calcEngineeringFromFactor, lookupFoundation, calcMarkup, getMarkupRate, autoComplexityFactor } from '@/lib/calculations';
-import { estimateFreightFromLocation } from '@/lib/freightEstimate';
-import type { FoundationType, Quote, QuoteFileRecord, StructureType } from '@/types';
+import { formatCurrency, formatNumber, PROVINCES, getProvinceTax, calcEngineeringFromFactor, lookupFoundation, calcMarkup, getMarkupRate, autoComplexityFactor } from '@/lib/calculations';
+import { estimateQuoteFreight, type QuoteFreightResult } from '@/lib/quoteFreightEstimator';
+import { FreightInfoBadge } from '@/components/FreightInfoBadge';
+import type { FoundationType, Quote, QuoteFileRecord, StructureType, FreightRecord } from '@/types';
 import { toast } from 'sonner';
 import { Upload, FileText, CheckCircle2, AlertTriangle, Download, Mail, ChevronDown, X, Sparkles, Loader2, MapPin, Lightbulb, Trash2, Plus, Truck } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
@@ -84,8 +85,9 @@ function generateCostSavingTips(form: any, costData: CostFileData, quote: Quote 
   if (h > 16) tips.push(`📏 Eave height of ${h}ft — consider ${Math.min(h, 16)}ft if clearance allows.`);
   if (w > 80) tips.push(`🏗️ Buildings over 80ft wide require multi-span framing — significantly more costly. If possible, keep width ≤ 80ft.`);
   if (form.foundationType === 'frost_wall') tips.push(`🧱 Frost wall foundations cost ~65% more than slab. Verify if slab-on-grade is feasible for this site.`);
-  if (form.remoteLevel === 'extreme') tips.push(`🚛 Extreme remote freight adds $3,000+. Consider a staging/pickup arrangement to reduce cost.`);
-  if (form.remoteLevel === 'remote') tips.push(`🚛 Remote location adds $1,500 to freight. Check if a closer delivery point is available.`);
+  const frtDist = parseFloat(form.distance) || 0;
+  if (frtDist >= 4200) tips.push(`🚛 Extreme distance (${frtDist} km) adds significant freight cost. Consider a staging/pickup arrangement.`);
+  else if (frtDist >= 2500) tips.push(`🚛 Remote distance (${frtDist} km) adds to freight. Check if a closer delivery point is available.`);
   if (w * l > 10000 && parseFloat(form.contingencyPct) >= 5) tips.push(`💰 For large buildings (${formatNumber(w * l)} sqft), you may be able to reduce contingency to 3% — the larger the project, the more predictable costs become.`);
   if (parseFloat(form.insulationCost) > 0 && !form.insulationGrade) tips.push(`🧊 Specify insulation grade to ensure the quote matches the correct R-value specification.`);
   return tips;
@@ -121,7 +123,7 @@ export default function InternalQuoteBuilder() {
     city: '', address: '', postalCode: '',
     width: '', length: '', height: '14',
     pitch: '1',
-    distance: '200', remoteLevel: 'none',
+    distance: '200',
     foundationType: 'slab' as FoundationType,
     structureType: 'steel_building' as StructureType,
     insulationCost: '0', insulationGrade: '',
@@ -208,6 +210,8 @@ export default function InternalQuoteBuilder() {
   const [aiProcessing, setAiProcessing] = useState(false);
   const [costSavingTips, setCostSavingTips] = useState<string[]>([]);
   const [locationSource, setLocationSource] = useState('');
+  const [freightResult, setFreightResult] = useState<QuoteFreightResult | null>(null);
+  const [overrideFreight, setOverrideFreight] = useState('');
   const [singleSlope, setSingleSlope] = useState(() => {
     const saved = localStorage.getItem('csb_internal_builder_active_state');
     if (saved) {
@@ -305,8 +309,7 @@ export default function InternalQuoteBuilder() {
       length: String(existingQuote.length || ''),
       height: String(existingQuote.height || 14),
       pitch: String(existingQuote.pitch ?? payload.pitch ?? 1),
-      distance: String(payload.distance ?? 200),
-      remoteLevel: String(payload.remoteLevel ?? 'none'),
+      distance: String(payload.distance ?? payload.freightDistanceKm ?? 200),
       foundationType: existingQuote.foundationType,
       structureType: normalizeStructureType(payload.structureType ?? 'steel_building'),
       insulationCost: String(existingQuote.insulation || 0),
@@ -370,8 +373,7 @@ export default function InternalQuoteBuilder() {
       length: String(sourceQuote.length || ''),
       height: String(sourceQuote.height || 14),
       pitch: String(payload.pitch || sourceQuote.pitch || 1),
-      distance: String(payload.distance ?? 200),
-      remoteLevel: String(payload.remoteLevel ?? 'none'),
+      distance: String(payload.distance ?? payload.freightDistanceKm ?? 200),
       foundationType: sourceQuote.foundationType,
       structureType: normalizeStructureType(payload.structureType ?? 'steel_building'),
       insulationCost: String(sourceQuote.insulation || 0),
@@ -510,16 +512,29 @@ export default function InternalQuoteBuilder() {
   const handleLocationLookup = async () => {
     const input = form.postalCode || form.city;
     if (!input.trim()) { setLocationSource('Enter a postal code or city'); return; }
-    setLocationSource('Looking up distance...');
-    const estimate = await estimateFreightFromLocation(input);
-    if (estimate) {
-      set('distance', estimate.distanceKm.toString());
-      set('remoteLevel', estimate.remote);
-      set('province', estimate.province);
-      const via = estimate.distanceSource === 'maps' ? 'Maps API' : 'heuristic';
-      setLocationSource(`Auto: ~${estimate.distanceKm}km via ${via} (${estimate.method})`);
+    setLocationSource('Estimating freight...');
+    const weight = costData.steelWeightLbs || 10000;
+    const result = await estimateQuoteFreight(
+      {
+        jobId: form.jobId || 'internal-quote-builder',
+        weight,
+        province: form.province,
+        city: form.city,
+        postalCode: form.postalCode,
+        address: form.address,
+        moffettIncluded: Boolean(form.moffettIncluded),
+        factoryOrigin: settings.factoryOrigin,
+      },
+      freight as FreightRecord[],
+    );
+    setFreightResult(result);
+    if (result.distanceKm > 0) {
+      set('distance', result.distanceKm.toString());
+    }
+    if (result.status === 'resolved') {
+      setLocationSource(`${result.basisNote} — ${result.distanceKm} km`);
     } else {
-      setLocationSource('Could not estimate — enter manually');
+      setLocationSource(result.basisNote);
     }
   };
 
@@ -1328,9 +1343,8 @@ export default function InternalQuoteBuilder() {
         });
 
         // Auto freight from postal code
-        if (form.postalCode) {
-          const est = await estimateFreightFromLocation(form.postalCode);
-          if (est) set('distance', est.distanceKm.toString());
+        if (form.postalCode && !freightResult) {
+          void handleLocationLookup();
         }
       } catch {
         newParsedFiles.push({ name: file.name, type: 'unknown', status: 'failed', buildingIndex: activeBuildingIdx });
@@ -1494,7 +1508,9 @@ export default function InternalQuoteBuilder() {
     const roofLinerPanelsVal = parseFloat(form.roofLinerPanels) || 0;
     const wallLinerPanelsVal = parseFloat(form.wallLinerPanels) || 0;
     const linersVal = roofLinerPanelsVal + wallLinerPanelsVal;
-    const freight = calcFreight(parseFloat(form.distance) || 0, weight, form.remoteLevel);
+    const freight = overrideFreight.trim()
+      ? parseFloat(overrideFreight)
+      : freightResult?.estimatedFreight ?? 0;
 
     const combinedTotal = adjustedSteel + engineering + foundation + insulation + guttersVal + linersVal + freight;
     const contingency = combinedTotal * (parseFloat(form.contingencyPct) || 0) / 100;
@@ -1517,7 +1533,7 @@ export default function InternalQuoteBuilder() {
       `Insulation: ${formatCurrency(insulation)} (pass-through, no markup)`,
       `Gutters & Downspouts: ${formatCurrency(guttersVal)}`,
       `Liners: roof = ${formatCurrency(roofLinerPanelsVal)}, wall = ${formatCurrency(wallLinerPanelsVal)}, combined = ${formatCurrency(linersVal)}`,
-      `Freight: MAX($4,000, ${form.distance}km × $4) + remote(${form.remoteLevel}) + overweight = ${formatCurrency(freight)}`,
+      `Freight: ${formatCurrency(freight)} (${form.distance}km, ${freightResult?.confidence ?? 'manual'} confidence${overrideFreight.trim() ? ' — manual override' : ''})${form.moffettIncluded ? ' + Moffett' : ''}`,
       `Tax: EXCLUDED from internal quote`,
       `ALL FIGURES SOURCE: 143 MBS projects for steel tiers, 48 Silvercote quotes for insulation, foundation schedule v1`,
     ].filter(Boolean);
@@ -1565,7 +1581,10 @@ export default function InternalQuoteBuilder() {
         leftEaveHeight,
         rightEaveHeight,
         distance: form.distance,
-        remoteLevel: form.remoteLevel,
+        freightDistanceKm: freightResult?.distanceKm ?? (parseFloat(form.distance) || 0),
+        freightConfidence: freightResult?.confidence ?? 'low',
+        freightBasisNote: freightResult?.basisNote ?? '',
+        overrideFreight: overrideFreight.trim() || null,
         pitch: form.pitch,
         structureType: normalizeStructureType(form.structureType || 'steel_building'),
         internalMarkupPct: Number.isFinite(manualInternalMarkupPct) ? manualInternalMarkupPct : null,
@@ -2023,18 +2042,6 @@ export default function InternalQuoteBuilder() {
             <div className="grid grid-cols-3 gap-3">
               <div><Label className="text-xs">Roof Pitch (:12)</Label><Input className="input-blue mt-1" value={form.pitch} onChange={e => set('pitch', e.target.value)} placeholder="1" /></div>
               <div>
-                <Label className="text-xs">Remote</Label>
-                <Select value={form.remoteLevel} onValueChange={v => set('remoteLevel', v)}>
-                  <SelectTrigger className="input-blue mt-1"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
-                    <SelectItem value="moderate">Moderate</SelectItem>
-                    <SelectItem value="remote">Remote</SelectItem>
-                    <SelectItem value="extreme">Extreme</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
                 <Label className="text-xs">Foundation</Label>
                 <Select value={form.foundationType} onValueChange={v => set('foundationType', v)}>
                   <SelectTrigger className="input-blue mt-1"><SelectValue /></SelectTrigger>
@@ -2045,7 +2052,12 @@ export default function InternalQuoteBuilder() {
                   </SelectContent>
                 </Select>
               </div>
+              <div>
+                <Label className="text-xs">Override Freight ($)</Label>
+                <Input className="input-blue mt-1" value={overrideFreight} onChange={e => setOverrideFreight(e.target.value)} placeholder="Auto" />
+              </div>
             </div>
+            {freightResult && <FreightInfoBadge result={freightResult} overrideFreight={overrideFreight} />}
             <div className="flex items-center gap-3 rounded-md border bg-muted/20 px-3 py-2">
               <Checkbox
                 checked={Boolean(form.moffettIncluded)}
@@ -2131,7 +2143,8 @@ export default function InternalQuoteBuilder() {
                 {quote.gutters > 0 && <QRow label="Gutters & Downspouts" value={quote.gutters} />}
                 {quote.liners > 0 && <QRow label="Liners" value={quote.liners} />}
                 {quote.insulation > 0 && <QRow label="Insulation" value={quote.insulation} />}
-                <QRow label={`Freight Estimate (${form.distance}km, ${form.remoteLevel})${form.moffettIncluded ? ' + Moffett' : ''}`} value={quote.freight} />
+                <QRow label={`Freight Estimate (${form.distance}km)${form.moffettIncluded ? ' + Moffett' : ''}`} value={quote.freight} />
+                {freightResult && <FreightInfoBadge result={freightResult} overrideFreight={overrideFreight} compact />}
                 <div className="h-2" />
                 <QRow label="SUBTOTAL" value={quote.combinedTotal} bold />
                 <QRow label="$/sqft" value={quote.perSqft} />

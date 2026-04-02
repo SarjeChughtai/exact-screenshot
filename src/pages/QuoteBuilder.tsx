@@ -8,11 +8,12 @@ import { JobIdSelect } from '@/components/JobIdSelect';
 import { useAppContext } from '@/context/AppContext';
 import { useSettings } from '@/context/SettingsContext';
 import {
-  calcTax, calcMarkup, calcEngineeringFromFactor, lookupFoundation, calcFreight,
+  calcTax, calcMarkup, calcEngineeringFromFactor, lookupFoundation,
   formatCurrency, formatNumber, PROVINCES, getProvinceTax,
 } from '@/lib/calculations';
-import { estimateFreightFromLocation } from '@/lib/freightEstimate';
-import type { Quote } from '@/types';
+import { estimateQuoteFreight, type QuoteFreightResult } from '@/lib/quoteFreightEstimator';
+import { FreightInfoBadge } from '@/components/FreightInfoBadge';
+import type { Quote, FreightRecord } from '@/types';
 import { toast } from 'sonner';
 import { MapPin } from 'lucide-react';
 import { PersonnelSelect } from '@/components/PersonnelSelect';
@@ -41,7 +42,6 @@ const INITIAL_FORM = {
   insulationCost: '0',
   insulationGrade: '',
   distance: '200',
-  remoteLevel: 'none',
   overrideFreight: '',
   complexityFactor: '1.0',
   foundationType: 'slab' as FoundationType,
@@ -50,7 +50,7 @@ const INITIAL_FORM = {
 
 export default function QuoteBuilder() {
   const [searchParams] = useSearchParams();
-  const { addQuote, updateQuote, deals, quotes, allocateJobId } = useAppContext();
+  const { addQuote, updateQuote, deals, quotes, allocateJobId, freight: freightRecords } = useAppContext();
   const { settings } = useSettings();
   const editingQuoteId = searchParams.get('quoteId');
   const sourceDocumentId = searchParams.get('sourceDocumentId');
@@ -58,6 +58,7 @@ export default function QuoteBuilder() {
   const [form, setForm] = useState(INITIAL_FORM);
   const [quote, setQuote] = useState<Quote | null>(null);
   const [freightSource, setFreightSource] = useState('');
+  const [freightResult, setFreightResult] = useState<QuoteFreightResult | null>(null);
 
   const existingQuote = useMemo(
     () => quotes.find(item => item.id === editingQuoteId),
@@ -92,7 +93,6 @@ export default function QuoteBuilder() {
       insulationCost: String(existingQuote.insulation || 0),
       insulationGrade: existingQuote.insulationGrade || '',
       distance: existingQuote.weight ? String(Math.round(existingQuote.freight / 4)) : '200',
-      remoteLevel: 'none',
       overrideFreight: String(existingQuote.freight || 0),
       complexityFactor: existingQuote.engineering ? String((existingQuote.engineering - 500) / 2500 || 1) : '1.0',
       foundationType: existingQuote.foundationType,
@@ -125,7 +125,6 @@ export default function QuoteBuilder() {
       insulationCost: String(sourceQuote.insulation || 0),
       insulationGrade: sourceQuote.insulationGrade || '',
       distance: String(sourcePayload.distance || '200'),
-      remoteLevel: sourcePayload.remoteLevel || 'none',
       overrideFreight: String(sourceQuote.freight || 0),
       complexityFactor: String(sourcePayload.complexityFactor || '1.0'),
       foundationType: sourceQuote.foundationType,
@@ -148,16 +147,29 @@ export default function QuoteBuilder() {
       return;
     }
 
-    setFreightSource('Looking up distance...');
-    const estimate = await estimateFreightFromLocation(input);
-    if (estimate) {
-      set('distance', estimate.distanceKm.toString());
-      set('remoteLevel', estimate.remote);
-      set('province', estimate.province);
-      const via = estimate.distanceSource === 'maps' ? 'Maps API' : 'heuristic';
-      setFreightSource(`Auto: ~${estimate.distanceKm}km via ${via} (${estimate.method})`);
+    setFreightSource('Estimating freight...');
+    const weight = parseFloat(form.totalWeight) || 10000;
+    const result = await estimateQuoteFreight(
+      {
+        jobId: form.jobId || 'quote-builder',
+        weight,
+        province: form.province,
+        city: form.city,
+        postalCode: form.postalCode,
+        address: form.address,
+        moffettIncluded: false,
+        factoryOrigin: settings.factoryOrigin,
+      },
+      freightRecords as FreightRecord[],
+    );
+    setFreightResult(result);
+    if (result.distanceKm > 0) {
+      set('distance', result.distanceKm.toString());
+    }
+    if (result.status === 'resolved') {
+      setFreightSource(`${result.basisNote} — ${result.distanceKm} km`);
     } else {
-      setFreightSource('Could not estimate');
+      setFreightSource(result.basisNote);
     }
   };
 
@@ -188,7 +200,7 @@ export default function QuoteBuilder() {
     const liners = parseFloat(form.liners) || 0;
     const freight = form.overrideFreight
       ? parseFloat(form.overrideFreight)
-      : calcFreight(parseFloat(form.distance) || 0, weight, form.remoteLevel);
+      : freightResult?.estimatedFreight ?? 0;
 
     const combinedTotal = adjustedSteel + engineering + foundation + insulation + gutters + liners + freight;
     const contingencyPct = parseFloat(form.contingencyPct) || 0;
@@ -239,10 +251,12 @@ export default function QuoteBuilder() {
       workflowStatus: 'draft',
       sourceDocumentId: existingQuote?.sourceDocumentId || searchParams.get('sourceDocumentId'),
       payload: {
-        remoteLevel: form.remoteLevel,
         distance: form.distance,
         overrideFreight: form.overrideFreight,
         complexityFactor: form.complexityFactor,
+        freightDistanceKm: freightResult?.distanceKm ?? (parseFloat(form.distance) || 0),
+        freightConfidence: freightResult?.confidence ?? 'low',
+        freightBasisNote: freightResult?.basisNote ?? '',
       },
     });
   };
@@ -355,22 +369,12 @@ export default function QuoteBuilder() {
             <div><Label className="text-xs">Insulation Grade</Label><Input className="input-blue mt-1" value={form.insulationGrade} onChange={event => set('insulationGrade', event.target.value)} /></div>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             <div><Label className="text-xs">Distance (km)</Label><Input className="input-blue mt-1" value={form.distance} onChange={event => set('distance', event.target.value)} /></div>
-            <div>
-              <Label className="text-xs">Remote</Label>
-              <Select value={form.remoteLevel} onValueChange={value => set('remoteLevel', value)}>
-                <SelectTrigger className="input-blue mt-1"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  <SelectItem value="moderate">Moderate</SelectItem>
-                  <SelectItem value="remote">Remote</SelectItem>
-                  <SelectItem value="extreme">Extreme</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
             <div><Label className="text-xs">Override Freight</Label><Input className="input-blue mt-1" value={form.overrideFreight} onChange={event => set('overrideFreight', event.target.value)} placeholder="Auto" /></div>
           </div>
+
+          {freightResult && <FreightInfoBadge result={freightResult} overrideFreight={form.overrideFreight} />}
 
           <div className="grid grid-cols-3 gap-3">
             <div><Label className="text-xs">Complexity Factor</Label><Input className="input-blue mt-1" value={form.complexityFactor} onChange={event => set('complexityFactor', event.target.value)} /></div>
