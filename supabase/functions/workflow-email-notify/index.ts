@@ -51,15 +51,38 @@ serve(async (req) => {
       .select("user_id, email, name")
       .in("user_id", uniqueUserIds);
 
-    const recipients = (Array.isArray(accessRows) ? accessRows : [])
-      .filter((row: { user_id?: string; email?: string | null }) => {
-        if (!row.user_id || !row.email) return false;
-        return emailPreferenceByUserId.get(row.user_id) !== false;
-      })
-      .map((row: { email: string; name?: string | null }) => ({
-        email: row.email,
-        name: row.name || row.email,
-      }));
+    const accessRowsByUserId = new Map<string, { email?: string | null; name?: string | null }>(
+      (Array.isArray(accessRows) ? accessRows : [])
+        .filter((row: { user_id?: string }) => Boolean(row.user_id))
+        .map((row: { user_id: string; email?: string | null; name?: string | null }) => [
+          row.user_id,
+          { email: row.email, name: row.name },
+        ]),
+    );
+
+    const recipients = (
+      await Promise.all(uniqueUserIds.map(async (userId) => {
+        if (emailPreferenceByUserId.get(userId) === false) return null;
+
+        const accessRow = accessRowsByUserId.get(userId);
+        if (accessRow?.email) {
+          return {
+            email: accessRow.email,
+            name: accessRow.name || accessRow.email,
+          };
+        }
+
+        const { data: authUserData, error: authUserError } = await supabaseAdmin.auth.admin.getUserById(userId);
+        if (authUserError || !authUserData?.user?.email) {
+          return null;
+        }
+
+        return {
+          email: authUserData.user.email,
+          name: accessRow?.name || authUserData.user.user_metadata?.name || authUserData.user.email,
+        };
+      }))
+    ).filter(Boolean) as Array<{ email: string; name: string }>;
 
     const uniqueEmails = [...new Set(recipients.map((entry) => entry.email.trim()).filter(Boolean))];
     if (uniqueEmails.length === 0) {
