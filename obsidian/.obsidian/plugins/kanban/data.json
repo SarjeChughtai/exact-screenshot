@@ -1,0 +1,78 @@
+{
+  "kanban-plugin": "basic",
+  "lane-width": 280,
+  "show-checkboxes": true,
+  "new-note-folder": "",
+  "new-note-template": "",
+  "date-format": "YYYY-MM-DD",
+  "date-display-format": "YYYY-MM-DD",
+  "date-colors": [],
+  "hide-date-display-in-front-matter": false,
+  "hide-date-in-title": false,
+  "link-date-to-daily-note": false,
+  "show-relative-date": false,
+  "max-archive-size": -1,
+  "time-format": "HH:mm",
+  "prepend-archive-date": false,
+  "prepend-archive-separator": "",
+  "prepend-archive-format": "",
+  "archive-with-date": false,
+  "tag-colors": [
+    {
+      "tagKey": "@{priority: critical}",
+      "color": "rgba(220, 38, 38, 0.85)",
+      "backgroundColor": "rgba(220, 38, 38, 0.1)"
+    },
+    {
+      "tagKey": "@{priority: high}",
+      "color": "rgba(234, 88, 12, 0.85)",
+      "backgroundColor": "rgba(234, 88, 12, 0.1)"
+    },
+    {
+      "tagKey": "@{priority: medium}",
+      "color": "rgba(202, 138, 4, 0.85)",
+      "backgroundColor": "rgba(202, 138, 4, 0.1)"
+    },
+    {
+      "tagKey": "@{priority: low}",
+      "color": "rgba(100, 116, 139, 0.85)",
+      "backgroundColor": "rgba(100, 116, 139, 0.1)"
+    }
+  ],
+  "board-id": "antigravity-agent-os-kanban",
+  "move-dates-to-end-of-line": false,
+  "hide-tags-in-title": false,
+  "hide-tags-display": false,
+  "lanes": [
+    {
+      "id": "pending",
+      "title": "Pending",
+      "collapsed": false
+    },
+    {
+      "id": "ready",
+      "title": "Ready",
+      "collapsed": false
+    },
+    {
+      "id": "in_progress",
+      "title": "In Progress",
+      "collapsed": false
+    },
+    {
+      "id": "blocked",
+      "title": "Blocked",
+      "collapsed": false
+    },
+    {
+      "id": "review",
+      "title": "Review",
+      "collapsed": false
+    },
+    {
+      "id": "done",
+      "title": "Done",
+      "collapsed": true
+    }
+  ]
+}

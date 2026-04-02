@@ -1,0 +1,29 @@
+filters: 'file.inFolder("obsidian/generated/decisions")'
+
+properties:
+  title:
+    displayName: "Decision"
+  decided_by:
+    displayName: "Decided By"
+  status:
+    displayName: "Status"
+  created_at:
+    displayName: "Created"
+  source:
+    displayName: "Source"
+
+views:
+  - type: table
+    name: "Decisions"
+    order:
+      - title
+      - status
+      - decided_by
+      - created_at
+      - source
+  - type: list
+    name: "Decision List"
+    order:
+      - title
+      - created_at
+      - decided_by

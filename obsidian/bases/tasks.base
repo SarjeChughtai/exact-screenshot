@@ -1,0 +1,40 @@
+filters: 'file.inFolder("obsidian/generated/tasks")'
+
+properties:
+  id:
+    displayName: "Task ID"
+  title:
+    displayName: "Title"
+  status:
+    displayName: "Status"
+  priority:
+    displayName: "Priority"
+  owner:
+    displayName: "Owner"
+  area:
+    displayName: "Area"
+  next_action:
+    displayName: "Next Action"
+  updated_at:
+    displayName: "Updated"
+
+views:
+  - type: table
+    name: "Tasks Table"
+    order:
+      - id
+      - title
+      - status
+      - priority
+      - owner
+      - area
+      - updated_at
+      - next_action
+  - type: cards
+    name: "Task Cards"
+    order:
+      - id
+      - status
+      - priority
+      - owner
+      - next_action

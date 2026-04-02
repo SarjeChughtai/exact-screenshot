@@ -1,0 +1,29 @@
+filters: 'file.inFolder("obsidian/generated/activity")'
+
+properties:
+  timestamp:
+    displayName: "Timestamp"
+  agent:
+    displayName: "Agent"
+  task_id:
+    displayName: "Task"
+  summary:
+    displayName: "Summary"
+  source:
+    displayName: "Source"
+
+views:
+  - type: table
+    name: "Activity"
+    order:
+      - timestamp
+      - agent
+      - task_id
+      - summary
+      - source
+  - type: cards
+    name: "Activity Cards"
+    order:
+      - agent
+      - task_id
+      - summary

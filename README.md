@@ -1,5 +1,31 @@
 # CSB Portal
 
+## Antigravity Workflow
+
+This repo now includes a local Antigravity operating layer for agent coordination.
+
+- Canonical agent state lives in `ai-context/`
+- Shared skills and personas live in `.agent/` and `.agents/`
+- Obsidian artifacts are generated into `ai-context/kanban-board.md` and `obsidian/generated/`
+- Notion artifacts are generated into `notion/export/`
+- Legacy reference context remains in `docs/ai_context/`
+
+Common commands:
+
+```bash
+npm run context:validate:strict
+npm run context:obsidian:bootstrap
+npm run context:notion:export
+npm run context:federation:sync
+```
+
+Before starting work, read:
+
+- `ai-context/project.md`
+- `ai-context/dashboard.md`
+- `ai-context/tasks.json`
+- `ai-context/handoffs/active.md`
+
 ## Environment
 
 The repo now includes checked-in example env files:

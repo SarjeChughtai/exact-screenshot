@@ -1,0 +1,20 @@
+{
+  "name": "antigravity-agent-os-mcp",
+  "version": "1.0.0",
+  "description": "MCP server exposing Antigravity Agent OS ai-context files as live tools",
+  "type": "module",
+  "main": "index.mjs",
+  "bin": { "agent-os-mcp": "./index.mjs" },
+  "scripts": {
+    "start": "node index.mjs",
+    "dev": "node --watch index.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": ["mcp", "agent-os", "antigravity", "model-context-protocol"],
+  "license": "MIT"
+}

@@ -15,6 +15,11 @@ dist-ssr
 .env.*
 !**/.env.example
 supabase/.temp/
+ai-context/kanban-board.md
+notion/export/*
+!notion/export/.gitkeep
+obsidian/generated/*
+!obsidian/generated/.gitkeep
 
 # Editor directories and files
 .vscode/*
