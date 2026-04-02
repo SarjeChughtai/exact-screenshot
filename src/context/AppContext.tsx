@@ -72,6 +72,7 @@ import {
   findClientRecordForLedger,
   findVendorRecordForLedger,
 } from '@/lib/paymentLedgerIntegrity';
+import { promoteFreightRecordToDealQuote } from '@/lib/freightHandoff';
 
 interface AppState {
   quotes: Quote[];
@@ -986,10 +987,34 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return nextPayment;
   }, [quickAddClient, quickAddVendor, state.clients, state.deals, state.vendors, upsertClientJob]);
 
+  const promoteFreightEstimateToDealQuote = useCallback(async (jobId: string) => {
+    const existingFreight = state.freight.find(record => jobIdsMatch(record.jobId, jobId));
+    if (!existingFreight || existingFreight.mode !== 'pre_sale') return null;
+
+    const nextFreight = promoteFreightRecordToDealQuote(existingFreight);
+    setState(prev => ({
+      ...prev,
+      freight: prev.freight.map(record => jobIdsMatch(record.jobId, jobId) ? nextFreight : record),
+    }));
+
+    try {
+      const row = freightToRow(nextFreight);
+      await supabase.from('freight').update(row as any).eq('job_id', existingFreight.jobId);
+    } catch {}
+
+    void syncJobProfileFromFreight(nextFreight);
+    return nextFreight;
+  }, [state.freight, syncJobProfileFromFreight]);
+
   // --- Deals ---
   const addDeal = useCallback(async (d: Deal) => {
     const opportunity = await upsertOpportunityRecord(d, 'deal');
-    const nextDeal = { ...d, opportunityId: d.opportunityId || opportunity?.id || null };
+    const existingFreightEstimate = state.freight.find(record => jobIdsMatch(record.jobId, d.jobId) && record.mode === 'pre_sale');
+    const nextDeal = {
+      ...d,
+      opportunityId: d.opportunityId || opportunity?.id || null,
+      freightStatus: existingFreightEstimate && (!d.freightStatus || d.freightStatus === 'Pending') ? 'Quoted' : d.freightStatus,
+    };
     setState(prev => ({ ...prev, deals: [...prev.deals, nextDeal] }));
     logAudit(currentUser?.name || 'System', 'CREATE', 'Deal', nextDeal.jobId, nextDeal);
     try {
@@ -1006,17 +1031,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const cId = nextDeal.clientId || `C-${Date.now().toString(36).toUpperCase()}`;
       await upsertClientJob(cId, nextDeal.clientName, nextDeal.jobId);
     }
-  }, [currentUser, ensureManualPersonnelEntry, syncJobProfileFromDeal, syncProductionShadow, upsertClientJob, upsertOpportunityRecord]);
+    await promoteFreightEstimateToDealQuote(nextDeal.jobId);
+  }, [currentUser, ensureManualPersonnelEntry, promoteFreightEstimateToDealQuote, state.freight, syncJobProfileFromDeal, syncProductionShadow, upsertClientJob, upsertOpportunityRecord]);
 
   const updateDeal = useCallback(async (jobId: string, updates: Partial<Deal>) => {
     const existingDeal = state.deals.find(d => d.jobId === jobId);
-    const nextDeal = existingDeal ? { ...existingDeal, ...updates } : null;
+    const existingFreightEstimate = state.freight.find(record => jobIdsMatch(record.jobId, jobId) && record.mode === 'pre_sale');
+    const shouldPromoteFreightStatus = Boolean(
+      existingFreightEstimate
+      && existingDeal
+      && !updates.freightStatus
+      && existingDeal.freightStatus === 'Pending',
+    );
+    const persistedUpdates = shouldPromoteFreightStatus
+      ? { ...updates, freightStatus: 'Quoted' as Deal['freightStatus'] }
+      : updates;
+    const nextDeal = existingDeal ? { ...existingDeal, ...persistedUpdates } : null;
     setState(prev => {
       const existing = prev.deals.find(d => d.jobId === jobId);
-      if (existing) logAudit(currentUser?.name || 'System', 'UPDATE', 'Deal', jobId, updates, existing);
+      if (existing) logAudit(currentUser?.name || 'System', 'UPDATE', 'Deal', jobId, persistedUpdates, existing);
       return {
         ...prev,
-        deals: prev.deals.map(d => d.jobId === jobId ? { ...d, ...updates } : d),
+        deals: prev.deals.map(d => d.jobId === jobId ? { ...d, ...persistedUpdates } : d),
       };
     });
     if (nextDeal) {
@@ -1027,10 +1063,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (nextDeal.estimator) void ensureManualPersonnelEntry(nextDeal.estimator, ['estimator']);
       if (nextDeal.teamLead) void ensureManualPersonnelEntry(nextDeal.teamLead, ['team_lead']);
     }
+    let persisted = false;
     try {
-      const row = dealToRow(updates);
+      const row = dealToRow(persistedUpdates);
       const { data, error } = await supabase.from('deals').update(row as any).eq('job_id', jobId).select().single();
       if (error) throw error;
+      persisted = true;
 
       if (data) {
         const mapped = dealFromRow(data);
@@ -1049,7 +1087,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
       toast.error('Unable to save the deal update. The previous value was restored.');
     }
-  }, [currentUser, ensureManualPersonnelEntry, state.deals, syncJobProfileFromDeal, syncProductionShadow, upsertOpportunityRecord]);
+    if (persisted && nextDeal) {
+      await promoteFreightEstimateToDealQuote(nextDeal.jobId);
+    }
+  }, [currentUser, ensureManualPersonnelEntry, promoteFreightEstimateToDealQuote, state.deals, state.freight, syncJobProfileFromDeal, syncProductionShadow, upsertOpportunityRecord]);
 
   const deleteDeal = useCallback(async (jobId: string) => {
     const revertedQuote = state.quotes.find(quote =>

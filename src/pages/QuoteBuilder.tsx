@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { JobIdSelect } from '@/components/JobIdSelect';
 import { useAppContext } from '@/context/AppContext';
+import { useSettings } from '@/context/SettingsContext';
 import {
   calcTax, calcMarkup, calcEngineeringFromFactor, lookupFoundation, calcFreight,
   formatCurrency, formatNumber, PROVINCES, getProvinceTax,
@@ -50,6 +51,7 @@ const INITIAL_FORM = {
 export default function QuoteBuilder() {
   const [searchParams] = useSearchParams();
   const { addQuote, updateQuote, deals, quotes, allocateJobId } = useAppContext();
+  const { settings } = useSettings();
   const editingQuoteId = searchParams.get('quoteId');
   const sourceDocumentId = searchParams.get('sourceDocumentId');
 
@@ -177,7 +179,7 @@ export default function QuoteBuilder() {
 
     const pricePerLb = baseSteelCost / weight;
     const steelAfter12 = pricePerLb * 1.12 * weight;
-    const markup = calcMarkup(steelAfter12);
+    const markup = calcMarkup(steelAfter12, { useFlatMarkup: settings.useFlatInternalMarkup });
     const adjustedSteel = steelAfter12 + markup;
     const engineering = calcEngineeringFromFactor(parseFloat(form.complexityFactor) || 1);
     const foundation = lookupFoundation(sqft, form.foundationType);

@@ -5,8 +5,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { formatCurrency, formatNumber, getProvinceTax } from '@/lib/calculations';
 import { useAppContext } from '@/context/AppContext';
 import { useRoles } from '@/context/RoleContext';
+import { useSettings } from '@/context/SettingsContext';
 import { getQuoteLifecycleForOpportunityStatus } from '@/lib/opportunities';
 import { doesQuoteMatchAssigneeFilter, type QuoteAssigneeFilter } from '@/lib/rfqWorkflow';
+import { isQuoteAssignedToSalesRepUser } from '@/lib/personnelAssignments';
 import { useSharedJobs } from '@/lib/sharedJobs';
 import { summarizeQuoteFiles } from '@/lib/documentVault';
 import { supabase } from '@/integrations/supabase/client';
@@ -15,6 +17,7 @@ import type { Deal, DocumentType, OpportunityStatus, Quote, QuoteFileRecord, Quo
 import { toast } from 'sonner';
 import { Archive, ChevronDown, ChevronRight, Download, Pencil, RotateCcw, Trash2 } from 'lucide-react';
 import { getQuoteFileUrl } from '@/lib/quoteFileStorage';
+import { getRFQWorkflowDisplayLabel } from '@/lib/workflowStatus';
 
 const STATUSES: QuoteStatus[] = ['Draft', 'Sent', 'Follow Up', 'Won', 'Lost', 'Expired'];
 
@@ -44,7 +47,8 @@ export function DocumentLogTable({
 }: DocumentLogTableProps) {
   const navigate = useNavigate();
   const { quotes, deals, opportunities, updateQuote, deleteQuote, restoreQuote, addDeal, updateDeal, deleteDeal, updateOpportunityByJob } = useAppContext();
-  const { hasAnyRole } = useRoles();
+  const { currentUser, hasAnyRole } = useRoles();
+  const { settings } = useSettings();
   const { visibleJobIds, stateByJobId } = useSharedJobs();
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const handledFocusDocumentIdRef = useRef<string | null>(null);
@@ -53,6 +57,7 @@ export function DocumentLogTable({
   const canManageOpportunityStatus = hasAnyRole('admin', 'owner', 'operations', 'sales_rep');
   const canManageFreightWorkflow = hasAnyRole('admin', 'owner', 'operations', 'freight');
   const canViewPayloadSnapshot = hasAnyRole('admin', 'owner');
+  const restrictSalesRepRfqVisibility = hasAnyRole('sales_rep') && !hasAnyRole('admin', 'owner', 'operations');
 
   const expectedStateByType: Record<DocumentType, SharedJobState> = {
     rfq: 'rfq',
@@ -68,6 +73,13 @@ export function DocumentLogTable({
       rfqAssigneeFilter &&
       (quote.documentType === 'rfq' || quote.documentType === 'dealer_rfq') &&
       !doesQuoteMatchAssigneeFilter(quote, rfqAssigneeFilter)
+    ) {
+      return false;
+    }
+    if (
+      restrictSalesRepRfqVisibility &&
+      (quote.documentType === 'rfq' || quote.documentType === 'dealer_rfq') &&
+      !isQuoteAssignedToSalesRepUser(settings.personnel, quote, currentUser.id, currentUser.name)
     ) {
       return false;
     }
@@ -306,7 +318,7 @@ export function DocumentLogTable({
             <td className="px-3 py-2 text-xs">{quote.salesRep}</td>
             <td className="px-3 py-2 text-xs">{quote.width}x{quote.length}x{quote.height}</td>
             <td className="px-3 py-2 font-mono">{formatCurrency(quote.grandTotal)}</td>
-            <td className="px-3 py-2 text-xs">{quote.workflowStatus}</td>
+            <td className="px-3 py-2 text-xs">{getRFQWorkflowDisplayLabel(quote.workflowStatus)}</td>
             <td className="px-3 py-2">
               <Select value={quote.status} onValueChange={value => changeStatus(quote.id, value as QuoteStatus)} disabled={isTrash}>
                 <SelectTrigger className="h-7 text-xs w-28"><SelectValue /></SelectTrigger>
@@ -380,7 +392,7 @@ export function DocumentLogTable({
                     <p className="font-semibold text-muted-foreground">Document</p>
                     <p>Job Name: {quote.jobName || 'Not set'}</p>
                     <p>Client ID: {quote.clientId || 'Not set'}</p>
-                    <p>Workflow: {quote.workflowStatus}</p>
+                    <p>Workflow: {getRFQWorkflowDisplayLabel(quote.workflowStatus)}</p>
                     <p>Type: {DOCUMENT_LABELS[quote.documentType]}</p>
                   </div>
                   <div className="space-y-1 text-xs">

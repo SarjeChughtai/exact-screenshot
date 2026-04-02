@@ -37,6 +37,7 @@ interface FreightFormState {
   estFreight: string;
   actualFreight: string;
   paid: boolean;
+  moffettIncluded: boolean;
   assignToCurrentUser: boolean;
 }
 
@@ -54,10 +55,11 @@ const EMPTY_FORM: FreightFormState = {
   estFreight: '',
   actualFreight: '',
   paid: false,
+  moffettIncluded: false,
   assignToCurrentUser: false,
 };
 
-const FREIGHT_STATUS_OPTIONS: FreightStatus[] = ['Pending', 'Booked', 'In Transit', 'Delivered'];
+const FREIGHT_STATUS_OPTIONS: FreightStatus[] = ['Pending', 'RFQ', 'Quoted', 'Booked', 'In Transit', 'Delivered'];
 
 export default function FreightBoard() {
   const {
@@ -164,12 +166,12 @@ export default function FreightBoard() {
     return buildPreSaleFreightRows({
       freight,
       quotes,
-      visibleJobIds: canManageAllFreight ? undefined : executionVisibleJobIds,
+      visibleJobIds: undefined,
     }).filter(row => {
       if (!isRestrictedFreightUser) return true;
-      return row.assignedFreightUserId === currentUser.id;
+      return !row.assignedFreightUserId || row.assignedFreightUserId === currentUser.id;
     });
-  }, [canManageAllFreight, currentUser.id, executionVisibleJobIds, freight, isRestrictedFreightUser, quotes]);
+  }, [currentUser.id, freight, isRestrictedFreightUser, quotes]);
 
   const freightJobIds = useMemo(
     () => [...new Set([...executionRows.map(row => row.jobId), ...preSaleRows.map(row => row.jobId)].filter(Boolean))].sort(),
@@ -279,6 +281,7 @@ export default function FreightBoard() {
       estFreight: String(record.estFreight || ''),
       actualFreight: String(record.actualFreight || ''),
       paid: record.paid || false,
+      moffettIncluded: record.moffettIncluded || false,
       assignToCurrentUser: record.assignedFreightUserId === currentUser.id,
     });
     setDialogOpen(true);
@@ -302,6 +305,7 @@ export default function FreightBoard() {
       actualDeliveryDate: existing?.actualDeliveryDate || current.actualDeliveryDate,
       status: existing?.status || current.status,
       paid: existing?.paid || current.paid,
+      moffettIncluded: existing?.moffettIncluded || current.moffettIncluded,
       assignToCurrentUser: existing ? existing.assignedFreightUserId === currentUser.id : current.assignToCurrentUser,
     }));
   };
@@ -331,6 +335,7 @@ export default function FreightBoard() {
       estFreight: existing?.estFreight ? String(existing.estFreight) : '',
       actualFreight: existing?.actualFreight ? String(existing.actualFreight) : '',
       paid: existing?.paid || false,
+      moffettIncluded: existing?.moffettIncluded || false,
       assignToCurrentUser: existing ? existing.assignedFreightUserId === currentUser.id : hasAnyRole('freight') || nextMode === 'execution',
     });
     setDialogOpen(true);
@@ -390,6 +395,7 @@ export default function FreightBoard() {
       actualFreight: Number(form.actualFreight) || 0,
       paid: form.paid,
       carrier: form.carrier,
+      moffettIncluded: form.moffettIncluded,
       assignedFreightUserId: form.assignToCurrentUser ? currentUser.id : existing?.assignedFreightUserId || null,
       status: form.status,
     };
@@ -407,6 +413,7 @@ export default function FreightBoard() {
 
   const sourcePreview = form.jobId ? jobSourceById[form.jobId] : null;
   const canEditRecord = (assignedFreightUserId?: string | null) => canManageAllFreight || assignedFreightUserId === currentUser.id;
+  const canClaimPreSaleRecord = (assignedFreightUserId?: string | null) => isRestrictedFreightUser && !assignedFreightUserId;
 
   return (
     <div className="space-y-6" data-testid="freight-board-page">
@@ -463,14 +470,14 @@ export default function FreightBoard() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-primary text-primary-foreground text-xs">
-                {['Job ID', 'Client', 'Building', 'Province', 'Est Distance', 'Est Freight', 'Est Pickup', 'Est Delivery', 'Drop-Off', 'Assigned', 'Docs', 'Status', 'Actions'].map(header => (
+                {['Job ID', 'Client', 'Building', 'Province', 'Est Distance', 'Est Freight', 'Est Pickup', 'Est Delivery', 'Drop-Off', 'Moffett', 'Assigned', 'Docs', 'Status', 'Actions'].map(header => (
                   <th key={header} className="px-3 py-2 text-left font-medium whitespace-nowrap">{header}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {preSaleRows.length === 0 ? (
-                <tr><td colSpan={13} className="px-3 py-8 text-center text-muted-foreground">No pre-sale freight estimates.</td></tr>
+                <tr><td colSpan={14} className="px-3 py-8 text-center text-muted-foreground">No pre-sale freight estimates.</td></tr>
               ) : preSaleRows.map(row => {
                 const documentSummary = documentSummaryByJobId[row.jobId];
                 return (
@@ -484,6 +491,7 @@ export default function FreightBoard() {
                   <td className="px-3 py-2 text-xs">{row.estimatedPickupDate || row.pickupDate || '-'}</td>
                   <td className="px-3 py-2 text-xs">{row.estimatedDeliveryDate || row.deliveryDate || '-'}</td>
                   <td className="px-3 py-2 text-xs">{row.dropOffLocation || '-'}</td>
+                  <td className="px-3 py-2 text-xs">{row.moffettIncluded ? 'Yes' : 'No'}</td>
                   <td className="px-3 py-2 text-xs">{getAssigneeLabel(row.assignedFreightUserId)}</td>
                   <td className="px-3 py-2 text-xs">
                     {documentSummary
@@ -492,7 +500,7 @@ export default function FreightBoard() {
                   </td>
                   <td className="px-3 py-2 text-xs">{row.status}</td>
                   <td className="px-3 py-2">
-                    {canEditRecord(row.assignedFreightUserId) && (
+                    {(canEditRecord(row.assignedFreightUserId) || canClaimPreSaleRecord(row.assignedFreightUserId)) && (
                       <Button variant="ghost" size="sm" className="h-7 gap-1" onClick={() => openEditDialog(freightByJobId[row.jobId])}>
                         <Edit className="h-3.5 w-3.5" />
                         Edit
@@ -517,14 +525,14 @@ export default function FreightBoard() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-primary text-primary-foreground text-xs">
-                {['Job ID', 'Client', 'Building', 'Weight', 'Province', 'Est Pickup', 'Est Delivery', 'Actual Pickup', 'Actual Delivery', 'Drop-Off', 'Assigned', 'Ready', 'Milestones', 'Next Step', 'Blocked Reason', 'Docs', 'Est Freight', 'Actual', 'Variance', 'Paid', 'Status', 'Actions'].map(header => (
+                {['Job ID', 'Client', 'Building', 'Weight', 'Province', 'Est Pickup', 'Est Delivery', 'Actual Pickup', 'Actual Delivery', 'Drop-Off', 'Moffett', 'Assigned', 'Ready', 'Milestones', 'Next Step', 'Blocked Reason', 'Docs', 'Est Freight', 'Actual', 'Variance', 'Paid', 'Status', 'Actions'].map(header => (
                   <th key={header} className="px-3 py-2 text-left font-medium whitespace-nowrap">{header}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {executionRows.length === 0 ? (
-                <tr><td colSpan={22} className="px-3 py-8 text-center text-muted-foreground">No deal-stage freight rows.</td></tr>
+                <tr><td colSpan={23} className="px-3 py-8 text-center text-muted-foreground">No deal-stage freight rows.</td></tr>
               ) : executionRows.map(row => {
                 const documentSummary = documentSummaryByJobId[row.jobId];
                 return (
@@ -539,6 +547,7 @@ export default function FreightBoard() {
                   <td className="px-3 py-2 text-xs">{row.actualPickupDate || row.pickupDate || '-'}</td>
                   <td className="px-3 py-2 text-xs">{row.actualDeliveryDate || row.deliveryDate || '-'}</td>
                   <td className="px-3 py-2 text-xs">{row.dropOffLocation || '-'}</td>
+                  <td className="px-3 py-2 text-xs">{row.moffettIncluded ? 'Yes' : 'No'}</td>
                   <td className="px-3 py-2 text-xs">{getAssigneeLabel(row.assignedFreightUserId)}</td>
                   <td className="px-3 py-2">
                     <span className={`text-xs px-2 py-0.5 rounded-full ${row.freightReady ? 'status-paid' : 'status-partial'}`}>
@@ -585,6 +594,7 @@ export default function FreightBoard() {
                         actualFreight: row.actualFreight,
                         paid: row.paid,
                         carrier: row.carrier,
+                        moffettIncluded: row.moffettIncluded,
                         assignedFreightUserId: row.assignedFreightUserId,
                         status: row.status,
                       })}>
@@ -693,6 +703,13 @@ export default function FreightBoard() {
                 onCheckedChange={checked => setForm(current => ({ ...current, paid: checked === true }))}
               />
               <Label>Freight vendor has been paid</Label>
+            </div>
+            <div className="flex items-center gap-3 pt-7">
+              <Checkbox
+                checked={form.moffettIncluded}
+                onCheckedChange={checked => setForm(current => ({ ...current, moffettIncluded: checked === true }))}
+              />
+              <Label>Moffett included</Label>
             </div>
             <div className="flex items-center gap-3 pt-7 md:col-span-2">
               <Checkbox

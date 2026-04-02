@@ -159,4 +159,16 @@ describe('estimate workflow helpers', () => {
     expect(form.insulationRoofGrade).toBe('R20/R20');
     expect(form.insulationWallGrade).toBe('R12/R20');
   });
+
+  it('normalizes legacy estimator gutter modes into the standard RFQ spacing package', () => {
+    const form = mapEstimateToSharedRFQForm(buildEstimate({
+      payload: {
+        guttersMode: 'per_side',
+        includeGutters: true,
+      },
+    }));
+
+    expect(form.gutters).toBe('spacing');
+    expect(form.guttersSpacing).toBe('20');
+  });
 });

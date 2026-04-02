@@ -107,7 +107,8 @@ function normalizeLinerMode(payload: Record<string, unknown>): SharedRFQLinerMod
 
 export function mapEstimateToSharedRFQForm(estimate: Estimate): Partial<SharedRFQFormValues> {
   const payload = (estimate.payload || {}) as Record<string, unknown>;
-  const gutters = normalizeQuickEstimatorGutterMode(payload);
+  const estimatorGutters = normalizeQuickEstimatorGutterMode(payload);
+  const gutters: SharedRFQGutterMode = estimatorGutters === 'none' ? 'none' : 'spacing';
   const liners = normalizeQuickEstimatorLinerMode(payload);
 
   return {
@@ -127,8 +128,8 @@ export function mapEstimateToSharedRFQForm(estimate: Estimate): Partial<SharedRF
     roofPitch: `${estimate.pitch}:12`,
     salesRep: estimate.salesRep,
     gutters,
-    guttersPerSide: String(payload.guttersPerSide ?? ''),
-    guttersSpacing: String(payload.guttersSpacing ?? ''),
+    guttersPerSide: gutters === 'none' ? '' : String(payload.guttersPerSide ?? ''),
+    guttersSpacing: gutters === 'none' ? '' : String(payload.guttersSpacing ?? '20'),
     gutterNotes: String(payload.gutterNotes ?? ''),
     liners,
     linerLocation: liners === 'none' ? '' : liners,

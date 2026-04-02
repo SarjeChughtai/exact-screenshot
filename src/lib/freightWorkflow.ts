@@ -26,6 +26,7 @@ export interface FreightExecutionRow {
   variance: number;
   paid: boolean;
   carrier: string;
+  moffettIncluded: boolean;
   status: FreightRecord['status'];
   freightReady: boolean;
   assignedFreightUserId?: string | null;
@@ -50,6 +51,7 @@ export interface FreightPreSaleRow {
   estDistance: number;
   estFreight: number;
   carrier: string;
+  moffettIncluded: boolean;
   status: FreightRecord['status'];
   assignedFreightUserId?: string | null;
 }
@@ -98,6 +100,7 @@ export function buildFreightExecutionRows(input: {
         variance: actualFreight ? actualFreight - estFreight : 0,
         paid: freightPaid > 0 || freightRecord?.paid || false,
         carrier: freightRecord?.carrier || '',
+        moffettIncluded: freightRecord?.moffettIncluded || false,
         status: freightRecord?.status || 'Pending',
         freightReady,
         assignedFreightUserId: freightRecord?.assignedFreightUserId || null,
@@ -138,6 +141,7 @@ export function buildPreSaleFreightRows(input: {
         estDistance: record.estDistance || 0,
         estFreight: record.estFreight || 0,
         carrier: record.carrier || '',
+        moffettIncluded: record.moffettIncluded || false,
         status: record.status || 'Pending',
         assignedFreightUserId: record.assignedFreightUserId || null,
       };

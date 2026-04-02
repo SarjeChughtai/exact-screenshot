@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Switch } from '@/components/ui/switch';
 import { useAppContext } from '@/context/AppContext';
@@ -13,7 +14,7 @@ import { formatCurrency, formatNumber, PROVINCES, getProvinceTax, calcFreight, c
 import { estimateFreightFromLocation } from '@/lib/freightEstimate';
 import type { FoundationType, Quote, QuoteFileRecord, StructureType } from '@/types';
 import { toast } from 'sonner';
-import { Upload, FileText, CheckCircle2, AlertTriangle, Download, Mail, ChevronDown, X, Sparkles, Loader2, MapPin, Lightbulb, Trash2, Plus } from 'lucide-react';
+import { Upload, FileText, CheckCircle2, AlertTriangle, Download, Mail, ChevronDown, X, Sparkles, Loader2, MapPin, Lightbulb, Trash2, Plus, Truck } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { uploadQuoteFile, saveSteelCostEntry } from '@/lib/quoteFileStorage';
 import { validateAIOutput } from '@/lib/aiOutputValidator';
@@ -23,7 +24,7 @@ import { JobIdSelect } from '@/components/JobIdSelect';
 import { DocumentGallery } from '@/components/DocumentGallery';
 import { getQuoteFileUrl } from '@/lib/quoteFileStorage';
 import { downloadDocumentPdf, saveDocumentPdf } from '@/lib/documentPdf';
-import { notifyUsers } from '@/lib/workflowNotifications';
+import { getUserIdsForRole, notifyUsers, sendWorkflowEmailNotification } from '@/lib/workflowNotifications';
 import { steelCostDataFromRow, insulationCostDataFromRow, storedDocumentFromRow } from '@/lib/supabaseMappers';
 import {
   extractTextFromPdf as extractCostPdfText,
@@ -39,6 +40,7 @@ import {
   normalizeStructureType,
   STRUCTURE_TYPE_OPTIONS,
 } from '@/lib/internalQuoteNormalization';
+import { buildFreightRecordFromInternalQuote } from '@/lib/freightHandoff';
 import { jobIdsMatch, resolveCanonicalJobId } from '@/lib/jobIds';
 
 interface CostFileData {
@@ -89,6 +91,10 @@ export default function InternalQuoteBuilder() {
   const {
     addQuote,
     updateQuote,
+    addFreight,
+    updateFreight,
+    updateDeal,
+    freight,
     deals,
     quotes,
     steelCostData,
@@ -115,6 +121,7 @@ export default function InternalQuoteBuilder() {
     guttersDownspouts: '0',
     roofLinerPanels: '0',
     wallLinerPanels: '0',
+    moffettIncluded: false,
     contingencyPct: '5',
     notes: '',
   });
@@ -186,6 +193,7 @@ export default function InternalQuoteBuilder() {
     return 0;
   });
   const [quote, setQuote] = useState<Quote | null>(null);
+  const [sendingToFreight, setSendingToFreight] = useState(false);
   const [tieredMarkupInfo, setTieredMarkupInfo] = useState<{ rate: number; amount: number } | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [complianceNotes, setComplianceNotes] = useState<string[]>([]);
@@ -298,6 +306,7 @@ export default function InternalQuoteBuilder() {
       guttersDownspouts: String(breakdown.guttersDownspoutsTotal || 0),
       roofLinerPanels: String(breakdown.roofLinerPanelsTotal || 0),
       wallLinerPanels: String(breakdown.wallLinerPanelsTotal || 0),
+      moffettIncluded: Boolean(payload.moffettIncluded),
       contingencyPct: String(existingQuote.contingencyPct || 5),
       notes: String(payload.notes || ''),
     });
@@ -356,6 +365,7 @@ export default function InternalQuoteBuilder() {
       guttersDownspouts: String(breakdown.guttersDownspoutsTotal || 0),
       roofLinerPanels: String(breakdown.roofLinerPanelsTotal || 0),
       wallLinerPanels: String(breakdown.wallLinerPanelsTotal || 0),
+      moffettIncluded: Boolean(payload.moffettIncluded),
       contingencyPct: String(sourceQuote.contingencyPct || 5),
       notes: Array.isArray(payload.notes) ? payload.notes.join('\n') : String(payload.notes || ''),
     });
@@ -1273,7 +1283,7 @@ export default function InternalQuoteBuilder() {
     const sqft = w * l;
     if (!sqft || !costData.steelWeightLbs || !costData.totalSupplierCost) {
       toast.error('Enter dimensions and steel cost data');
-      return;
+      return null;
     }
 
     const weight = costData.steelWeightLbs;
@@ -1282,12 +1292,14 @@ export default function InternalQuoteBuilder() {
 
     const adjustedCostPerLb = costData.supplierCostPerLb * (1 + supplierMarkup);
     const steelAfterSupplierMarkup = adjustedCostPerLb * weight;
+    const useSystemFlatMarkup = settings.useFlatInternalMarkup && !Number.isFinite(manualInternalMarkupPct);
+    const markupOptions = { useFlatMarkup: useSystemFlatMarkup };
     const tieredRate = Number.isFinite(manualInternalMarkupPct)
       ? manualInternalMarkupPct / 100
-      : getMarkupRate(steelAfterSupplierMarkup);
+      : getMarkupRate(steelAfterSupplierMarkup, markupOptions);
     const tieredMarkupAmount = Number.isFinite(manualInternalMarkupPct)
       ? steelAfterSupplierMarkup * tieredRate
-      : calcMarkup(steelAfterSupplierMarkup);
+      : calcMarkup(steelAfterSupplierMarkup, markupOptions);
     
     // Adjusted steel = steel after supplier markup + tiered markup
     const adjustedSteel = steelAfterSupplierMarkup + tieredMarkupAmount;
@@ -1315,7 +1327,7 @@ export default function InternalQuoteBuilder() {
     const notes: string[] = [
       `Base Steel (from MBS): ${formatCurrency(costData.totalSupplierCost)} at ${formatNumber(weight)} lbs = $${costData.supplierCostPerLb.toFixed(2)}/lb`,
       `+${supplierMarkupPct}% Supplier: $/lb goes from $${costData.supplierCostPerLb.toFixed(2)} to $${adjustedCostPerLb.toFixed(2)} → steel becomes ${formatCurrency(steelAfterSupplierMarkup)}`,
-      `${Number.isFinite(manualInternalMarkupPct) ? 'Manual' : 'Tiered'} Internal Markup: ${(tieredRate * 100).toFixed(1)}%, amount = ${formatCurrency(tieredMarkupAmount)}${!Number.isFinite(manualInternalMarkupPct) && tieredMarkupAmount === 3000 ? ' ($3K minimum applied)' : ''}`,
+      `${Number.isFinite(manualInternalMarkupPct) ? 'Manual' : useSystemFlatMarkup ? 'System Flat' : 'Tiered'} Internal Markup: ${(tieredRate * 100).toFixed(1)}%, amount = ${formatCurrency(tieredMarkupAmount)}${!Number.isFinite(manualInternalMarkupPct) && !useSystemFlatMarkup && tieredMarkupAmount === 3000 ? ' ($3K minimum applied)' : ''}`,
       `Adjusted Steel: ${formatCurrency(adjustedSteel)} → final $/lb = $${finalPerLb.toFixed(2)} (${finalPerLb >= 2.15 && finalPerLb <= 2.30 ? 'IN RANGE' : 'CHECK'} vs $2.15–$2.30)`,
       `Engineering: auto-complexity = ${complexity.factor} (${complexity.reason}) → ${formatCurrency(engineering)}`,
       form.foundationType === 'none'
@@ -1370,6 +1382,7 @@ export default function InternalQuoteBuilder() {
         guttersDownspoutsTotal: guttersVal,
         roofLinerPanelsTotal: roofLinerPanelsVal,
         wallLinerPanelsTotal: wallLinerPanelsVal,
+        moffettIncluded: Boolean(form.moffettIncluded),
       },
     };
     setQuote(q);
@@ -1379,11 +1392,95 @@ export default function InternalQuoteBuilder() {
 
     // Generate cost-saving tips
     setCostSavingTips(generateCostSavingTips(form, costData, q));
+    return q;
+  };
+
+  const sendToFreightBoard = async () => {
+    setSendingToFreight(true);
+    try {
+      const nextQuote = await generate();
+      if (!nextQuote) return;
+
+      const existingFreight = freight.find(record => jobIdsMatch(record.jobId, nextQuote.jobId)) || null;
+      const isDealStage = deals.some(deal => jobIdsMatch(deal.jobId, nextQuote.jobId));
+      const dropOffLocation = [nextQuote.address, nextQuote.city, nextQuote.province, nextQuote.postalCode]
+        .filter(Boolean)
+        .join(', ');
+
+      const nextFreight = buildFreightRecordFromInternalQuote({
+        quote: nextQuote,
+        distanceKm: Number(form.distance) || 0,
+        dropOffLocation,
+        moffettIncluded: Boolean(form.moffettIncluded),
+        isDealStage,
+        existing: existingFreight,
+      });
+
+      if (existingFreight) {
+        await updateFreight(nextQuote.jobId, nextFreight);
+      } else {
+        await addFreight(nextFreight);
+      }
+
+      if (isDealStage) {
+        await updateDeal(nextQuote.jobId, { freightStatus: 'Quoted' });
+      }
+
+      const freightUserIds = await getUserIdsForRole('freight');
+      const freightLink = `/freight?freightJobId=${encodeURIComponent(nextQuote.jobId)}&freightMode=${nextFreight.mode === 'execution' ? 'execution' : 'pre_sale'}`;
+      const emailSubject = `${nextFreight.mode === 'execution' ? 'Freight quote ready' : 'New freight estimate available'}: ${nextQuote.jobId}`;
+      const emailText = [
+        `${nextFreight.mode === 'execution' ? 'A freight quote is ready.' : 'A new freight estimate is available for bid.'}`,
+        '',
+        `Job ID: ${nextQuote.jobId}`,
+        `Client: ${nextQuote.clientName || 'Not set'}`,
+        `Building: ${nextQuote.width} x ${nextQuote.length} x ${nextQuote.height}`,
+        `Location: ${dropOffLocation || 'Not set'}`,
+        `Estimated freight: ${formatCurrency(nextFreight.estFreight)}`,
+        `Estimated distance: ${formatNumber(nextFreight.estDistance)} km`,
+        `Moffett included: ${nextFreight.moffettIncluded ? 'Yes' : 'No'}`,
+        '',
+        `Open in portal: ${window.location.origin}${freightLink}`,
+      ].join('\n');
+
+      await notifyUsers({
+        userIds: freightUserIds,
+        title: nextFreight.mode === 'execution' ? 'Freight Quote Ready' : 'New Freight Estimate',
+        message: `${nextQuote.jobId} is available on the Freight Board${nextFreight.moffettIncluded ? ' with moffett included' : ''}.`,
+        link: freightLink,
+      });
+
+      try {
+        await sendWorkflowEmailNotification({
+          userIds: freightUserIds,
+          subject: emailSubject,
+          text: emailText,
+          html: `<p>${nextFreight.mode === 'execution' ? 'A freight quote is ready.' : 'A new freight estimate is available for bid.'}</p>
+<p><strong>Job ID:</strong> ${nextQuote.jobId}<br />
+<strong>Client:</strong> ${nextQuote.clientName || 'Not set'}<br />
+<strong>Building:</strong> ${nextQuote.width} x ${nextQuote.length} x ${nextQuote.height}<br />
+<strong>Location:</strong> ${dropOffLocation || 'Not set'}<br />
+<strong>Estimated freight:</strong> ${formatCurrency(nextFreight.estFreight)}<br />
+<strong>Estimated distance:</strong> ${formatNumber(nextFreight.estDistance)} km<br />
+<strong>Moffett included:</strong> ${nextFreight.moffettIncluded ? 'Yes' : 'No'}</p>
+<p><a href="${window.location.origin}${freightLink}">Open in portal</a></p>`,
+        });
+      } catch (emailError) {
+        console.warn('Freight email notification failed', emailError);
+      }
+
+      toast.success(nextFreight.mode === 'execution'
+        ? 'Sent to Freight Board as a freight quote.'
+        : 'Sent to Freight Board as a freight estimate.');
+    } finally {
+      setSendingToFreight(false);
+    }
   };
 
   const persistQuote = async (resetAfterSave = false) => {
-    if (!quote) return;
-    const nextQuote = { ...quote, updatedAt: new Date().toISOString() };
+    const preparedQuote = await generate();
+    if (!preparedQuote) return;
+    const nextQuote = { ...preparedQuote, updatedAt: new Date().toISOString() };
 
     if (existingQuote) {
       await updateQuote(existingQuote.id, nextQuote);
@@ -1416,11 +1513,11 @@ export default function InternalQuoteBuilder() {
     });
 
     setQuote(current => current ? ({
-      ...current,
+      ...nextQuote,
       pdfStoragePath: pdf.storagePath,
       pdfFileName: pdf.fileName,
       updatedAt: new Date().toISOString(),
-    }) : current);
+    }) : nextQuote);
 
     toast.success(existingQuote ? 'Internal quote updated' : 'Internal quote saved to Internal Quote Log');
     if (resetAfterSave) {
@@ -1429,18 +1526,17 @@ export default function InternalQuoteBuilder() {
   };
 
   const saveToLog = async () => {
-    if (!quote) return;
     await persistQuote(false);
   };
 
   const saveToLogAndNew = async () => {
-    if (!quote) return;
     await persistQuote(true);
   };
 
   const downloadPdf = async () => {
-    if (!quote) return;
-    await downloadDocumentPdf(quote);
+    const preparedQuote = await generate();
+    if (!preparedQuote) return;
+    await downloadDocumentPdf(preparedQuote);
     return;
     const printContent = document.getElementById('internal-quote-output');
     if (!printContent) return;
@@ -1657,10 +1753,12 @@ export default function InternalQuoteBuilder() {
                 step="0.1"
                 value={internalMarkupPct}
                 onChange={e => setInternalMarkupPct(e.target.value)}
-                placeholder="Leave blank for auto tiered"
+                placeholder={settings.useFlatInternalMarkup ? 'Leave blank for system flat 5%' : 'Leave blank for auto tiered'}
               />
               <p className="mt-1 text-[10px] text-muted-foreground">
-                Blank uses the tiered internal markup schedule. Enter a value to override it for this quote.
+                {settings.useFlatInternalMarkup
+                  ? 'Blank uses the system-wide flat 5% internal markup. Enter a value to override it for this quote.'
+                  : 'Blank uses the tiered internal markup schedule. Enter a value to override it for this quote.'}
               </p>
             </div>
             <div className="flex items-center justify-between">
@@ -1791,6 +1889,14 @@ export default function InternalQuoteBuilder() {
                 </Select>
               </div>
             </div>
+            <div className="flex items-center gap-3 rounded-md border bg-muted/20 px-3 py-2">
+              <Checkbox
+                checked={Boolean(form.moffettIncluded)}
+                onCheckedChange={checked => setForm(current => ({ ...current, moffettIncluded: checked === true }))}
+                id="internal-quote-moffett-included"
+              />
+              <Label htmlFor="internal-quote-moffett-included" className="text-xs">Moffett included</Label>
+            </div>
             <div className="grid grid-cols-3 gap-3">
               <div><Label className="text-xs">Contingency %</Label><Input className="input-blue mt-1" value={form.contingencyPct} onChange={e => set('contingencyPct', e.target.value)} /></div>
               <div><Label className="text-xs">Insulation ($)</Label><Input className="input-blue mt-1" value={form.insulationCost} onChange={e => set('insulationCost', e.target.value)} /></div>
@@ -1832,6 +1938,10 @@ export default function InternalQuoteBuilder() {
                 <div className="flex gap-2">
                   <Button onClick={downloadPdf} size="sm" variant="outline"><Download className="h-3 w-3 mr-1" />PDF</Button>
                   <Button onClick={emailQuote} size="sm" variant="outline"><Mail className="h-3 w-3 mr-1" />Email</Button>
+                  <Button onClick={sendToFreightBoard} size="sm" variant="outline" disabled={sendingToFreight}>
+                    {sendingToFreight ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Truck className="h-3 w-3 mr-1" />}
+                    Send to Freight
+                  </Button>
                   <Button onClick={saveToLog} size="sm" variant="outline">Save to Log</Button>
                   <Button onClick={saveToLogAndNew} size="sm">Save & New</Button>
                 </div>
@@ -1864,7 +1974,7 @@ export default function InternalQuoteBuilder() {
                 {quote.gutters > 0 && <QRow label="Gutters & Downspouts" value={quote.gutters} />}
                 {quote.liners > 0 && <QRow label="Liners" value={quote.liners} />}
                 {quote.insulation > 0 && <QRow label="Insulation" value={quote.insulation} />}
-                <QRow label={`Freight Estimate (${form.distance}km, ${form.remoteLevel})`} value={quote.freight} />
+                <QRow label={`Freight Estimate (${form.distance}km, ${form.remoteLevel})${form.moffettIncluded ? ' + Moffett' : ''}`} value={quote.freight} />
                 <div className="h-2" />
                 <QRow label="SUBTOTAL" value={quote.combinedTotal} bold />
                 <QRow label="$/sqft" value={quote.perSqft} />

@@ -436,6 +436,7 @@ export function freightFromRow(r: any): FreightRecord {
     actualFreight: Number(r.actual_freight) || 0,
     paid: r.paid ?? false,
     carrier: r.carrier ?? '',
+    moffettIncluded: r.moffett_included ?? false,
     assignedFreightUserId: r.assigned_freight_user_id ?? null,
     status: r.status ?? 'Pending',
   };
@@ -450,7 +451,7 @@ export function freightToRow(fr: Partial<FreightRecord>): Record<string, any> {
     estimatedPickupDate: 'estimated_pickup_date', estimatedDeliveryDate: 'estimated_delivery_date',
     actualPickupDate: 'actual_pickup_date', actualDeliveryDate: 'actual_delivery_date', mode: 'mode',
     estDistance: 'est_distance', estFreight: 'est_freight', actualFreight: 'actual_freight',
-    paid: 'paid', carrier: 'carrier', assignedFreightUserId: 'assigned_freight_user_id', status: 'status',
+    paid: 'paid', carrier: 'carrier', moffettIncluded: 'moffett_included', assignedFreightUserId: 'assigned_freight_user_id', status: 'status',
   };
   const row: Record<string, any> = {};
   for (const [k, v] of Object.entries(fr)) {

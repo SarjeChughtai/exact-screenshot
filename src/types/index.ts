@@ -91,7 +91,7 @@ export type QuoteStatus = 'Draft' | 'Sent' | 'Follow Up' | 'Won' | 'Lost' | 'Exp
 
 export type DealStatus = 'Lead' | 'Quoted' | 'Pending Payment' | 'In Progress' | 'In Production' | 'Shipped' | 'Delivered' | 'Complete' | 'Cancelled' | 'On Hold';
 export type PaymentStatus = 'PAID' | 'PARTIAL' | 'UNPAID';
-export type FreightStatus = 'Pending' | 'Booked' | 'In Transit' | 'Delivered';
+export type FreightStatus = 'Pending' | 'RFQ' | 'Quoted' | 'Booked' | 'In Transit' | 'Delivered';
 export type ProductionStage = 'Submitted' | 'Acknowledged' | 'In Production' | 'QC Complete' | 'Ship Ready' | 'Shipped' | 'Delivered';
 export type DrawingStatus = 'not_requested' | 'requested' | 'received' | 'signed' | 'not_required';
 
@@ -280,6 +280,7 @@ export interface FreightRecord {
   actualFreight: number;
   paid: boolean;
   carrier: string;
+  moffettIncluded?: boolean;
   assignedFreightUserId?: string | null;
   status: FreightStatus;
 }

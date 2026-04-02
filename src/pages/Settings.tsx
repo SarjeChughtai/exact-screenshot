@@ -264,6 +264,19 @@ export default function Settings() {
                 </div>
               </div>
 
+              <div className="flex items-center justify-between rounded-lg border p-3">
+                <div>
+                  <Label className="text-xs font-semibold">System-wide flat internal markup</Label>
+                  <p className="mt-1 text-[10px] text-muted-foreground">
+                    When enabled, quote-generation paths use a fixed 5% internal markup instead of the tiered schedule unless a manual override is entered.
+                  </p>
+                </div>
+                <Switch
+                  checked={settings.useFlatInternalMarkup}
+                  onCheckedChange={checked => updateSettings({ useFlatInternalMarkup: checked })}
+                />
+              </div>
+
               <div>
                 <Label className="text-xs font-semibold">{t('settings.markups.internalMarkupTiers')}</Label>
                 <div className="mt-2 space-y-1">

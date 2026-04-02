@@ -89,6 +89,9 @@ function buildDocumentLines(quote: Quote) {
   lines.push(`Liners: ${formatCurrency(quote.liners)}`);
   lines.push(`Insulation: ${formatCurrency(quote.insulation)}`);
   lines.push(`Freight: ${formatCurrency(quote.freight)}`);
+  if ((quote.payload as Record<string, unknown> | undefined)?.moffettIncluded === true) {
+    lines.push('Moffett Included: Yes');
+  }
   lines.push(`Combined Total: ${formatCurrency(quote.combinedTotal)}`);
   lines.push(`Contingency: ${formatCurrency(quote.contingency)} (${quote.contingencyPct}%)`);
   lines.push(`Tax: ${formatCurrency((quote.gstHst || 0) + (quote.qst || 0))}`);

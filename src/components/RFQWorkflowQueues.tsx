@@ -8,6 +8,8 @@ import { useRoles } from '@/context/RoleContext';
 import { useSettings } from '@/context/SettingsContext';
 import { supabase } from '@/integrations/supabase/client';
 import { quoteFileFromRow } from '@/lib/supabaseMappers';
+import { isQuoteAssignedToSalesRepUser } from '@/lib/personnelAssignments';
+import { getRFQWorkflowDisplayLabel } from '@/lib/workflowStatus';
 import { getQuoteFileUrl, uploadQuoteFile } from '@/lib/quoteFileStorage';
 import { doesQuoteMatchAssigneeFilter, isEstimatorAssignedToQuote, type QuoteAssigneeFilter } from '@/lib/rfqWorkflow';
 import { getUserIdsForRole, notifyUsers } from '@/lib/workflowNotifications';
@@ -25,10 +27,6 @@ const SALES_QUEUE_STATUSES: WorkflowStatus[] = [
 
 const ESTIMATOR_QUEUE_STATUSES: WorkflowStatus[] = ['estimate_needed', 'estimating'];
 const OPERATIONS_QUEUE_STATUSES: WorkflowStatus[] = ['estimate_complete', 'internal_quote_in_progress'];
-
-function formatWorkflowLabel(status: WorkflowStatus) {
-  return status.replace(/_/g, ' ');
-}
 
 function QueueCard({
   quote,
@@ -51,7 +49,7 @@ function QueueCard({
             <CardTitle className="text-base">{title}</CardTitle>
             <CardDescription>{description}</CardDescription>
           </div>
-          <Badge variant="outline" className="capitalize">{formatWorkflowLabel(quote.workflowStatus)}</Badge>
+          <Badge variant="outline" className="capitalize">{getRFQWorkflowDisplayLabel(quote.workflowStatus)}</Badge>
         </div>
       </CardHeader>
       <CardContent className="space-y-3 text-sm">
@@ -124,11 +122,10 @@ export function RFQWorkflowQueues({
       (
         hasAnyRole('admin', 'owner', 'operations') ||
         !hasAnyRole('sales_rep') ||
-        quote.salesRep === currentUser.name ||
-        quote.createdByUserId === currentUser.id
+        isQuoteAssignedToSalesRepUser(settings.personnel, quote, currentUser.id, currentUser.name)
       )
     )
-  ), [currentUser.id, currentUser.name, hasAnyRole, rfqDocuments]);
+  ), [currentUser.id, currentUser.name, hasAnyRole, rfqDocuments, settings.personnel]);
 
   const estimatorQueue = useMemo(() => (
     rfqDocuments.filter(quote =>

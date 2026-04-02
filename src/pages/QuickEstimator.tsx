@@ -8,9 +8,9 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
-  calcSteelCost, calcEngineering, lookupFoundation, lookupInsulation,
+  calcSteelCost, calcEngineeringFromFactor, lookupFoundation, lookupInsulation,
   calcInsulationArea, calcFreight, calcTax, formatCurrency, formatNumber,
-  PROVINCES, INSULATION_GRADES, ENGINEERING_FACTORS, calcMarkup, getMarkupRate,
+  PROVINCES, INSULATION_GRADES, ENGINEERING_FACTORS, calcMarkup, getMarkupRate, autoComplexityFactor,
 } from '@/lib/calculations';
 import { estimateFreightFromLocation, hasGoogleMapsKeyConfigured } from '@/lib/freightEstimate';
 import {
@@ -38,6 +38,7 @@ import { MapPin, Lightbulb, ChevronDown, Save, FolderOpen, PlusCircle, Trash2 } 
 import { useAppContext } from '@/context/AppContext';
 import { useRoles } from '@/context/RoleContext';
 import { useAuth } from '@/context/AuthContext';
+import { useSettings } from '@/context/SettingsContext';
 import { toast } from 'sonner';
 import type { Estimate } from '@/types';
 import { PersonnelSelect } from '@/components/PersonnelSelect';
@@ -55,6 +56,7 @@ export default function QuickEstimator() {
   const { addEstimate, estimates, updateEstimate, quotes, deals, clients } = useAppContext();
   const { currentUser, hasAnyRole } = useRoles();
   const { user } = useAuth();
+  const { settings } = useSettings();
   const isAdminOwner = hasAnyRole('admin', 'owner');
 
   const [jobId, setJobId] = useState('');
@@ -101,9 +103,8 @@ export default function QuickEstimator() {
   const [clientId, setClientId] = useState('');
   const [salesRep, setSalesRep] = useState('');
 
-  // Admin/Owner markup toggle
-  const [useFlat, setUseFlat] = useState(false);
-  const [flatMarkupPct, setFlatMarkupPct] = useState('5');
+  const useFlat = settings.useFlatInternalMarkup;
+  const flatMarkupPct = '5';
 
   const [editingEstimateId, setEditingEstimateId] = useState<string | null>(null);
   const [loadedDraftId, setLoadedDraftId] = useState<string | null>(null);
@@ -240,8 +241,6 @@ export default function QuickEstimator() {
     setClientName(nextState.clientName);
     setClientId(nextState.clientId);
     setSalesRep(nextState.salesRep);
-    setUseFlat(nextState.useFlat);
-    setFlatMarkupPct(nextState.flatMarkupPct);
     setResult(nextState.result);
   }, []);
 
@@ -302,9 +301,9 @@ export default function QuickEstimator() {
       setSingleSlope(Boolean(latestQuote.isSingleSlope || imported.buildingStyle === 'Single Slope'));
       setLeftEaveHeight(latestQuote.leftEaveHeight != null ? String(latestQuote.leftEaveHeight) : imported.lowSide);
       setRightEaveHeight(latestQuote.rightEaveHeight != null ? String(latestQuote.rightEaveHeight) : imported.highSide);
-      setGuttersMode(imported.gutters);
-      setGuttersPerSide(imported.guttersPerSide);
-      setGuttersSpacing(imported.guttersSpacing);
+      setGuttersMode(imported.gutters === 'none' ? 'none' : 'spacing');
+      setGuttersPerSide('');
+      setGuttersSpacing(imported.gutters === 'none' ? '' : imported.guttersSpacing || '20');
       setGutterNotes(imported.gutterNotes);
       setLinersMode(imported.liners);
       setLinerNotes(imported.linerNotes);
@@ -455,13 +454,26 @@ export default function QuickEstimator() {
     if (estimate) {
       setDistance(estimate.distanceKm.toString());
       setRemoteLevel(estimate.remote);
-      setProvince(estimate.province);
       const via = estimate.distanceSource === 'maps' ? 'Maps API' : 'heuristic';
       setFreightSource(`Auto: ~${estimate.distanceKm}km via ${via} (${estimate.method})`);
     } else {
+      setFreightSource('Could not estimate. Enter distance manually.');
+      return;
       setFreightSource('Could not estimate — enter manually');
     }
   };
+
+  const handleGuttersSelection = useCallback((nextValue: 'none' | 'spacing') => {
+    setGuttersMode(nextValue);
+    if (nextValue === 'none') {
+      setGuttersPerSide('');
+      setGuttersSpacing('');
+      return;
+    }
+
+    setGuttersPerSide('');
+    setGuttersSpacing(current => current || '20');
+  }, []);
 
   const calculate = () => {
     const w = parseFloat(width) || 0;
@@ -471,7 +483,8 @@ export default function QuickEstimator() {
     if (sqft <= 0) return;
 
     const steel = calcSteelCost(sqft);
-    const eng = calcEngineering(selectedFactors);
+    const complexity = autoComplexityFactor(w, l, h);
+    const eng = calcEngineeringFromFactor(complexity.factor);
     const found = lookupFoundation(sqft, foundationType);
     const insulationArea = calcInsulationArea(w, l, h);
 
@@ -483,20 +496,17 @@ export default function QuickEstimator() {
     }
 
     let gutters = 0;
-    if (guttersMode === 'per_side') {
-      const sides = Math.max(parseFloat(guttersPerSide) || 2, 1);
-      gutters = l * sides * 10;
-    } else if (guttersMode === 'spacing') {
-      const spacing = parseFloat(guttersSpacing) || 20;
+    if (guttersMode !== 'none') {
+      const spacing = 20;
       const downspoutCount = Math.max(Math.ceil((2 * (w + l)) / spacing), 2);
-      gutters = (l * 2 * 10) + (downspoutCount * 65);
+      gutters = (l * 2 * settings.gutterPerLF) + (downspoutCount * 65);
     }
 
     let linerArea = 0;
     if (linersMode === 'walls') linerArea = insulationArea.wallArea;
     else if (linersMode === 'roof') linerArea = sqft;
     else if (linersMode === 'roof_walls') linerArea = insulationArea.wallArea + sqft;
-    const liners = linerArea * 3.25;
+    const liners = linerArea * settings.linerPerSqft;
 
     const frt = calcFreight(parseFloat(distance) || 0, steel.weight, remoteLevel);
 
@@ -505,19 +515,10 @@ export default function QuickEstimator() {
     const adjustedSteel = steel.cost;
 
     // Calculate markup - baked into steel price (hidden from user)
-    let markupAmount: number;
-    let markupRate: number;
-    let markupType: string;
-
-    if (isAdminOwner && useFlat) {
-      markupRate = parseFloat(flatMarkupPct) / 100;
-      markupAmount = adjustedSteel * markupRate;
-      markupType = `Flat ${flatMarkupPct}%`;
-    } else {
-      markupAmount = calcMarkup(adjustedSteel);
-      markupRate = getMarkupRate(adjustedSteel);
-      markupType = `Tiered ${(markupRate * 100).toFixed(1)}%`;
-    }
+    const markupOptions = { useFlatMarkup: useFlat };
+    const markupAmount = calcMarkup(adjustedSteel, markupOptions);
+    const markupRate = getMarkupRate(adjustedSteel, markupOptions);
+    const markupType = useFlat ? 'System Flat 5%' : `Tiered ${(markupRate * 100).toFixed(1)}%`;
 
     const steelWithMargin = adjustedSteel + markupAmount;
 
@@ -548,6 +549,7 @@ export default function QuickEstimator() {
     if (remoteLevel === 'remote') tips.push(`🚛 Remote location adds $1,500 to freight. Check if a closer delivery point is available.`);
     if (sqft > 10000 && parseFloat(contingencyPct) >= 5) tips.push(`💰 For large buildings (${formatNumber(sqft)} sqft), contingency could be reduced to 3% — larger projects have more predictable costs.`);
     if (insulationRequired && (!insulationRoofGrade || !insulationWallGrade)) tips.push(`🧊 Specify roof and wall insulation grades to keep the RFQ import complete.`);
+    if (complexity.factor > 1) tips.push(`Engineering auto-adjusted to ${complexity.factor.toFixed(2)} based on building size and height.`);
     setCostSavingTips(tips);
   };
 
@@ -559,7 +561,6 @@ export default function QuickEstimator() {
     const w = parseFloat(width) || 0;
     const l = parseFloat(length) || 0;
     const h = parseFloat(height) || 14;
-    const p = parseFloat(pitch) || 1;
     const rep = salesRep || currentUser.name || user?.email || '';
     const nowIso = new Date().toISOString();
 
@@ -567,7 +568,7 @@ export default function QuickEstimator() {
       `Steel base: ${formatCurrency(result.steelCost)} at ${formatNumber(result.weight)} lbs`,
       `Margin baked in: ${result.markupType} = ${formatCurrency(result.markupAmount)}`,
       `Steel shown to client: ${formatCurrency(result.steelWithMargin)}`,
-      `Engineering factors: ${selectedFactors.join(', ')}`,
+      `Engineering auto-complexity applied from building dimensions`,
       `Location: ${[city, province, postalCode].filter(Boolean).join(', ') || province}`,
     ];
 
@@ -594,7 +595,7 @@ export default function QuickEstimator() {
         distance, remoteLevel, foundationType, contingencyPct,
         guttersMode,
         guttersPerSide,
-        guttersSpacing,
+        guttersSpacing: guttersMode === 'none' ? '' : (guttersSpacing || '20'),
         gutterNotes,
         linersMode,
         linerLocation: linersMode === 'none' ? '' : linersMode,
@@ -919,36 +920,21 @@ export default function QuickEstimator() {
             )}
           </div>
 
-          <div className="space-y-3">
-            <div>
-              <Label className="text-xs">Gutters</Label>
-              <Select value={guttersMode} onValueChange={value => setGuttersMode(value as QuickEstimatorGutterMode)}>
-                <SelectTrigger className="input-blue mt-1"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  <SelectItem value="per_side">Per Side</SelectItem>
-                  <SelectItem value="spacing">Spacing / Downspouts</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {guttersMode === 'per_side' && (
-              <div>
-                <Label className="text-xs">Gutter Sides</Label>
-                <Input className="input-blue mt-1" value={guttersPerSide} onChange={e => setGuttersPerSide(e.target.value)} placeholder="2" />
-              </div>
-            )}
-            {guttersMode === 'spacing' && (
-              <div>
-                <Label className="text-xs">Downspout Spacing (ft)</Label>
-                <Input className="input-blue mt-1" value={guttersSpacing} onChange={e => setGuttersSpacing(e.target.value)} placeholder="20" />
-              </div>
-            )}
-            {guttersMode !== 'none' && (
-              <div>
-                <Label className="text-xs">Gutter Notes</Label>
-                <Input className="input-blue mt-1" value={gutterNotes} onChange={e => setGutterNotes(e.target.value)} placeholder="Optional gutter details" />
-              </div>
-            )}
+          <div>
+            <Label className="text-xs">Gutters & Downspouts</Label>
+            <Select
+              value={guttersMode === 'none' ? 'none' : 'spacing'}
+              onValueChange={value => handleGuttersSelection(value as 'none' | 'spacing')}
+            >
+              <SelectTrigger className="input-blue mt-1"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No</SelectItem>
+                <SelectItem value="spacing">Yes</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="mt-1 text-[10px] text-muted-foreground">
+              Yes uses the standard gutter package with 20ft downspout spacing.
+            </p>
           </div>
 
           <div className="space-y-3">
@@ -970,7 +956,7 @@ export default function QuickEstimator() {
             )}
           </div>
 
-          <div>
+          <div className="hidden">
             <Label className="text-xs mb-2 block">Engineering Complexity</Label>
             <div className="space-y-1.5 max-h-48 overflow-y-auto">
               {ENGINEERING_FACTORS.map(f => (
@@ -981,22 +967,6 @@ export default function QuickEstimator() {
               ))}
             </div>
           </div>
-
-          {/* Admin/Owner: Markup Toggle */}
-          {isAdminOwner && (
-            <div className="bg-accent/5 border border-accent/20 rounded-lg p-3 space-y-2">
-              <div className="flex items-center justify-between">
-                <Label className="text-xs font-semibold">Use Flat Markup (instead of tiered)</Label>
-                <Switch checked={useFlat} onCheckedChange={setUseFlat} />
-              </div>
-              {useFlat && (
-                <div>
-                  <Label className="text-xs">Flat Markup %</Label>
-                  <Input className="input-blue mt-1" type="number" step="0.5" value={flatMarkupPct} onChange={e => setFlatMarkupPct(e.target.value)} />
-                </div>
-              )}
-            </div>
-          )}
 
           <Button onClick={calculate} className="w-full">Calculate Estimate</Button>
         </div>
