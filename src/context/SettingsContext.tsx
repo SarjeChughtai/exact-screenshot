@@ -39,6 +39,7 @@ export interface AppSettings {
   linerPerSqft: number;
   freightBaseRate: number;
   freightMinimum: number;
+  factoryOrigin: { lat: number; lng: number; label: string };
   showMarkupOnEstimator: boolean;
   useFlatInternalMarkup: boolean;
   dealStatuses: string[];
@@ -73,6 +74,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   linerPerSqft: 3.25,
   freightBaseRate: 4,
   freightMinimum: 4000,
+  factoryOrigin: { lat: 44.0469, lng: -79.4599, label: 'Bradford, ON' },
   showMarkupOnEstimator: true,
   useFlatInternalMarkup: false,
   dealStatuses: ['Lead', 'Quoted', 'Pending Payment', 'In Progress', 'In Production', 'Shipped', 'Delivered', 'Complete', 'Cancelled', 'On Hold'],
@@ -124,6 +126,7 @@ const SETTINGS_KEY_MAP: Record<keyof AppSettings, string | null> = {
   linerPerSqft: 'pricing',
   freightBaseRate: 'pricing',
   freightMinimum: 'pricing',
+  factoryOrigin: 'pricing',
   showMarkupOnEstimator: 'pricing',
   useFlatInternalMarkup: 'pricing',
   dealStatuses: 'deal_statuses',
@@ -238,6 +241,9 @@ function mergeSettingsRows(rows: { key: string; value: any }[], personnel: Perso
     linerPerSqft: Number(pricing.linerPerSqft ?? next.linerPerSqft),
     freightBaseRate: Number(pricing.freightBaseRate ?? next.freightBaseRate),
     freightMinimum: Number(pricing.freightMinimum ?? next.freightMinimum),
+    factoryOrigin: pricing.factoryOrigin && typeof pricing.factoryOrigin === 'object'
+      ? { lat: Number(pricing.factoryOrigin.lat), lng: Number(pricing.factoryOrigin.lng), label: String(pricing.factoryOrigin.label || '') }
+      : next.factoryOrigin,
     showMarkupOnEstimator: Boolean(pricing.showMarkupOnEstimator ?? next.showMarkupOnEstimator),
     useFlatInternalMarkup: Boolean(pricing.useFlatInternalMarkup ?? next.useFlatInternalMarkup),
   });
@@ -394,7 +400,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     const pricingKeys: (keyof AppSettings)[] = [
       'supplierIncreasePct', 'minimumMargin', 'minimumMarginThreshold', 'drawingsMarkup',
       'internalMarginOnEstimator', 'frostWallMultiplier', 'gutterPerLF', 'linerPerSqft',
-      'freightBaseRate', 'freightMinimum', 'showMarkupOnEstimator', 'useFlatInternalMarkup',
+      'freightBaseRate', 'freightMinimum', 'factoryOrigin', 'showMarkupOnEstimator', 'useFlatInternalMarkup',
     ];
 
     if (pricingKeys.some(key => key in updates)) {
@@ -409,6 +415,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         linerPerSqft: next.linerPerSqft,
         freightBaseRate: next.freightBaseRate,
         freightMinimum: next.freightMinimum,
+        factoryOrigin: next.factoryOrigin,
         showMarkupOnEstimator: next.showMarkupOnEstimator,
         useFlatInternalMarkup: next.useFlatInternalMarkup,
       });

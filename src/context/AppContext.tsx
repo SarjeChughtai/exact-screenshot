@@ -880,7 +880,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
       )),
     );
 
-    if (existingClient) return existingClient;
+    if (existingClient) {
+      const canonicalJobId = resolveCanonicalJobId(jobId || '');
+      if (canonicalJobId && !existingClient.jobIds.some(existingJobId => jobIdsMatch(existingJobId, canonicalJobId))) {
+        const nextJobIds = [...existingClient.jobIds, canonicalJobId];
+        setState(prev => ({
+          ...prev,
+          clients: prev.clients.map(client =>
+            client.id === existingClient.id ? { ...client, jobIds: nextJobIds } : client,
+          ),
+        }));
+        try {
+          await supabase.from('clients').update({ job_ids: nextJobIds }).eq('id', existingClient.id);
+        } catch {}
+      }
+      return existingClient;
+    }
 
     try {
       const { data, error } = await supabase

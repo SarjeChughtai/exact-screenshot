@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -42,6 +42,11 @@ import {
 } from '@/lib/internalQuoteNormalization';
 import { buildFreightRecordFromInternalQuote } from '@/lib/freightHandoff';
 import { jobIdsMatch, resolveCanonicalJobId } from '@/lib/jobIds';
+import {
+  buildInternalQuoteAutoJobName,
+  canUploadInternalQuoteDocuments,
+  resolveInternalQuoteJobName,
+} from '@/lib/internalQuoteWorkflow';
 
 interface CostFileData {
   steelWeightLbs: number;
@@ -100,7 +105,9 @@ export default function InternalQuoteBuilder() {
     steelCostData,
     insulationCostData,
     storedDocuments,
-    allocateJobId,
+    jobProfiles,
+    quickAddClient,
+    upsertJobProfile,
   } = useAppContext();
   const { settings, getSalesReps } = useSettings();
   const editingQuoteId = searchParams.get('quoteId');
@@ -146,6 +153,7 @@ export default function InternalQuoteBuilder() {
     }
     return getInitialForm();
   });
+  const [jobNameManuallyEdited, setJobNameManuallyEdited] = useState(false);
 
   const [supplierMarkupPct, setSupplierMarkupPct] = useState(() => {
     const saved = localStorage.getItem('csb_internal_builder_active_state');
@@ -316,6 +324,12 @@ export default function InternalQuoteBuilder() {
     setLeftEaveHeight(String(payload.leftEaveHeight ?? existingQuote.leftEaveHeight ?? existingQuote.height ?? 14));
     setRightEaveHeight(String(payload.rightEaveHeight ?? existingQuote.rightEaveHeight ?? existingQuote.height ?? 14));
     setInternalMarkupPct(payload.internalMarkupPct != null ? String(payload.internalMarkupPct) : '');
+    setJobNameManuallyEdited(
+      Boolean(
+        existingQuote.jobName
+        && existingQuote.jobName.trim() !== buildInternalQuoteAutoJobName(existingQuote.jobId, existingQuote.clientName),
+      ),
+    );
     setQuote(existingQuote);
   }, [existingQuote]);
 
@@ -372,6 +386,12 @@ export default function InternalQuoteBuilder() {
     setBuildings(importedBuildings);
     setActiveBuildingIdx(0);
     setInternalMarkupPct(payload.internalMarkupPct != null ? String(payload.internalMarkupPct) : '');
+    setJobNameManuallyEdited(
+      Boolean(
+        sourceQuote.jobName
+        && sourceQuote.jobName.trim() !== buildInternalQuoteAutoJobName(sourceQuote.jobId, sourceQuote.clientName),
+      ),
+    );
   }, [existingQuote, sourceQuote]);
 
   const handleEaveHeightChange = (side: 'left' | 'right', value: string) => {
@@ -397,6 +417,68 @@ export default function InternalQuoteBuilder() {
   };
 
   const set = (key: string, val: string) => setForm(f => ({ ...f, [key]: val }));
+  const canAttachDocuments = canUploadInternalQuoteDocuments(form);
+  const uploadRequirementMessage = !form.jobId.trim()
+    ? 'Select or create a job ID first.'
+    : !form.clientId.trim() || !form.clientName.trim()
+      ? 'Connect the job to a client before uploading documents.'
+      : 'Dropped documents will hydrate the job profile and quote builder from this shared job.';
+
+  const buildNextJobProfilePayload = useCallback((nextForm: typeof form, overrides?: {
+    leftEaveHeight?: string;
+    rightEaveHeight?: string;
+    singleSlope?: boolean;
+  }) => {
+    const canonicalJobId = resolveCanonicalJobId(nextForm.jobId) || nextForm.jobId.trim();
+    if (!canonicalJobId) return null;
+
+    const width = Number(nextForm.width);
+    const length = Number(nextForm.length);
+    const height = Number(nextForm.height);
+    const pitch = Number(nextForm.pitch);
+
+    return {
+      jobId: canonicalJobId,
+      jobName: nextForm.jobName.trim(),
+      clientId: nextForm.clientId.trim(),
+      clientName: nextForm.clientName.trim(),
+      salesRep: nextForm.salesRep.trim(),
+      estimator: nextForm.estimator.trim(),
+      province: nextForm.province.trim(),
+      city: nextForm.city.trim(),
+      address: nextForm.address.trim(),
+      postalCode: nextForm.postalCode.trim(),
+      width: Number.isFinite(width) ? width : 0,
+      length: Number.isFinite(length) ? length : 0,
+      height: Number.isFinite(height) ? height : 0,
+      leftEaveHeight: overrides?.leftEaveHeight != null ? Number(overrides.leftEaveHeight) || undefined : Number(leftEaveHeight) || undefined,
+      rightEaveHeight: overrides?.rightEaveHeight != null ? Number(overrides.rightEaveHeight) || undefined : Number(rightEaveHeight) || undefined,
+      isSingleSlope: overrides?.singleSlope ?? singleSlope,
+      pitch: Number.isFinite(pitch) ? pitch : undefined,
+      structureType: normalizeStructureType(nextForm.structureType || 'steel_building'),
+      lastSource: 'quote' as const,
+    };
+  }, [form, leftEaveHeight, rightEaveHeight, singleSlope]);
+
+  const syncJobWorkspace = useCallback(async (nextForm: typeof form, overrides?: {
+    leftEaveHeight?: string;
+    rightEaveHeight?: string;
+    singleSlope?: boolean;
+  }) => {
+    const canonicalJobId = resolveCanonicalJobId(nextForm.jobId) || nextForm.jobId.trim();
+    if (!canonicalJobId) return;
+
+    const clientId = nextForm.clientId.trim();
+    const clientName = nextForm.clientName.trim();
+    if (clientId && clientName) {
+      await quickAddClient(clientId, clientName, canonicalJobId);
+    }
+
+    const payload = buildNextJobProfilePayload(nextForm, overrides);
+    if (payload) {
+      await upsertJobProfile(payload);
+    }
+  }, [buildNextJobProfilePayload, quickAddClient, upsertJobProfile]);
 
   const pickText = (...values: Array<unknown>) => {
     for (const value of values) {
@@ -442,10 +524,11 @@ export default function InternalQuoteBuilder() {
   };
 
   // Auto-populate from Job ID
-  const handleJobIdChange = (jobId: string) => {
+  const handleJobIdChange = async (jobId: string) => {
     const canonicalJobId = resolveCanonicalJobId(jobId) || jobId.trim();
     if (!canonicalJobId) return;
 
+    const profile = jobProfiles.find(item => jobIdsMatch(item.jobId, canonicalJobId)) || null;
     const deal = deals.find(d => jobIdsMatch(d.jobId, canonicalJobId));
     const q = quotes.find(item => jobIdsMatch(item.jobId, canonicalJobId));
     const steelMatch = selectLatestRecord(steelCostData.filter(item => jobIdsMatch(item.jobId || item.projectId, canonicalJobId)));
@@ -454,11 +537,33 @@ export default function InternalQuoteBuilder() {
     const steelRaw = (steelMatch?.rawExtraction || {}) as Record<string, unknown>;
     const insulationRaw = (insulationMatch?.rawExtraction || {}) as Record<string, unknown>;
     const storedParsed = (storedDocumentMatch?.parsedData || {}) as Record<string, unknown>;
-
-    setForm(current => ({
-      ...current,
-      jobId: canonicalJobId,
-      jobName: pickText(
+    const nextClientName = pickText(
+      profile?.clientName,
+      deal?.clientName,
+      q?.clientName,
+      steelRaw.client_name,
+      steelRaw.clientName,
+      insulationRaw.client_name,
+      insulationRaw.clientName,
+      storedParsed.client_name,
+      storedParsed.clientName,
+      form.clientName,
+    );
+    const nextClientId = pickText(
+      profile?.clientId,
+      deal?.clientId,
+      q?.clientId,
+      steelMatch?.clientId,
+      insulationMatch?.clientId,
+      storedDocumentMatch?.clientId,
+      storedParsed.client_id,
+      storedParsed.clientId,
+      form.clientId,
+    );
+    const resolvedJobName = resolveInternalQuoteJobName({
+      currentJobName: form.jobName,
+      storedJobName: pickText(
+        profile?.jobName,
         deal?.jobName,
         q?.jobName,
         steelRaw.job_name,
@@ -469,74 +574,68 @@ export default function InternalQuoteBuilder() {
         insulationRaw.jobName,
         storedParsed.job_name,
         storedParsed.jobName,
-        current.jobName,
       ),
-      clientName: pickText(
-        deal?.clientName,
-        q?.clientName,
-        steelRaw.client_name,
-        steelRaw.clientName,
-        insulationRaw.client_name,
-        insulationRaw.clientName,
-        storedParsed.client_name,
-        storedParsed.clientName,
-        current.clientName,
-      ),
-      clientId: pickText(
-        deal?.clientId,
-        q?.clientId,
-        steelMatch?.clientId,
-        insulationMatch?.clientId,
-        storedDocumentMatch?.clientId,
-        storedParsed.client_id,
-        storedParsed.clientId,
-        current.clientId,
-      ),
+      jobId: canonicalJobId,
+      clientName: nextClientName,
+      preserveManual: jobNameManuallyEdited,
+    });
+    const nextForm = {
+      ...form,
+      jobId: canonicalJobId,
+      jobName: resolvedJobName.jobName,
+      clientName: nextClientName,
+      clientId: nextClientId,
       salesRep: pickText(
+        profile?.salesRep,
         deal?.salesRep,
         q?.salesRep,
         steelRaw.sales_rep,
         steelRaw.salesRep,
         storedParsed.sales_rep,
         storedParsed.salesRep,
-        current.salesRep,
+        form.salesRep,
       ),
       estimator: pickText(
+        profile?.estimator,
         deal?.estimator,
         q?.estimator,
         steelRaw.estimator,
         insulationRaw.estimator,
         storedParsed.estimator,
-        current.estimator,
+        form.estimator,
       ),
       province: pickText(
+        profile?.province,
         deal?.province,
         q?.province,
         steelMatch?.province,
         steelRaw.province,
         insulationRaw.province,
         storedParsed.province,
-        current.province,
-      ) || current.province,
+        form.province,
+      ) || form.province,
       city: pickText(
+        profile?.city,
         deal?.city,
         q?.city,
         steelMatch?.city,
         steelRaw.city,
         insulationRaw.city,
         storedParsed.city,
-        current.city,
+        form.city,
       ),
       address: pickText(
+        profile?.address,
         deal?.address,
         q?.address,
         steelRaw.address,
         steelRaw.delivery_address,
         insulationRaw.address,
         storedParsed.address,
-        current.address,
+        form.address,
       ),
       postalCode: pickText(
+        profile?.postalCode,
         deal?.postalCode,
         q?.postalCode,
         steelRaw.postal_code,
@@ -545,10 +644,11 @@ export default function InternalQuoteBuilder() {
         insulationRaw.postalCode,
         storedParsed.postal_code,
         storedParsed.postalCode,
-        current.postalCode,
+        form.postalCode,
       ),
       width: String(
         pickNumeric(
+          profile?.width,
           deal?.width,
           q?.width,
           steelMatch?.widthFt,
@@ -557,11 +657,12 @@ export default function InternalQuoteBuilder() {
           steelRaw.widthFt,
           storedParsed.width,
           storedParsed.width_ft,
-          current.width,
+          form.width,
         ) ?? '',
       ),
       length: String(
         pickNumeric(
+          profile?.length,
           deal?.length,
           q?.length,
           steelMatch?.lengthFt,
@@ -570,11 +671,12 @@ export default function InternalQuoteBuilder() {
           steelRaw.lengthFt,
           storedParsed.length,
           storedParsed.length_ft,
-          current.length,
+          form.length,
         ) ?? '',
       ),
       height: String(
         pickNumeric(
+          profile?.height,
           deal?.height,
           q?.height,
           steelMatch?.eaveHeightFt,
@@ -585,11 +687,12 @@ export default function InternalQuoteBuilder() {
           steelRaw.eaveHeightFt,
           storedParsed.height,
           storedParsed.height_ft,
-          current.height,
+          form.height,
         ) ?? '14',
       ),
       pitch: String(
         pickNumeric(
+          profile?.pitch,
           q?.pitch,
           steelMatch?.roofSlope,
           insulationMatch?.roofSlope,
@@ -599,11 +702,12 @@ export default function InternalQuoteBuilder() {
           steelRaw.roofSlope,
           storedParsed.roof_pitch,
           storedParsed.roofPitch,
-          current.pitch,
+          form.pitch,
         ) ?? 1,
       ),
       structureType: normalizeStructureType(
-        steelMatch?.structureType
+        profile?.structureType
+        || steelMatch?.structureType
         || insulationMatch?.structureType
         || storedDocumentMatch?.structureType
         || steelRaw.structure_type
@@ -612,7 +716,7 @@ export default function InternalQuoteBuilder() {
         || insulationRaw.structureType
         || storedParsed.structure_type
         || storedParsed.structureType
-        || current.structureType
+        || form.structureType
         || 'steel_building',
       ),
       insulationCost: String(
@@ -622,7 +726,7 @@ export default function InternalQuoteBuilder() {
           insulationRaw.totalCost,
           storedParsed.insulation_total,
           storedParsed.insulationTotal,
-          current.insulationCost,
+          form.insulationCost,
         ) ?? 0,
       ),
       insulationGrade: pickText(
@@ -633,9 +737,15 @@ export default function InternalQuoteBuilder() {
         insulationRaw.grade,
         storedParsed.insulation_grade,
         storedParsed.insulationGrade,
-        current.insulationGrade,
+        form.insulationGrade,
       ),
-    }));
+    };
+
+    setForm(nextForm);
+    setJobNameManuallyEdited(resolvedJobName.isManual);
+    if (canUploadInternalQuoteDocuments(nextForm)) {
+      void syncJobWorkspace(nextForm);
+    }
 
     if (steelMatch) {
       const snapshot = buildHistoricalQuoteFileSnapshot({
@@ -670,7 +780,7 @@ export default function InternalQuoteBuilder() {
         insulationWarehouseEntry: insulationMatch,
         storedDocument: storedDocumentMatch,
       });
-      applyHistoricalSnapshot(snapshot);
+      applyHistoricalSnapshot(snapshot, nextForm);
       return;
     }
 
@@ -707,35 +817,84 @@ export default function InternalQuoteBuilder() {
         insulationWarehouseEntry: insulationMatch,
         storedDocument: storedDocumentMatch,
       });
-      applyHistoricalSnapshot(snapshot);
+      applyHistoricalSnapshot(snapshot, nextForm);
     }
   };
 
-  const handleClientSelect = (client: { clientId: string; clientName: string }) => {
-    setForm(f => ({ ...f, clientId: client.clientId, clientName: client.clientName }));
+  const handleClientSelect = async (client: { clientId: string; clientName: string }) => {
+    const resolvedJobName = resolveInternalQuoteJobName({
+      currentJobName: form.jobName,
+      jobId: form.jobId,
+      clientName: client.clientName,
+      preserveManual: jobNameManuallyEdited,
+    });
+    const nextForm = {
+      ...form,
+      clientId: client.clientId,
+      clientName: client.clientName,
+      jobName: resolvedJobName.jobName,
+    };
+    setForm(nextForm);
+    setJobNameManuallyEdited(resolvedJobName.isManual);
+    if (canUploadInternalQuoteDocuments(nextForm)) {
+      await syncJobWorkspace(nextForm);
+    }
   };
 
-  const applyHistoricalSnapshot = (snapshot: ReturnType<typeof buildHistoricalQuoteFileSnapshot>) => {
-    const effectiveJobId = resolveCanonicalJobId(form.jobId, snapshot.jobId);
-    if (effectiveJobId) set('jobId', effectiveJobId);
-    if (snapshot.clientName) set('clientName', snapshot.clientName);
-    if (snapshot.clientId) set('clientId', snapshot.clientId);
-    if (snapshot.jobName) set('jobName', snapshot.jobName);
-    if (snapshot.width != null) set('width', String(snapshot.width));
-    if (snapshot.length != null) set('length', String(snapshot.length));
-    if (snapshot.height != null) set('height', String(snapshot.height));
-    if (snapshot.roofPitch != null) set('pitch', String(snapshot.roofPitch));
-    if (snapshot.province) set('province', snapshot.province);
-    if (snapshot.city) set('city', snapshot.city);
-    if (snapshot.postalCode) set('postalCode', snapshot.postalCode);
-    if (snapshot.structureType) set('structureType', snapshot.structureType);
-    if (snapshot.guttersDownspoutsTotal != null) set('guttersDownspouts', String(snapshot.guttersDownspoutsTotal));
-    if (snapshot.roofLinerPanelsTotal != null) set('roofLinerPanels', String(snapshot.roofLinerPanelsTotal));
-    if (snapshot.wallLinerPanelsTotal != null) set('wallLinerPanels', String(snapshot.wallLinerPanelsTotal));
+  const handleJobNameChange = (value: string) => {
+    const autoJobName = buildInternalQuoteAutoJobName(form.jobId, form.clientName);
+    const trimmed = value.trim();
+    const isManual = Boolean(trimmed && trimmed !== autoJobName);
+    setJobNameManuallyEdited(isManual);
+    setForm(current => ({
+      ...current,
+      jobName: trimmed ? value : autoJobName,
+    }));
+  };
+
+  const applyHistoricalSnapshot = (
+    snapshot: ReturnType<typeof buildHistoricalQuoteFileSnapshot>,
+    baseForm = form,
+  ) => {
+    const effectiveJobId = resolveCanonicalJobId(baseForm.jobId, snapshot.jobId);
+    const nextClientName = snapshot.clientName || baseForm.clientName;
+    const resolvedJobName = resolveInternalQuoteJobName({
+      currentJobName: baseForm.jobName,
+      jobId: effectiveJobId || baseForm.jobId,
+      clientName: nextClientName,
+      preserveManual: jobNameManuallyEdited,
+    });
+    const nextForm = {
+      ...baseForm,
+      jobId: effectiveJobId || baseForm.jobId,
+      clientName: nextClientName,
+      clientId: snapshot.clientId || baseForm.clientId,
+      jobName: resolvedJobName.jobName,
+      width: snapshot.width != null ? String(snapshot.width) : baseForm.width,
+      length: snapshot.length != null ? String(snapshot.length) : baseForm.length,
+      height: snapshot.height != null ? String(snapshot.height) : baseForm.height,
+      pitch: snapshot.roofPitch != null ? String(snapshot.roofPitch) : baseForm.pitch,
+      province: snapshot.province || baseForm.province,
+      city: snapshot.city || baseForm.city,
+      postalCode: snapshot.postalCode || baseForm.postalCode,
+      structureType: snapshot.structureType || baseForm.structureType,
+      guttersDownspouts: snapshot.guttersDownspoutsTotal != null ? String(snapshot.guttersDownspoutsTotal) : baseForm.guttersDownspouts,
+      roofLinerPanels: snapshot.roofLinerPanelsTotal != null ? String(snapshot.roofLinerPanelsTotal) : baseForm.roofLinerPanels,
+      wallLinerPanels: snapshot.wallLinerPanelsTotal != null ? String(snapshot.wallLinerPanelsTotal) : baseForm.wallLinerPanels,
+    };
+
+    setForm(nextForm);
+    setJobNameManuallyEdited(resolvedJobName.isManual);
 
     if (snapshot.documentType === 'insulation') {
-      if (snapshot.insulationTotal != null) set('insulationCost', String(snapshot.insulationTotal));
-      if (snapshot.insulationGrade) set('insulationGrade', snapshot.insulationGrade);
+      setForm(current => ({
+        ...current,
+        insulationCost: snapshot.insulationTotal != null ? String(snapshot.insulationTotal) : current.insulationCost,
+        insulationGrade: snapshot.insulationGrade || current.insulationGrade,
+      }));
+      if (canUploadInternalQuoteDocuments(nextForm)) {
+        void syncJobWorkspace(nextForm);
+      }
       return;
     }
 
@@ -746,6 +905,10 @@ export default function InternalQuoteBuilder() {
         totalSupplierCost: snapshot.totalSupplierCost || 0,
         accessories: snapshot.components || [],
       });
+    }
+
+    if (canUploadInternalQuoteDocuments(nextForm)) {
+      void syncJobWorkspace(nextForm);
     }
   };
 
@@ -876,6 +1039,10 @@ export default function InternalQuoteBuilder() {
   });
 
   const handleFileUpload = async (files: FileList | File[]) => {
+    if (!canAttachDocuments) {
+      toast.error(uploadRequirementMessage);
+      return;
+    }
     const fileArr = Array.from(files);
     const newParsedFiles: ParsedFile[] = [];
     setAiProcessing(true);
@@ -1237,10 +1404,16 @@ export default function InternalQuoteBuilder() {
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setDragActive(false);
+    if (!canAttachDocuments) {
+      toast.error(uploadRequirementMessage);
+      return;
+    }
     if (e.dataTransfer.files.length) handleFileUpload(e.dataTransfer.files);
   };
 
   const getDefaultJobName = () => {
+    const autoJobName = buildInternalQuoteAutoJobName(form.jobId, form.clientName);
+    if (autoJobName) return autoJobName;
     const w = parseFloat(form.width) || 0;
     const l = parseFloat(form.length) || 0;
     const h = parseFloat(form.height) || 0;
@@ -1281,6 +1454,14 @@ export default function InternalQuoteBuilder() {
     const h = parseFloat(form.height) || 14;
     const pitch = parseFloat(form.pitch) || 1;
     const sqft = w * l;
+    if (!form.jobId.trim()) {
+      toast.error('Select or create a job ID before generating the internal quote');
+      return null;
+    }
+    if (!form.clientId.trim() || !form.clientName.trim()) {
+      toast.error('Connect this job to a client before generating the internal quote');
+      return null;
+    }
     if (!sqft || !costData.steelWeightLbs || !costData.totalSupplierCost) {
       toast.error('Enter dimensions and steel cost data');
       return null;
@@ -1343,10 +1524,19 @@ export default function InternalQuoteBuilder() {
     setComplianceNotes(notes);
 
     // Default job name to dimensions
-    const jobName = form.jobName || getDefaultJobName();
-
-    const jobId = form.jobId || await allocateJobId();
-    if (!form.jobId) set('jobId', jobId);
+    const jobId = resolveCanonicalJobId(form.jobId) || form.jobId.trim();
+    const resolvedJobName = resolveInternalQuoteJobName({
+      currentJobName: form.jobName,
+      jobId,
+      clientName: form.clientName,
+      preserveManual: jobNameManuallyEdited,
+    });
+    const jobName = resolvedJobName.jobName || getDefaultJobName();
+    const nextForm = { ...form, jobId, jobName };
+    if (jobName !== form.jobName || jobId !== form.jobId) {
+      setForm(nextForm);
+    }
+    await syncJobWorkspace(nextForm);
 
   const q: Quote = {
       id: existingQuote?.id || quote?.id || crypto.randomUUID(),
@@ -1587,12 +1777,12 @@ export default function InternalQuoteBuilder() {
                 <Label className="text-xs">Associate Upload To Job ID</Label>
                 <JobIdSelect
                   value={form.jobId}
-                  onValueChange={handleJobIdChange}
+                  onValueChange={value => { void handleJobIdChange(value); }}
                   placeholder="Select or create a shared job ID"
                   triggerTestId="internal-quote-upload-job-id"
                 />
                 <p className="mt-1 text-[10px] text-muted-foreground">
-                  Uploaded documents are stored against this job ID. If one is selected here, it overrides file-extracted job IDs.
+                  Uploaded documents are stored against this job ID. New jobs must also be linked to a client before files can be dropped in.
                 </p>
               </div>
               <div>
@@ -1634,9 +1824,10 @@ export default function InternalQuoteBuilder() {
                   <Sparkles className="h-4 w-4 text-primary" /> AI-Powered Document Extraction
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">Drop MBS cost files + insulation quotes — AI extracts all fields automatically</p>
+                <p className="mt-2 text-[11px] text-muted-foreground">{uploadRequirementMessage}</p>
                 <label className="mt-3 inline-block">
-                  <input type="file" className="hidden" accept=".csv,.txt,.pdf" multiple onChange={e => e.target.files && handleFileUpload(e.target.files)} />
-                  <Button variant="outline" size="sm" asChild><span>Or browse files</span></Button>
+                  <input type="file" className="hidden" accept=".csv,.txt,.pdf" multiple disabled={!canAttachDocuments} onChange={e => e.target.files && handleFileUpload(e.target.files)} />
+                  <Button variant="outline" size="sm" asChild disabled={!canAttachDocuments}><span>Or browse files</span></Button>
                 </label>
               </>
             )}
@@ -1755,11 +1946,11 @@ export default function InternalQuoteBuilder() {
             <div className="grid grid-cols-2 gap-3">
           <div>
             <Label className="text-xs">Job ID</Label>
-            <JobIdSelect value={form.jobId} onValueChange={handleJobIdChange} placeholder="Auto / type to search" triggerTestId="internal-quote-job-id" />
+            <JobIdSelect value={form.jobId} onValueChange={value => { void handleJobIdChange(value); }} placeholder="Select or create a shared job ID" triggerTestId="internal-quote-job-id" />
           </div>
               <div>
                 <Label className="text-xs">Job Name</Label>
-                <Input className="input-blue mt-1" value={form.jobName} onChange={e => set('jobName', e.target.value)} placeholder={getDefaultJobName() || 'Auto from dimensions'} />
+                <Input className="input-blue mt-1" value={form.jobName} onChange={e => handleJobNameChange(e.target.value)} placeholder={getDefaultJobName() || 'Auto from job + client'} />
               </div>
               <div>
                 <Label className="text-xs">Client Name</Label>

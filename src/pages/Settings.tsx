@@ -262,6 +262,18 @@ export default function Settings() {
                   <Label className="text-xs">{t('settings.markups.freightMinimum')}</Label>
                   <Input className="input-blue mt-1" type="number" value={settings.freightMinimum} onChange={e => updateSettings({ freightMinimum: parseFloat(e.target.value) || 0 })} />
                 </div>
+                <div>
+                  <Label className="text-xs">Factory Origin Label</Label>
+                  <Input className="input-blue mt-1" value={settings.factoryOrigin.label} onChange={e => updateSettings({ factoryOrigin: { ...settings.factoryOrigin, label: e.target.value } })} placeholder="Bradford, ON" />
+                </div>
+                <div>
+                  <Label className="text-xs">Factory Origin Lat</Label>
+                  <Input className="input-blue mt-1" type="number" step="0.0001" value={settings.factoryOrigin.lat} onChange={e => updateSettings({ factoryOrigin: { ...settings.factoryOrigin, lat: parseFloat(e.target.value) || 0 } })} />
+                </div>
+                <div>
+                  <Label className="text-xs">Factory Origin Lng</Label>
+                  <Input className="input-blue mt-1" type="number" step="0.0001" value={settings.factoryOrigin.lng} onChange={e => updateSettings({ factoryOrigin: { ...settings.factoryOrigin, lng: parseFloat(e.target.value) || 0 } })} />
+                </div>
               </div>
 
               <div className="flex items-center justify-between rounded-lg border p-3">
