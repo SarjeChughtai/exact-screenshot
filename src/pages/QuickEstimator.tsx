@@ -10,7 +10,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import {
   calcSteelCost, calcEngineeringFromFactor, lookupFoundation, lookupInsulation,
   calcInsulationArea, calcFreight, calcTax, formatCurrency, formatNumber,
-  PROVINCES, INSULATION_GRADES, ENGINEERING_FACTORS, calcMarkup, getMarkupRate, autoComplexityFactor,
+  PROVINCES, INSULATION_GRADES, calcMarkup, getMarkupRate, autoComplexityFactor,
 } from '@/lib/calculations';
 import { estimateFreightFromLocation, hasGoogleMapsKeyConfigured } from '@/lib/freightEstimate';
 import {
@@ -274,10 +274,6 @@ export default function QuickEstimator() {
     setClientName(client.clientName);
   };
 
-  const toggleFactor = (item: string) => {
-    setSelectedFactors(prev => prev.includes(item) ? prev.filter(f => f !== item) : [...prev, item]);
-  };
-
   const handleJobIdChange = useCallback((nextJobId: string) => {
     setJobId(nextJobId);
     if (!nextJobId) return;
@@ -508,7 +504,7 @@ export default function QuickEstimator() {
   }, [drafts]);
 
   const handleLocationLookup = async () => {
-    if (![postalCode.trim(), city.trim(), province.trim()].some(Boolean)) {
+    if (!postalCode.trim() || !city.trim() || !province.trim()) {
       setFreightSource('Enter postal code, city, and province to look up distance.');
       return;
     }
@@ -525,8 +521,6 @@ export default function QuickEstimator() {
       setFreightSource(`Auto distance from Maps: ~${estimate.distanceKm} km`);
     } else {
       setFreightSource('Distance lookup failed. Enter distance manually.');
-      return;
-      setFreightSource('Could not estimate — enter manually');
     }
   };
 
@@ -1023,7 +1017,7 @@ export default function QuickEstimator() {
             )}
           </div>
 
-          <div className="hidden">
+          {/* Engineering complexity controls intentionally removed.
             <Label className="text-xs mb-2 block">Engineering Complexity</Label>
             <div className="space-y-1.5 max-h-48 overflow-y-auto">
               {ENGINEERING_FACTORS.map(f => (
@@ -1033,7 +1027,7 @@ export default function QuickEstimator() {
                 </div>
               ))}
             </div>
-          </div>
+          */}
 
           <Button onClick={calculate} className="w-full">Calculate Estimate</Button>
         </div>
