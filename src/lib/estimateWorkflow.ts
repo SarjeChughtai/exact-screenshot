@@ -137,10 +137,13 @@ export function normalizeQuickEstimatorGutterMode(
   value: Pick<QuickEstimatorPersistedState, 'guttersMode'> | Record<string, unknown>,
 ): QuickEstimatorGutterMode {
   const explicit = (value as Record<string, unknown>).guttersMode ?? (value as Record<string, unknown>).gutters;
-  if (explicit === 'per_side' || explicit === 'spacing' || explicit === 'none') {
+  if (explicit === 'spacing' || explicit === 'none') {
     return explicit;
   }
-  return asBoolean((value as Record<string, unknown>).includeGutters) ? 'per_side' : 'none';
+  if (explicit === 'per_side') {
+    return 'spacing';
+  }
+  return asBoolean((value as Record<string, unknown>).includeGutters) ? 'spacing' : 'none';
 }
 
 export function normalizeQuickEstimatorLinerMode(

@@ -121,4 +121,41 @@ describe('shared job registry', () => {
       state: 'estimate',
     });
   });
+
+  it('includes jobs that only exist in job profiles', () => {
+    const records = buildSharedJobRecords({
+      quotes: [],
+      deals: [],
+      freight: [],
+      payments: [],
+      clients: [],
+      jobProfiles: [
+        {
+          jobId: 'J26 - 1100',
+          jobName: 'Profile Seed Job',
+          clientId: 'CL-1100',
+          clientName: 'Profile Client',
+          salesRep: 'Rep One',
+          estimator: 'Estimator One',
+          teamLead: '',
+          province: 'ON',
+          city: 'Barrie',
+          address: '1 Profile Way',
+          postalCode: 'L4N1A1',
+          width: 80,
+          length: 120,
+          height: 20,
+        },
+      ],
+      steelCostData: [],
+      insulationCostData: [],
+      storedDocuments: [],
+    });
+
+    expect(records.find(record => record.jobId === 'J26-1100')).toMatchObject({
+      clientName: 'Profile Client',
+      jobName: 'Profile Seed Job',
+      state: 'estimate',
+    });
+  });
 });

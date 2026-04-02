@@ -16,6 +16,7 @@ import {
 } from '@/lib/dealerProjectTracker';
 import { getQuoteFileUrl } from '@/lib/quoteFileStorage';
 import { quoteFileFromRow } from '@/lib/supabaseMappers';
+import { getRFQWorkflowDisplayLabel } from '@/lib/workflowStatus';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 
@@ -257,7 +258,7 @@ export default function DealerLog() {
       ) : viewMode === 'cards' ? (
         <div className="grid gap-4 xl:grid-cols-3 lg:grid-cols-2" data-testid="dealer-cards-view">
           {filteredRows.map(row => {
-            const latestStatus = row.latestSalesQuote?.status || row.deal?.dealStatus || row.request.workflowStatus;
+            const latestStatus = row.latestSalesQuote?.status || row.deal?.dealStatus || getRFQWorkflowDisplayLabel(row.request.workflowStatus);
             return (
               <div
                 key={row.request.id}
@@ -370,7 +371,7 @@ export default function DealerLog() {
             </thead>
             <tbody>
               {filteredRows.map(row => {
-                const latestStatus = row.latestSalesQuote?.status || row.deal?.dealStatus || row.request.workflowStatus;
+                const latestStatus = row.latestSalesQuote?.status || row.deal?.dealStatus || getRFQWorkflowDisplayLabel(row.request.workflowStatus);
                 const payload = (row.request.payload || {}) as Record<string, any>;
                 const isExpanded = expandedJobId === row.request.jobId;
 

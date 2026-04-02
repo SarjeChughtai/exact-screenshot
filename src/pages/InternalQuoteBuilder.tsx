@@ -24,7 +24,7 @@ import { JobIdSelect } from '@/components/JobIdSelect';
 import { DocumentGallery } from '@/components/DocumentGallery';
 import { getQuoteFileUrl } from '@/lib/quoteFileStorage';
 import { downloadDocumentPdf, saveDocumentPdf } from '@/lib/documentPdf';
-import { getUserIdsForRole, notifyUsers, sendWorkflowEmailNotification } from '@/lib/workflowNotifications';
+import { getUserIdsForRole, notifyUsers } from '@/lib/workflowNotifications';
 import { steelCostDataFromRow, insulationCostDataFromRow, storedDocumentFromRow } from '@/lib/supabaseMappers';
 import {
   extractTextFromPdf as extractCostPdfText,
@@ -1428,46 +1428,12 @@ export default function InternalQuoteBuilder() {
 
       const freightUserIds = await getUserIdsForRole('freight');
       const freightLink = `/freight?freightJobId=${encodeURIComponent(nextQuote.jobId)}&freightMode=${nextFreight.mode === 'execution' ? 'execution' : 'pre_sale'}`;
-      const emailSubject = `${nextFreight.mode === 'execution' ? 'Freight quote ready' : 'New freight estimate available'}: ${nextQuote.jobId}`;
-      const emailText = [
-        `${nextFreight.mode === 'execution' ? 'A freight quote is ready.' : 'A new freight estimate is available for bid.'}`,
-        '',
-        `Job ID: ${nextQuote.jobId}`,
-        `Client: ${nextQuote.clientName || 'Not set'}`,
-        `Building: ${nextQuote.width} x ${nextQuote.length} x ${nextQuote.height}`,
-        `Location: ${dropOffLocation || 'Not set'}`,
-        `Estimated freight: ${formatCurrency(nextFreight.estFreight)}`,
-        `Estimated distance: ${formatNumber(nextFreight.estDistance)} km`,
-        `Moffett included: ${nextFreight.moffettIncluded ? 'Yes' : 'No'}`,
-        '',
-        `Open in portal: ${window.location.origin}${freightLink}`,
-      ].join('\n');
-
       await notifyUsers({
         userIds: freightUserIds,
         title: nextFreight.mode === 'execution' ? 'Freight Quote Ready' : 'New Freight Estimate',
         message: `${nextQuote.jobId} is available on the Freight Board${nextFreight.moffettIncluded ? ' with moffett included' : ''}.`,
         link: freightLink,
       });
-
-      try {
-        await sendWorkflowEmailNotification({
-          userIds: freightUserIds,
-          subject: emailSubject,
-          text: emailText,
-          html: `<p>${nextFreight.mode === 'execution' ? 'A freight quote is ready.' : 'A new freight estimate is available for bid.'}</p>
-<p><strong>Job ID:</strong> ${nextQuote.jobId}<br />
-<strong>Client:</strong> ${nextQuote.clientName || 'Not set'}<br />
-<strong>Building:</strong> ${nextQuote.width} x ${nextQuote.length} x ${nextQuote.height}<br />
-<strong>Location:</strong> ${dropOffLocation || 'Not set'}<br />
-<strong>Estimated freight:</strong> ${formatCurrency(nextFreight.estFreight)}<br />
-<strong>Estimated distance:</strong> ${formatNumber(nextFreight.estDistance)} km<br />
-<strong>Moffett included:</strong> ${nextFreight.moffettIncluded ? 'Yes' : 'No'}</p>
-<p><a href="${window.location.origin}${freightLink}">Open in portal</a></p>`,
-        });
-      } catch (emailError) {
-        console.warn('Freight email notification failed', emailError);
-      }
 
       toast.success(nextFreight.mode === 'execution'
         ? 'Sent to Freight Board as a freight quote.'

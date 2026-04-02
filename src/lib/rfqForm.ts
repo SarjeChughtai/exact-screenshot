@@ -85,11 +85,14 @@ function normalizeBoolean(value: unknown) {
 
 function normalizeGutterMode(payload: Record<string, unknown>): SharedRFQGutterMode {
   const explicit = payload.guttersMode ?? payload.gutters;
-  if (explicit === 'per_side' || explicit === 'spacing' || explicit === 'none') {
+  if (explicit === 'spacing' || explicit === 'none') {
     return explicit;
   }
+  if (explicit === 'per_side') {
+    return 'spacing';
+  }
   if (normalizeBoolean(explicit)) {
-    return 'per_side';
+    return 'spacing';
   }
   return 'none';
 }

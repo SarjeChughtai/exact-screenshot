@@ -121,7 +121,6 @@ export function RFQWorkflowQueues({
       SALES_QUEUE_STATUSES.includes(quote.workflowStatus) &&
       (
         hasAnyRole('admin', 'owner', 'operations') ||
-        !hasAnyRole('sales_rep') ||
         isQuoteAssignedToSalesRepUser(settings.personnel, quote, currentUser.id, currentUser.name)
       )
     )
@@ -216,6 +215,21 @@ export function RFQWorkflowQueues({
     toast.success('Cost files uploaded');
   };
 
+  const openSavedPdf = async (quote: Quote) => {
+    if (!quote.pdfStoragePath) {
+      toast.error('No RFQ details PDF is attached yet.');
+      return;
+    }
+
+    const url = await getQuoteFileUrl(quote.pdfStoragePath);
+    if (!url) {
+      toast.error('Could not open RFQ PDF');
+      return;
+    }
+
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
   if (!hasAnyRole('sales_rep', 'estimator', 'operations', 'admin', 'owner')) {
     return null;
   }
@@ -243,6 +257,7 @@ export function RFQWorkflowQueues({
                   actions={
                     <>
                       <Button size="sm" variant="outline" onClick={() => navigate(`/quote-rfq?quoteId=${quote.id}`)}>Open RFQ</Button>
+                      <Button size="sm" variant="outline" onClick={() => void openSavedPdf(quote)}>RFQ PDF</Button>
                       {linkedInternal && (
                         <Button size="sm" variant="outline" onClick={() => navigate(`/quote-builder?sourceDocumentId=${linkedInternal.id}`)}>
                           Create External Quote
@@ -280,6 +295,13 @@ export function RFQWorkflowQueues({
                 files={filesByDocumentId[quote.id] || []}
                 actions={
                   <>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void openSavedPdf(quote)}
+                    >
+                      RFQ PDF
+                    </Button>
                     <Button
                       size="sm"
                       variant="outline"
@@ -372,6 +394,7 @@ export function RFQWorkflowQueues({
                     >
                       Build Internal Quote
                     </Button>
+                    <Button size="sm" variant="outline" onClick={() => void openSavedPdf(quote)}>RFQ PDF</Button>
                     <Button size="sm" variant="outline" onClick={() => navigate(`/quote-rfq?quoteId=${quote.id}`)}>Review RFQ</Button>
                   </>
                 }

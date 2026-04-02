@@ -60,7 +60,67 @@ function buildPayloadLines(payload: Record<string, unknown> | undefined) {
   return lines;
 }
 
-function buildDocumentLines(quote: Quote) {
+function buildRfqDocumentLines(quote: Quote) {
+  const payload = (quote.payload || {}) as Record<string, unknown>;
+  const openings = Array.isArray(payload.openings) ? payload.openings as Array<Record<string, unknown>> : [];
+  const location = [quote.address, quote.city, quote.province, quote.postalCode].filter(Boolean).join(', ') || 'Not set';
+  const guttersMode = String(payload.guttersMode ?? (payload.gutters ? 'spacing' : 'none'));
+  const linersMode = String(payload.linersMode ?? payload.linerLocation ?? 'none');
+  const buildingStyle = String(payload.buildingStyle ?? 'Symmetrical');
+  const roofPitch = String(payload.roofPitch ?? (quote.pitch != null ? `${quote.pitch}:12` : 'Not set'));
+  const openingsLines = openings.length > 0
+    ? openings.map((opening, index) => {
+      const wall = formatValue(opening.wall);
+      const number = formatValue(opening.number || index + 1);
+      const width = formatValue(opening.width);
+      const height = formatValue(opening.height);
+      const notes = formatValue(opening.notes);
+      return `Opening ${index + 1}: ${wall} #${number} ${width} x ${height}${notes !== 'Not set' ? ` - ${notes}` : ''}`;
+    })
+    : ['None'];
+
+  return [
+    DOCUMENT_TITLES[quote.documentType],
+    `${quote.jobId} | ${quote.clientName}`,
+    '',
+    'Project Details',
+    `Date: ${quote.date}`,
+    `Job Name: ${quote.jobName || 'Not set'}`,
+    `Client ID: ${quote.clientId || 'Not set'}`,
+    `Sales Rep: ${quote.salesRep || 'Not set'}`,
+    `Estimator: ${quote.estimator || 'Not set'}`,
+    `Contact Email: ${formatValue(payload.contactEmail)}`,
+    `Contact Phone: ${formatValue(payload.contactPhone)}`,
+    `Location: ${location}`,
+    '',
+    'Building Specs',
+    `Building Style: ${buildingStyle}`,
+    `Dimensions: ${quote.width} x ${quote.length} x ${quote.height}`,
+    `Low Side: ${formatValue(payload.lowSide)}`,
+    `High Side: ${formatValue(payload.highSide)}`,
+    `Roof Pitch: ${roofPitch}`,
+    `Sqft: ${formatNumber(quote.sqft)}`,
+    '',
+    'Accessories',
+    `Insulation Required: ${formatValue(payload.insulationRequired)}`,
+    `Roof Insulation: ${formatValue(payload.insulationRoofGrade)}`,
+    `Wall Insulation: ${formatValue(payload.insulationWallGrade)}`,
+    `Liners: ${linersMode}`,
+    `Gutters & Downspouts: ${guttersMode}`,
+    '',
+    'Openings',
+    ...openingsLines,
+    '',
+    'Notes',
+    formatValue(payload.notes || 'None'),
+  ];
+}
+
+export function buildDocumentLines(quote: Quote) {
+  if (quote.documentType === 'rfq' || quote.documentType === 'dealer_rfq') {
+    return buildRfqDocumentLines(quote);
+  }
+
   const lines: string[] = [];
   const title = DOCUMENT_TITLES[quote.documentType];
 
@@ -134,8 +194,18 @@ async function createDocumentPdfBytes(quote: Quote) {
     y -= LINE_HEIGHT;
   };
 
+  const sectionHeadings = new Set([
+    'Project Details',
+    'Building Specs',
+    'Accessories',
+    'Openings',
+    'Notes',
+    'Financial Summary',
+    'Document Payload',
+  ]);
+
   for (const line of buildDocumentLines(quote)) {
-    const bold = !line || ['Project Details', 'Financial Summary', 'Document Payload'].includes(line) || line === DOCUMENT_TITLES[quote.documentType];
+    const bold = !line || sectionHeadings.has(line) || line === DOCUMENT_TITLES[quote.documentType];
     drawLine(line, {
       bold,
       color: line === DOCUMENT_TITLES[quote.documentType] ? rgb(0.08, 0.23, 0.42) : undefined,

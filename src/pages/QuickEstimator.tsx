@@ -46,14 +46,25 @@ import { ClientSelect } from '@/components/ClientSelect';
 import { JobIdSelect } from '@/components/JobIdSelect';
 import { SimilarJobs } from '@/components/SimilarJobs';
 import { mapQuoteToSharedRFQForm } from '@/lib/rfqForm';
-import { jobIdsMatch } from '@/lib/jobIds';
+import { jobIdsMatch, resolveCanonicalJobIdFromRecord } from '@/lib/jobIds';
 
 const isBrowser = typeof window !== 'undefined';
 
 export default function QuickEstimator() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { addEstimate, estimates, updateEstimate, quotes, deals, clients } = useAppContext();
+  const {
+    addEstimate,
+    estimates,
+    updateEstimate,
+    quotes,
+    deals,
+    clients,
+    jobProfiles,
+    steelCostData,
+    insulationCostData,
+    storedDocuments,
+  } = useAppContext();
   const { currentUser, hasAnyRole } = useRoles();
   const { user } = useAuth();
   const { settings } = useSettings();
@@ -258,13 +269,13 @@ export default function QuickEstimator() {
     }
   }, [applyPersistedState, setSearchParams]);
 
-  const toggleFactor = (item: string) => {
-    setSelectedFactors(prev => prev.includes(item) ? prev.filter(f => f !== item) : [...prev, item]);
-  };
-
   const handleClientSelect = (client: { clientId: string; clientName: string }) => {
     setClientId(client.clientId);
     setClientName(client.clientName);
+  };
+
+  const toggleFactor = (item: string) => {
+    setSelectedFactors(prev => prev.includes(item) ? prev.filter(f => f !== item) : [...prev, item]);
   };
 
   const handleJobIdChange = useCallback((nextJobId: string) => {
@@ -279,6 +290,47 @@ export default function QuickEstimator() {
       )[0];
     const matchingDeal = deals.find(deal => jobIdsMatch(deal.jobId, nextJobId));
     const matchingClient = clients.find(client => client.jobIds.some(existingJobId => jobIdsMatch(existingJobId, nextJobId)));
+    const matchingProfile = jobProfiles.find(profile => jobIdsMatch(profile.jobId, nextJobId));
+    const matchingSteelCost = steelCostData.find(record =>
+      jobIdsMatch(resolveCanonicalJobIdFromRecord(record as unknown as Record<string, unknown>), nextJobId),
+    );
+    const matchingInsulationCost = insulationCostData.find(record =>
+      jobIdsMatch(resolveCanonicalJobIdFromRecord(record as unknown as Record<string, unknown>), nextJobId),
+    );
+    const matchingStoredDocument = storedDocuments.find(record =>
+      jobIdsMatch(resolveCanonicalJobIdFromRecord(record as unknown as Record<string, unknown>), nextJobId),
+    );
+    const warehouseExtraction = (
+      matchingSteelCost?.rawExtraction
+      || matchingInsulationCost?.rawExtraction
+      || matchingStoredDocument?.parsedData
+      || {}
+    ) as Record<string, unknown>;
+    const warehouseJobName =
+      (typeof warehouseExtraction.job_name === 'string' && warehouseExtraction.job_name)
+      || (typeof warehouseExtraction.jobName === 'string' && warehouseExtraction.jobName)
+      || (typeof warehouseExtraction.project_name === 'string' && warehouseExtraction.project_name)
+      || (typeof warehouseExtraction.projectName === 'string' && warehouseExtraction.projectName)
+      || '';
+    const warehouseClientName =
+      (typeof warehouseExtraction.client_name === 'string' && warehouseExtraction.client_name)
+      || (typeof warehouseExtraction.clientName === 'string' && warehouseExtraction.clientName)
+      || '';
+    const warehouseProvince =
+      matchingSteelCost?.province
+      || (typeof warehouseExtraction.province === 'string' ? warehouseExtraction.province : '')
+      || '';
+    const warehouseCity =
+      matchingSteelCost?.city
+      || (typeof warehouseExtraction.city === 'string' ? warehouseExtraction.city : '')
+      || '';
+    const warehousePostalCode =
+      (typeof warehouseExtraction.postal_code === 'string' && warehouseExtraction.postal_code)
+      || (typeof warehouseExtraction.postalCode === 'string' && warehouseExtraction.postalCode)
+      || '';
+    const warehouseWidth = matchingSteelCost?.widthFt ?? matchingInsulationCost?.widthFt ?? 0;
+    const warehouseLength = matchingSteelCost?.lengthFt ?? matchingInsulationCost?.lengthFt ?? 0;
+    const warehouseHeight = matchingSteelCost?.eaveHeightFt ?? matchingInsulationCost?.eaveHeightFt ?? 0;
 
     if (latestQuote) {
       const imported = mapQuoteToSharedRFQForm(latestQuote);
@@ -313,36 +365,53 @@ export default function QuickEstimator() {
       if (latestQuote.foundationType === 'slab' || latestQuote.foundationType === 'frost_wall') {
         setFoundationType(latestQuote.foundationType);
       }
-      return;
     }
 
-    if (matchingDeal) {
-      setClientId(matchingDeal.clientId || matchingClient?.clientId || '');
-      setClientName(matchingDeal.clientName || matchingClient?.clientName || matchingClient?.name || '');
-      setSalesRep(matchingDeal.salesRep || '');
-      setWidth(matchingDeal.width ? String(matchingDeal.width) : '');
-      setLength(matchingDeal.length ? String(matchingDeal.length) : '');
-      setHeight(matchingDeal.height ? String(matchingDeal.height) : '');
-      setProvince(matchingDeal.province || 'ON');
-      setCity(matchingDeal.city || '');
-      setPostalCode(matchingDeal.postalCode || '');
-      setSingleSlope(Boolean(matchingDeal.isSingleSlope));
-      setLeftEaveHeight(matchingDeal.leftEaveHeight != null ? String(matchingDeal.leftEaveHeight) : '');
-      setRightEaveHeight(matchingDeal.rightEaveHeight != null ? String(matchingDeal.rightEaveHeight) : '');
-      return;
-    }
+    const resolvedClientId = matchingDeal?.clientId || matchingProfile?.clientId || matchingClient?.clientId || '';
+    const resolvedClientName =
+      matchingDeal?.clientName
+      || matchingProfile?.clientName
+      || warehouseClientName
+      || matchingClient?.clientName
+      || matchingClient?.name
+      || '';
+    const resolvedSalesRep = matchingDeal?.salesRep || matchingProfile?.salesRep || '';
+    const resolvedWidth = matchingDeal?.width ?? matchingProfile?.width ?? warehouseWidth;
+    const resolvedLength = matchingDeal?.length ?? matchingProfile?.length ?? warehouseLength;
+    const resolvedHeight = matchingDeal?.height ?? matchingProfile?.height ?? warehouseHeight;
+    const resolvedProvince = matchingDeal?.province || matchingProfile?.province || warehouseProvince || 'ON';
+    const resolvedCity = matchingDeal?.city || matchingProfile?.city || warehouseCity || '';
+    const resolvedPostalCode = matchingDeal?.postalCode || matchingProfile?.postalCode || warehousePostalCode || '';
+    const resolvedSingleSlope = matchingDeal?.isSingleSlope ?? matchingProfile?.isSingleSlope ?? false;
+    const resolvedLeftEaveHeight = matchingDeal?.leftEaveHeight ?? matchingProfile?.leftEaveHeight;
+    const resolvedRightEaveHeight = matchingDeal?.rightEaveHeight ?? matchingProfile?.rightEaveHeight;
+    const resolvedPitch = matchingProfile?.pitch;
 
-    if (matchingClient) {
-      setClientId(matchingClient.clientId);
-      setClientName(matchingClient.clientName || matchingClient.name || '');
+    if (resolvedClientId) setClientId(resolvedClientId);
+    if (resolvedClientName) setClientName(resolvedClientName);
+    if (resolvedSalesRep) setSalesRep(resolvedSalesRep);
+    if (resolvedWidth) setWidth(String(resolvedWidth));
+    if (resolvedLength) setLength(String(resolvedLength));
+    if (resolvedHeight) setHeight(String(resolvedHeight));
+    setProvince(resolvedProvince);
+    setCity(resolvedCity);
+    setPostalCode(resolvedPostalCode);
+    setSingleSlope(Boolean(resolvedSingleSlope));
+    setLeftEaveHeight(resolvedLeftEaveHeight != null ? String(resolvedLeftEaveHeight) : '');
+    setRightEaveHeight(resolvedRightEaveHeight != null ? String(resolvedRightEaveHeight) : '');
+    if (resolvedPitch != null) setPitch(String(resolvedPitch));
+    if (matchingDeal && (matchingDeal.foundationType === 'slab' || matchingDeal.foundationType === 'frost_wall')) {
+      setFoundationType(matchingDeal.foundationType);
     }
-  }, [clients, deals, quotes]);
+    if (warehouseJobName) {
+      setFreightSource(current => current || `Loaded defaults for ${warehouseJobName}`);
+    }
+  }, [clients, deals, insulationCostData, jobProfiles, quotes, steelCostData, storedDocuments]);
 
   const loadEstimateIntoForm = useCallback((estimateId: string, updateRoute = true) => {
     const estimate = estimates.find(item => item.id === estimateId);
     if (!estimate) {
       toast.error('Estimate not found.');
-      return;
     }
 
     applyPersistedState(quickEstimatorStateFromEstimate(estimate));
@@ -361,7 +430,6 @@ export default function QuickEstimator() {
     const draft = drafts.find(item => item.id === draftId);
     if (!draft) {
       toast.error('Draft not found.');
-      return;
     }
 
     applyPersistedState(draft.state);
@@ -441,12 +509,12 @@ export default function QuickEstimator() {
 
   const handleLocationLookup = async () => {
     if (![postalCode.trim(), city.trim(), province.trim()].some(Boolean)) {
-      setFreightSource('Enter a postal code, city, or province');
+      setFreightSource('Enter postal code, city, and province to look up distance.');
       return;
     }
     setLocationInput([postalCode.trim(), city.trim(), province.trim()].filter(Boolean).join(', '));
     if (!hasGoogleMapsKeyConfigured()) {
-      setFreightSource('Google Maps key is not configured. Enter distance manually.');
+      setFreightSource('Google Maps lookup is unavailable. Enter distance manually.');
       return;
     }
     setFreightSource('Looking up distance...');
@@ -454,10 +522,9 @@ export default function QuickEstimator() {
     if (estimate) {
       setDistance(estimate.distanceKm.toString());
       setRemoteLevel(estimate.remote);
-      const via = estimate.distanceSource === 'maps' ? 'Maps API' : 'heuristic';
-      setFreightSource(`Auto: ~${estimate.distanceKm}km via ${via} (${estimate.method})`);
+      setFreightSource(`Auto distance from Maps: ~${estimate.distanceKm} km`);
     } else {
-      setFreightSource('Could not estimate. Enter distance manually.');
+      setFreightSource('Distance lookup failed. Enter distance manually.');
       return;
       setFreightSource('Could not estimate — enter manually');
     }

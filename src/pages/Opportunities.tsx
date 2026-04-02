@@ -14,6 +14,7 @@ import { buildOpportunityWorkspaceRows, summarizeOpportunities } from '@/lib/opp
 import { formatCurrency } from '@/lib/calculations';
 import { getQuoteFileUrl } from '@/lib/quoteFileStorage';
 import { quoteFileFromRow } from '@/lib/supabaseMappers';
+import { getRFQWorkflowDisplayLabel } from '@/lib/workflowStatus';
 import type { OpportunityStatus, QuoteFileRecord } from '@/types';
 import { toast } from 'sonner';
 
@@ -350,7 +351,11 @@ export default function Opportunities() {
                 </td>
                 <td className="px-3 py-2 text-xs">{row.opportunity.source}</td>
                 <td className="px-3 py-2 text-xs">
-                  {row.latestQuote ? `${row.latestQuote.documentType} / ${row.latestQuote.workflowStatus}` : row.deal ? `deal / ${row.deal.dealStatus}` : '-'}
+                  {row.latestQuote
+                    ? `${row.latestQuote.documentType} / ${getRFQWorkflowDisplayLabel(row.latestQuote.workflowStatus)}`
+                    : row.deal
+                      ? `deal / ${row.deal.dealStatus}`
+                      : '-'}
                 </td>
                 <td className="px-3 py-2 text-xs">
                   <div>

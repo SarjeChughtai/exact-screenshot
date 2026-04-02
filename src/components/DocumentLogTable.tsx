@@ -458,7 +458,7 @@ export function DocumentLogTable({
                   </div>
                 </div>
                 {isRfqDocument && (
-                  <div className="mt-4 grid gap-4 md:grid-cols-3">
+                  <div className="mt-4 grid gap-4 md:grid-cols-4">
                     <div className="space-y-1 text-xs">
                       <p className="font-semibold text-muted-foreground">RFQ Details</p>
                       <p>Contact Email: {String(payload.contactEmail ?? 'Not set')}</p>
@@ -475,9 +475,12 @@ export function DocumentLogTable({
                       <p>Gutters: {String(payload.guttersMode ?? (payload.gutters ? 'enabled' : 'none'))}</p>
                     </div>
                     <div className="space-y-1 text-xs">
-                      <p className="font-semibold text-muted-foreground">Openings and PDF</p>
+                      <p className="font-semibold text-muted-foreground">Openings</p>
                       <p>Openings: {openings.length}</p>
                       <p>Notes: {String(payload.notes ?? 'None')}</p>
+                    </div>
+                    <div className="space-y-1 text-xs">
+                      <p className="font-semibold text-muted-foreground">Saved PDF</p>
                       {quote.pdfStoragePath ? (
                         <Button size="sm" variant="outline" className="h-7 px-2 text-xs mt-2" onClick={() => void openPdf(quote)}>
                           <Download className="h-3 w-3 mr-1" />Open Saved PDF
