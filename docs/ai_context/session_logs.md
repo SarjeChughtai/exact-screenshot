@@ -1,12 +1,14 @@
 # Session Logs: Canada Steel Platform
 
+> [!IMPORTANT]
+> **This file is now legacy.** New session history is appended to [/brain/history/SESSION_LOG.md](../../brain/history/SESSION_LOG.md).
+
 This file records the summary of work done in each interactive AI session.
 
 ---
 
 ### Session: Mar 31, 2026 (Modern Onboarding & i18n Completion)
 **Objective**: Finalize French localization and refactor dealer onboarding.
-
 #### ✨ Key Features Implemented:
 - **Comprehensive French Support**: Every UI label in `Settings`, `Dashboard`, `DealerRFQ`, and `DealerLog` is now governed by i18next `t()` keys.
 - **Retailored Dealer Onboarding**:

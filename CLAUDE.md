@@ -3,6 +3,13 @@
 ## Project Overview
 Internal steel building sales management platform. React + TypeScript + Tailwind + shadcn/ui + Supabase.
 
+### 🧠 Operational Memory
+This project uses the `/brain` folder for all agent context, tasks, and state.
+Before any work, always read:
+1. `brain/active/NEXT_AGENT.md`
+2. `brain/active/CURRENT_STATE.md`
+3. `brain/core/STANDARDS.md`
+
 ## Tech Stack
 - Frontend: React 18, TypeScript, Vite, Tailwind CSS, shadcn/ui
 - Backend: Supabase (PostgreSQL + Auth + Storage)

@@ -1,11 +1,9 @@
 # Current State: Canada Steel Platform
 
-Last updated: Apr 1, 2026
+> [!IMPORTANT]
+> **This file is now legacy.** The active operational project state is now maintained in [/brain/active/CURRENT_STATE.md](../../brain/active/CURRENT_STATE.md). Refer to that file for the most up-to-date information.
 
-## 🛠️ Technology Stack
-- **Frontend**: React (Vite) with TypeScript.
-- **Styling**: TailwindCSS & shadcn/ui components.
-- **Backend**: Supabase (PostgreSQL, Auth, Edge Functions).
+Last updated: Apr 1, 2026
 - **State Management**: React Context (`AuthContext`, `RoleContext`, `SettingsContext`, `AppContext`).
 - **i18n**: `i18next` with English/French localization.
 

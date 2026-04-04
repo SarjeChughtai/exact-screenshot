@@ -1,30 +1,38 @@
 # CSB Portal
 
-## Antigravity Workflow
+## 🧠 Brain Memory System
 
-This repo now includes a local Antigravity operating layer for agent coordination.
+This repository uses a structured, tool-agnostic agent memory and handoff system in the `/brain` folder.
 
-- Canonical agent state lives in `ai-context/`
-- Shared skills and personas live in `.agent/` and `.agents/`
-- Obsidian artifacts are generated into `ai-context/kanban-board.md` and `obsidian/generated/`
-- Notion artifacts are generated into `notion/export/`
-- Legacy reference context remains in `docs/ai_context/`
+- **Operational Memory**: `/brain/active/`
+- **Project Context**: `/brain/active/CURRENT_STATE.md`
+- **Handoffs**: `/brain/active/NEXT_AGENT.md`
+- **Durable Decisions**: `/brain/core/DECISIONS.md`
+- **Historical Logs**: `/brain/history/SESSION_LOG.md`
 
-Common commands:
-
-```bash
-npm run context:validate:strict
-npm run context:obsidian:bootstrap
-npm run context:notion:export
-npm run context:federation:sync
-```
+### Workflow Compliance
+Agents must follow the operational standards defined in `/brain/core/STANDARDS.md`.
 
 Before starting work, read:
+1. `/brain/active/NEXT_AGENT.md`
+2. `/brain/active/CURRENT_STATE.md`
+3. `/brain/core/DECISIONS.md`
 
-- `ai-context/project.md`
-- `ai-context/dashboard.md`
-- `ai-context/tasks.json`
-- `ai-context/handoffs/active.md`
+### 📓 Obsidian Vault
+The root of this repository can be opened as an Obsidian vault for project management.
+- Detailed instructions: `BRAIN_SYSTEM.md`
+
+---
+
+## Antigravity Workflow
+
+This repo includes multiple context layers:
+- **Primary Operational Layer**: `/brain/` (New standard)
+- **Legacy Reference Layer**: `docs/ai_context/`
+- **Antigravity Coordination Layer**: `ai-context/`
+- **Obsidian Artifacts**: `obsidian/generated/`
+- **Notion Artifacts**: `notion/export/`
+
 
 ## Environment
 
