@@ -1,40 +1,28 @@
 # Current State: Canada Steel Platform
 
-Last updated: Apr 2, 2026
+Last updated: Apr 4, 2026
 
 ## 🎯 Objective
 Complete implementation of a tool-agnostic agent memory and handoff system (`/brain`).
 
+## 🛠️ Status
+- **Initial Setup complete**: The `/brain` structure is fully operational.
+- **Rules defined**: Standardized read/write orders for agents established in `brain/core/STANDARDS.md`.
+- **Instruction integration**: `AGENTS.md`, `.cursorrules`, `CLAUDE.md`, and `.github/copilot-instructions.md` updated to use the system.
+- **Documentation complete**: `BRAIN_SYSTEM.md` and `brain/core/ARCHITECTURE.md` cover Obsidian and multi-tool workflow.
+
 ## 🛠️ Technology Stack
 - **Frontend**: React (Vite) with TypeScript.
-- **Styling**: TailwindCSS & shadcn/ui components.
-- **Backend**: Supabase (PostgreSQL, Auth, Edge Functions).
-- **State Management**: React Context (`AuthContext`, `RoleContext`, `SettingsContext`, `AppContext`).
-- **i18n**: `i18next` with English/French localization.
-
-## 🔐 Role System
-Users belong to specialized portals:
-- **Admin/Owner**: Full system control.
-- **Internal**: Operations, Accounting, Sales.
-- **Dealer**: External partners submitting RFQs.
-- **Vendor**: Manufacturers and Freight providers.
-
-## 🔄 Core Workflows
-1. **Dealer Onboarding**: Signup -> Admin Approval -> Business Profile Setup (Skippable) -> Dashboard Access.
-2. **RFQ Lifecycle**: Dealer Submits RFQ -> Internal Sales Reviews -> Quotes Generated -> Client Approves -> Deal P&L.
-3. **Localization**: All UI labels must use `t()` keys from `en.json`/`fr.json`.
+- **Backend**: Supabase.
+- **Memory Layer**: `/brain/` (Operational) & `docs/ai_context/` (Legacy).
 
 ## 🧠 Brain System
-- **Status**: Implementing core structure.
-- **Relationship**: `/brain` is now the operational layer; `docs/ai_context/` is preserved for historical reference but linked to from here.
+- **Status**: Operational and ready for next session.
+- **Context Layers**:
+  - `/brain/active/`: Next steps, state, checkpoints.
+  - `/brain/core/`: Durable architectural decisions and standards.
+  - `/brain/history/`: Historical session context.
 
 ## 📍 Navigational Rules
-- Dealers default to the `dealer-log` page.
-- Onboarding prompts must be non-intrusive (skippable banners).
-- Redirects should be handled at the page level, not global middleware.
-- Dealer-facing project status derived from shared document, opportunity, and deal state.
-- Freight is a single job-linked record (pre_sale to execution).
-- Opportunity management happens from one portal-native workspace.
-- Production progress calculated from normalized deal stages.
-- RFQ routing stays on `/quote-log`.
-- Dealer workspace routing stays on `/dealer-log`.
+- All new agents/sessions MUST read `/brain/active/NEXT_AGENT.md` and `/brain/active/CURRENT_STATE.md` first.
+- Legacy context is in `docs/ai_context/` and should be referenced but not used as the operational layer.

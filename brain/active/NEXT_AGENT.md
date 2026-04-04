@@ -1,25 +1,24 @@
 # Next Agent Handoff
 
 ## 🎯 Immediate Goal
-Complete the implementation of the `/brain` memory system.
+The memory system is now fully live and integrated. Proceed with functional features or any new tasks.
 
 ## 📂 First Files to Read
 1. `/brain/active/CURRENT_STATE.md`
-2. `/brain/core/STANDARDS.md`
-3. `/brain/active/TASK_BOARD.md`
+2. `/brain/active/NEXT_AGENT.md` (Always read first)
+3. `/brain/core/STANDARDS.md` (Operational rules)
 
 ## ✅ What Was Already Done
-- Created `/brain` folder and subfolders (`active`, `core`, `history`, `templates`).
-- Migrated content from `docs/ai_context/` to `brain/history/SESSION_LOG.md`, `brain/core/DECISIONS.md`, and `brain/active/CURRENT_STATE.md`.
-- Formulated the structure for the complete memory system.
+- **Full Migration**: Legacy context from `docs/ai_context/` has been preserved and linked to the new operational `/brain` layer.
+- **Cross-Tool Instructions**: `AGENTS.md`, `.cursorrules`, `CLAUDE.md`, and `.github/copilot-instructions.md` updated to use the system.
+- **Obsidian Docs**: Created `BRAIN_SYSTEM.md` and `brain/core/ARCHITECTURE.md` to guide users on Obsidian vault setup.
+- **Templates**: Created `HANDOFF_TEMPLATE.md`, `CHECKPOINT_TEMPLATE.md`, and `TASK_TEMPLATE.md`.
 
 ## 🚀 What to do Next
-- Create/Update root instruction files: `AGENTS.md`, `CLAUDE.md`, `.github/copilot-instructions.md`, `.cursorrules`, `BRAIN_SYSTEM.md`.
-- Finalize the `brain/templates/` folder (HANDOFF, CHECKPOINT, TASK).
-- Update the `README.md` to explain the new memory system and Obsidian integration.
-- Finalize `docs/ai_context/` as the legacy reference layer with clear pointers to `/brain`.
+- Any new features, bugs, or refactors can now safely be performed using the memory system. 
+- Ensure all future sessions start with the standardized read order defined in `brain/core/STANDARDS.md`.
 
 ## ⚠️ Warnings
-- Do not reliance only on chat history.
-- Always check the `/brain/core/STANDARDS.md` for read/update orders.
-- Maintain the relationship between `/brain` and `docs/ai_context/`.
+- Do not bypass the `/brain` system for any context or state updates.
+- If you add a major feature, update `brain/core/DECISIONS.md`.
+- Keep the `TASK_BOARD.md` accurate.
